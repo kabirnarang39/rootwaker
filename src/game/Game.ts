@@ -21,6 +21,8 @@ import { AbilityKit } from './AbilityKit';
 import { WindGust, type GustState } from './WindGust';
 import { SKINS } from '../scene/skins';
 import { resolvePlayerObstacleCollision } from './ObstacleCollision';
+import { toCameraRelative } from './CameraRelativeMove';
+import { computeFacingAngle } from './FoxFacing';
 
 // Mirrors PlayerController's own (unexported) pounce range so the hunt-prompt lights up
 // exactly when a pounce would actually succeed. Keep these two in sync by hand.
@@ -77,6 +79,7 @@ export class Game {
 
   private moveInput = { x: 0, z: 0, jump: false };
   private jumpPressed = false;
+  private foxFacingAngle = 0;
 
   // Base terrain heightAt() has no notion of the mountain's elevated ledges, so a player
   // topping out a climb segment would otherwise free-fall straight back down to jungle-floor
@@ -131,13 +134,16 @@ export class Game {
 
     this.input = new Input(this.renderer.domElement);
     this.input.onMove((x, z) => {
-      this.moveInput = { x, z, jump: this.jumpPressed };
+      const relative = toCameraRelative(x, z, this.cameraRig.orbitYaw);
+      this.moveInput = { x: relative.x, z: relative.z, jump: this.jumpPressed };
       this.jumpPressed = false;
     });
+    this.input.onLook((dy, dp) => this.cameraRig.applyLookDelta(dy, dp));
     this.input.onAction((action: PlayerAction) => {
       if (action === 'jump') this.jumpPressed = true;
       if (action === 'attack') this.tryAttack();
       if (action === 'pounce') this.tryPounce();
+      if (action === 'cycleView') this.cameraRig.cycleViewMode();
     });
 
     this.hud = new HUD(container);
@@ -203,6 +209,7 @@ export class Game {
     const time = this.clock.elapsedTime;
 
     this.input.pollMove();
+    this.input.pollLook();
     this.level.update(time);
 
     if (this.playerController.mode === 'grounded') {
@@ -285,6 +292,13 @@ export class Game {
 
     this.fox.group.position.copy(this.playerController.body.position);
     this.fox.update(time, delta, this.playerController.moveSpeed);
+    this.foxFacingAngle = computeFacingAngle(
+      this.playerController.body.velocity.x,
+      this.playerController.body.velocity.z,
+      this.foxFacingAngle,
+      delta,
+    );
+    this.fox.group.rotation.y = this.foxFacingAngle;
 
     // Sync player combat hitbox to actual position every frame (was permanently pinned at world origin)
     this.playerCombatant.hitbox.start.copy(this.playerController.body.position);
