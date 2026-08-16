@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { Rig } from '../scene/rig/Rig';
 import { applyClipToRig } from '../scene/rig/Clip';
 import { crawlClip, lungeClip } from './rootWraithClips';
-import { EnemyAI } from './EnemyAI';
+import { EnemyAI, type AiState } from './EnemyAI';
 import type { Combatant } from '../game/Combat';
 import type { Capsule } from '../game/collision';
 
@@ -63,18 +63,21 @@ export function createRootWraith(): RootWraith {
   }
 
   let lungeStartTime = -1;
+  let prevAiState: AiState = 'idle';
 
   function update(time: number, delta: number, distanceToPlayer: number) {
-    const wasIdle = ai.state === 'idle' || ai.state === 'aggro';
     ai.update(distanceToPlayer, delta);
     const isIdle = ai.state === 'idle' || ai.state === 'aggro';
     if (isIdle) {
       applyClipToRig(rig, crawlClip, time);
       lungeStartTime = -1;
     } else {
-      if (wasIdle || lungeStartTime < 0) lungeStartTime = time;
+      if (ai.state === 'telegraph' && prevAiState !== 'telegraph') {
+        lungeStartTime = time;
+      }
       applyClipToRig(rig, lungeClip, time - lungeStartTime);
     }
+    prevAiState = ai.state;
     rig.root.updateMatrixWorld(true);
     syncHitbox();
   }
