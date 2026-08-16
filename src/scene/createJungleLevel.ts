@@ -4,6 +4,7 @@ import type { WaterBody } from '../game/WaterBody';
 import { createSky } from './createSky';
 import { createGroveHare, type GroveHare } from '../entities/groveHare';
 import { createTuskBoar, type TuskBoar } from '../entities/tuskBoar';
+import { TreeObstacleGrid, type TreeObstacle } from './TreeObstacleGrid';
 
 export interface ClimbableWall {
   normal: THREE.Vector3;
@@ -19,6 +20,7 @@ export interface JungleLevel {
   chapterBounds: THREE.Box3;
   hares: GroveHare[];
   boars: TuskBoar[];
+  obstacleGrid: TreeObstacleGrid;
   update(time: number): void;
 }
 
@@ -177,13 +179,14 @@ function buildFoliage(
   heightAt: (x: number, z: number) => number,
   water: WaterBody,
   wallBounds: THREE.Box2,
-): { meshes: THREE.InstancedMesh[]; update: (time: number) => void } {
+): { meshes: THREE.InstancedMesh[]; update: (time: number) => void; obstacles: TreeObstacle[] } {
   const COUNT = 1300;
   const windDir2 = new THREE.Vector2(WIND.x, WIND.z).normalize();
 
   const perSpeciesCount = Math.ceil(COUNT / TREE_SPECIES.length);
   const speciesMeshes = TREE_SPECIES.map((species) => buildTreeSpeciesMeshes(species, perSpeciesCount, windDir2));
   const placedPerSpecies = new Array(TREE_SPECIES.length).fill(0);
+  const treeObstacles: TreeObstacle[] = [];
 
   const dummy = new THREE.Object3D();
   let totalPlaced = 0;
@@ -210,6 +213,9 @@ function buildFoliage(
     canopyMesh.setMatrixAt(idx, dummy.matrix);
     placedPerSpecies[speciesIndex] = idx + 1;
     totalPlaced++;
+
+    const species = TREE_SPECIES[speciesIndex];
+    treeObstacles.push({ x, z, radius: species.trunkRadiusBottom * scale, height: species.trunkHeight * scale });
   }
 
   const meshes: THREE.InstancedMesh[] = [];
@@ -228,6 +234,7 @@ function buildFoliage(
         uniforms.uTime.value = time;
       });
     },
+    obstacles: treeObstacles,
   };
 }
 
@@ -324,8 +331,9 @@ export function createJungleLevel(): JungleLevel {
   const { mesh: waterMesh, water } = buildWater();
   group.add(waterMesh);
 
-  const { meshes: foliageMeshes, update: updateFoliage } = buildFoliage(heightAt, water, wall.bounds);
+  const { meshes: foliageMeshes, update: updateFoliage, obstacles } = buildFoliage(heightAt, water, wall.bounds);
   group.add(...foliageMeshes);
+  const obstacleGrid = new TreeObstacleGrid(obstacles);
 
   const { hares, boars } = buildWildlife(heightAt, water, wall.bounds);
   group.add(...hares.map((hare) => hare.group));
@@ -342,6 +350,7 @@ export function createJungleLevel(): JungleLevel {
     chapterBounds,
     hares,
     boars,
+    obstacleGrid,
     update: updateFoliage,
   };
 }
