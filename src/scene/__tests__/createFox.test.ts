@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { createFox } from '../createFox';
 
 describe('createFox', () => {
-  it('every mesh is on render layer 1 only (own-body exclusion for the foxEye camera), never the default layer 0 — a mesh left on layer 0 would leak into the first-person view; a shadow-casting mesh needs layer 1 explicitly re-enabled on the light\'s shadow camera in Game.ts, or it silently stops casting a shadow in every view mode', () => {
+  it('every mesh is on render layer 1 only (own-body exclusion for the foxEye camera), never the default layer 0 — a mesh left on layer 0 would leak into the first-person view. Shadow-casting is unaffected: THREE.WebGLShadowMap gates shadow-pass visibility on the MAIN render camera\'s layers, not shadow.camera.layers (verified directly against three.cjs\'s source — that property is never read), so the fox simply has no self-shadow in foxEye specifically, not a bug to work around.', () => {
     const fox = createFox();
     let meshCount = 0;
     fox.group.traverse((obj) => {
@@ -12,6 +12,18 @@ describe('createFox', () => {
       }
     });
     expect(meshCount).toBeGreaterThan(0);
+  });
+
+  it('the chest-glow light stays on the default layer 0, NOT swept onto layer 1 with the meshes (regression: THREE.WebGLRenderer.projectObject gates light contribution on the same object.layers.test(camera.layers) check used for mesh visibility — a light left on layer 1 would silently stop illuminating the rest of the scene whenever the camera loses layer 1, i.e. in foxEye specifically, making world lighting near the fox visibly shift with view mode)', () => {
+    const fox = createFox();
+    let lightCount = 0;
+    fox.group.traverse((obj) => {
+      if ((obj as { isLight?: boolean }).isLight) {
+        lightCount++;
+        expect(obj.layers.mask).toBe(1); // default layer 0 only — always visible to any camera
+      }
+    });
+    expect(lightCount).toBeGreaterThan(0);
   });
 
   it('the bind pose survives repeated update() calls (regression: clip application used to silently overwrite each joint\'s bind-pose local position, since clips author position keyframes as deltas around zero but the old code applied them as absolute overwrites)', () => {

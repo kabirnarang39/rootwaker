@@ -12,6 +12,13 @@ const GROUNDED_FOV = 55;
 const COMBAT_FOV = 48;
 const FOLLOW_LERP = 0.08;
 const CAMERA_CLEARANCE = 0.3;
+// Below this distance from the target, the third-person camera is close enough that it would
+// clip through the fox's own body rather than comfortably frame it (the obstacle clamp's floor
+// was lowered from 0.5 to 0.05 to fix foxEye's own obstacles, which routinely sit under 1m —
+// but that same lower floor lets a close third-person obstacle collapse the camera onto the
+// fox's own geometry instead of the world beyond it). Reuses the same own-body render layer
+// foxEye already excludes, rather than tuning a second obstacle-clearance constant.
+const NEAR_SELF_HIDE_DISTANCE = 0.6;
 const CLOSE_UP_SCALE = 0.5;
 const PITCH_MIN = -0.25; // steeper pitch-down would sink the camera below/into the ground plane at follow/closeUp distances
 const PITCH_MAX = 0.9;
@@ -228,6 +235,18 @@ export class CameraRig {
     const desired = this.clampAgainstObstacles(lookOrigin, targetPosition.clone().add(offset), obstacles);
 
     this.camera.position.lerp(desired, 1 - Math.pow(1 - FOLLOW_LERP, delta * 60));
+
+    // An obstacle can now clamp the third-person camera very close to the fox (the floor that
+    // used to prevent this was lowered to fix foxEye's own, much closer, obstacle clearance —
+    // see NEAR_SELF_HIDE_DISTANCE). Rather than clip through the fox's own geometry at close
+    // range, hide it via the same layer foxEye already uses — the world beyond stays visible.
+    // Distance from lookOrigin (chest height), not targetPosition (the root/feet) — lookOrigin
+    // is already offset 1m up, so even a maximally-clamped camera sits >=1m from the root
+    // while sitting right on top of the fox's own head/chest geometry; measuring from the root
+    // would never trigger this at all.
+    if (this.camera.position.distanceTo(lookOrigin) < NEAR_SELF_HIDE_DISTANCE) {
+      this.camera.layers.disable(1);
+    }
 
     const targetFov = mode === 'combat' ? COMBAT_FOV : GROUNDED_FOV;
     this.camera.fov = THREE.MathUtils.lerp(this.camera.fov, targetFov, 1 - Math.pow(1 - FOLLOW_LERP, delta * 60));

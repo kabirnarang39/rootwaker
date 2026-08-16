@@ -223,10 +223,12 @@ export class Game {
     moon.shadow.camera.near = 1;
     moon.shadow.camera.far = 40;
     // The fox's own meshes live exclusively on render layer 1 (see createFox.ts) so the foxEye
-    // camera can hide them without hiding the rest of the world — but a shadow camera's layers
-    // default to layer 0 only, which would otherwise silently drop the fox from the shadow pass
-    // entirely (in every view mode, not just foxEye) the instant that layer change shipped.
-    moon.shadow.camera.layers.enable(1);
+    // camera can hide them without hiding the rest of the world. This does mean the fox casts
+    // no self-shadow while in foxEye specifically — verified directly against three.cjs's
+    // source that shadow-pass visibility gates on the MAIN render camera's layers (the one
+    // actually passed to renderer.render()), not shadow.camera.layers (which the shadow pass
+    // never reads at all — setting it here would be a no-op). No self-shadow in first-person
+    // is the standard convention for this genre; not worth a shadow-only proxy mesh for it.
     this.scene.add(moon);
 
     const fill = new THREE.AmbientLight(0x203045, 0.85);

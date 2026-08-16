@@ -155,7 +155,18 @@ export function createFox(skin: FoxSkin = SKINS[0]): Fox {
   // wide/glowing parts like the ear cones and headShell at close range in a wide FOV — even
   // clear of every mesh's bounding box, they can still fill the frame edges. Camera layer 1 is
   // reserved for "the player's own body"; CameraRig disables it only in foxEye mode.
-  rig.root.traverse((obj) => obj.layers.set(1));
+  //
+  // Meshes only — NOT lights. THREE.WebGLRenderer's projectObject() gates BOTH mesh visibility
+  // AND light contribution on `object.layers.test(camera.layers)` (verified directly against
+  // three.cjs's source, not assumed): sweeping the chestLight onto layer 1 too would silently
+  // drop it from illuminating the rest of the scene the instant the main camera lost layer 1 in
+  // foxEye — the world's lighting would visibly shift depending on view mode, not just the fox's
+  // own visibility. (A shadow camera's own `.layers` property, by contrast, is never read by the
+  // shadow pass at all — that gate also uses the main camera — so no equivalent fix is needed or
+  // possible there via layers; foxEye simply has no self-shadow, the standard FPS convention.)
+  rig.root.traverse((obj) => {
+    if ((obj as THREE.Mesh).isMesh) obj.layers.set(1);
+  });
 
   const glowMaterials = [glowShellMat, glowCoreMat];
   let walkTime = 0;

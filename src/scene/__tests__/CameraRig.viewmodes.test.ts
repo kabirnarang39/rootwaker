@@ -242,6 +242,44 @@ describe('CameraRig hawk-eye and fox-eye view modes', () => {
     expect(rig.camera.position.y).toBeGreaterThan(0.7);
   });
 
+  it('follow mode hides the fox\'s own body (via the same render layer foxEye uses) when an obstacle clamps the camera very close to the target, so a close obstacle collapses the camera view onto the world beyond rather than clipping through the fox\'s own geometry', () => {
+    const target = new THREE.Vector3(0, 0, 0);
+    const lookOrigin = target.clone().add(new THREE.Vector3(0, 1, 0)); // matches CameraRig's own lookOrigin
+    // a blocker directly on the lookOrigin->offset ray, close enough that the lowered obstacle
+    // floor (0.05, needed for foxEye's much closer obstacles) would otherwise land the camera
+    // well under NEAR_SELF_HIDE_DISTANCE
+    const blocker = new THREE.Mesh(new THREE.BoxGeometry(10, 10, 0.1), new THREE.MeshBasicMaterial());
+    blocker.position.set(0, 1, 0.3);
+    blocker.updateMatrixWorld(true);
+
+    const rig = new CameraRig();
+    for (let i = 0; i < 60; i++) rig.update(target, 'grounded', 1 / 60, [blocker]);
+
+    expect(rig.camera.position.distanceTo(lookOrigin)).toBeLessThan(0.6);
+    const foxOnlyLayer = new THREE.Layers();
+    foxOnlyLayer.set(1);
+    expect(rig.camera.layers.test(foxOnlyLayer)).toBe(false); // fox (layer 1) hidden while this close
+  });
+
+  it('follow mode keeps the fox visible (layer 1 enabled) once the camera is back at a comfortable distance from an earlier close obstacle', () => {
+    const target = new THREE.Vector3(0, 0, 0);
+    const lookOrigin = target.clone().add(new THREE.Vector3(0, 1, 0));
+    const rig = new CameraRig();
+    // first frame with a very close blocker (hides the fox)
+    const blocker = new THREE.Mesh(new THREE.BoxGeometry(10, 10, 0.1), new THREE.MeshBasicMaterial());
+    blocker.position.set(0, 1, 0.3);
+    blocker.updateMatrixWorld(true);
+    for (let i = 0; i < 60; i++) rig.update(target, 'grounded', 1 / 60, [blocker]);
+    expect(rig.camera.position.distanceTo(lookOrigin)).toBeLessThan(0.6);
+
+    // then no obstacle at all — camera should lerp back out and the fox should reappear
+    for (let i = 0; i < 200; i++) rig.update(target, 'grounded', 1 / 60);
+    expect(rig.camera.position.distanceTo(lookOrigin)).toBeGreaterThan(0.6);
+    const foxOnlyLayer = new THREE.Layers();
+    foxOnlyLayer.set(1);
+    expect(rig.camera.layers.test(foxOnlyLayer)).toBe(true);
+  });
+
   it('follow and closeUp modes are unaffected by this change (regression check)', () => {
     const target = new THREE.Vector3(0, 0, 0);
     const rig = new CameraRig();
