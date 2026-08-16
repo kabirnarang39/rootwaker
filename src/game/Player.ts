@@ -14,6 +14,7 @@ import {
 } from './constants';
 import type { PlayerAction } from './Input';
 import type { PowerUpType } from '../entities/createPowerUp';
+import { SKINS, type FoxSkin } from '../scene/skins';
 
 export interface PlayerCollisionState {
   lane: number;
@@ -41,8 +42,8 @@ export class Player {
   private aura: THREE.Mesh;
   private auraMat: THREE.ShaderMaterial;
 
-  constructor() {
-    this.fox = createFox();
+  constructor(skin: FoxSkin = SKINS[0]) {
+    this.fox = createFox(skin);
     this.group = this.fox.group;
     this.group.position.set(this.currentX, 0, PLAYER_Z);
 

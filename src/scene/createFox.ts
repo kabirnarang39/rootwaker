@@ -1,16 +1,11 @@
 import * as THREE from 'three';
 import { createGlowMaterial } from '../shaders/glow';
+import { SKINS, type FoxSkin } from './skins';
 
 export interface Fox {
   group: THREE.Group;
   update(time: number, delta: number): void;
 }
-
-const FUR_COLOR = 0xd9622b;
-const FUR_DARK = 0x7a3418;
-const BELLY_COLOR = 0xf2ead2;
-const GLOW_COLOR = 0x5ff7ff;
-const GLOW_RIM = 0xbfffef;
 
 function furMaterial(color: THREE.ColorRepresentation) {
   return new THREE.MeshStandardMaterial({
@@ -22,22 +17,22 @@ function furMaterial(color: THREE.ColorRepresentation) {
 }
 
 /** Builds a custom stylized low-poly fox-spirit from primitives — no external model. */
-export function createFox(): Fox {
+export function createFox(skin: FoxSkin = SKINS[0]): Fox {
   const group = new THREE.Group();
   group.name = 'fox-spirit';
 
-  const fur = furMaterial(FUR_COLOR);
-  const furDark = furMaterial(FUR_DARK);
-  const belly = furMaterial(BELLY_COLOR);
+  const fur = furMaterial(skin.furColor);
+  const furDark = furMaterial(skin.furDark);
+  const belly = furMaterial(skin.bellyColor);
   const glowShellMat = createGlowMaterial({
-    color: GLOW_COLOR,
-    rimColor: GLOW_RIM,
+    color: skin.glowColor,
+    rimColor: skin.glowRim,
     intensity: 0.35,
     fresnelPower: 3.2,
   });
   const glowCoreMat = createGlowMaterial({
-    color: GLOW_COLOR,
-    rimColor: GLOW_RIM,
+    color: skin.glowColor,
+    rimColor: skin.glowRim,
     intensity: 0.55,
     fresnelPower: 1.4,
     pulseSpeed: 2.2,
@@ -65,7 +60,7 @@ export function createFox(): Fox {
   const chestCore = new THREE.Mesh(new THREE.IcosahedronGeometry(0.075, 0), glowCoreMat);
   chestCore.position.set(0, 0.46, 0.22);
   group.add(chestCore);
-  const chestLight = new THREE.PointLight(GLOW_COLOR, 0.25, 3.5, 2);
+  const chestLight = new THREE.PointLight(skin.glowColor, 0.25, 3.5, 2);
   chestLight.position.copy(chestCore.position);
   group.add(chestLight);
 

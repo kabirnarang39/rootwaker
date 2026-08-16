@@ -14,9 +14,27 @@ import { biomeForDistance } from './biomes';
 import { BASE_SPEED, MAX_SPEED, PLAYER_Z, SPEED_RAMP_PER_METER } from './constants';
 import { MockLeaderboardClient } from '../leaderboard/MockLeaderboardClient';
 import type { LeaderboardClient } from '../leaderboard/LeaderboardClient';
+import { SKINS } from '../scene/skins';
 
 const MIN_SUBMIT_DISTANCE = 5;
 const LAST_NAME_KEY = 'rootwaker.playerName';
+const SKIN_KEY = 'rootwaker.skin';
+
+const MOTE_SCORE_BASE = 10;
+const COMBO_STEP = 0.2;
+const COMBO_MAX = 3;
+const COMBO_DECAY_DELAY = 3; // seconds of no motes before the multiplier starts falling
+const COMBO_DECAY_RATE = 0.5; // multiplier lost per second once decaying
+
+function disposeGroup(group: THREE.Group) {
+  group.traverse((child) => {
+    if (child instanceof THREE.Mesh) {
+      child.geometry.dispose();
+      const mats = Array.isArray(child.material) ? child.material : [child.material];
+      mats.forEach((m) => m.dispose());
+    }
+  });
+}
 
 type GameStatus = 'idle' | 'running' | 'dead';
 
@@ -27,7 +45,8 @@ export class Game {
   private composer: EffectComposer;
   private clock = new THREE.Clock();
 
-  private player = new Player();
+  private player: Player;
+  private skinIndex = 0;
   private track = new TrackManager();
   private wake = new WakeTrail();
   private bursts = new Bursts();
@@ -40,6 +59,9 @@ export class Game {
   private speed = BASE_SPEED;
   private distance = 0;
   private motes = 0;
+  private score = 0;
+  private comboMultiplier = 1;
+  private comboTimer = 0;
   private currentBiomeName = '';
   private shakeTime = 0;
   private shakeMagnitude = 0;
@@ -62,6 +84,10 @@ export class Game {
     this.renderer.toneMappingExposure = 1.0;
     this.renderer.shadowMap.enabled = true;
     container.appendChild(this.renderer.domElement);
+
+    const savedSkinId = localStorage.getItem(SKIN_KEY);
+    this.skinIndex = Math.max(0, SKINS.findIndex((s) => s.id === savedSkinId));
+    this.player = new Player(SKINS[this.skinIndex]);
 
     this.setupLights(isTouchPrimary);
     this.scene.add(this.player.group);
@@ -101,6 +127,7 @@ export class Game {
 
     this.hud = new HUD(container);
     this.hud.showStart();
+    this.refreshSkinPicker();
 
     window.addEventListener('resize', this.onResize);
 
@@ -121,6 +148,28 @@ export class Game {
     this.audio.unlock();
     this.status = 'running';
     this.hud.hideGameOver();
+  }
+
+  private refreshSkinPicker() {
+    this.hud.showSkinPicker(
+      SKINS[this.skinIndex],
+      () => this.cycleSkin(-1),
+      () => this.cycleSkin(1),
+    );
+  }
+
+  private cycleSkin(dir: -1 | 1) {
+    if (this.status !== 'idle') return;
+    this.skinIndex = (this.skinIndex + dir + SKINS.length) % SKINS.length;
+    const skin = SKINS[this.skinIndex];
+    localStorage.setItem(SKIN_KEY, skin.id);
+
+    this.scene.remove(this.player.group);
+    disposeGroup(this.player.group);
+    this.player = new Player(skin);
+    this.scene.add(this.player.group);
+
+    this.refreshSkinPicker();
   }
 
   private setupLights(isTouchPrimary: boolean) {
@@ -155,7 +204,7 @@ export class Game {
     this.composer.setSize(window.innerWidth, window.innerHeight);
   };
 
-  private async handleRunEnd(distance: number, motes: number) {
+  private async handleRunEnd(distance: number, motes: number, score: number) {
     const top = await this.leaderboard.getTop(10);
     this.hud.renderLeaderboard(top, null);
 
@@ -163,7 +212,7 @@ export class Game {
     const defaultName = localStorage.getItem(LAST_NAME_KEY) ?? '';
     this.hud.showSubmitPrompt(defaultName, async (name) => {
       localStorage.setItem(LAST_NAME_KEY, name);
-      const result = await this.leaderboard.submit({ name, distance, motes });
+      const result = await this.leaderboard.submit({ name, distance, motes, score });
       this.hud.renderLeaderboard(result.top, result.rank <= result.top.length ? result.rank - 1 : null);
       this.hud.hideSubmitPromptOnly();
     });
@@ -177,6 +226,9 @@ export class Game {
     this.speed = BASE_SPEED;
     this.distance = 0;
     this.motes = 0;
+    this.score = 0;
+    this.comboMultiplier = 1;
+    this.comboTimer = 0;
     this.status = 'running';
     this.currentBiomeName = '';
     this.shakeTime = 0;
@@ -194,16 +246,25 @@ export class Game {
     if (this.status === 'running') {
       this.distance += this.speed * delta;
       this.speed = Math.min(MAX_SPEED, BASE_SPEED + this.distance * SPEED_RAMP_PER_METER);
+      this.score += this.speed * delta;
 
       this.player.update(time, delta);
       this.track.update(time, delta, this.speed, this.distance);
       this.wake.update(delta, this.speed, this.player.group.position.x);
       this.bursts.update(delta, this.speed * delta);
 
+      this.comboTimer += delta;
+      if (this.comboTimer > COMBO_DECAY_DELAY) {
+        this.comboMultiplier = Math.max(1, this.comboMultiplier - COMBO_DECAY_RATE * delta);
+      }
+
       const magnetActive = this.player.isMagnetActive(time);
       const result = this.track.checkCollisions(this.player.getCollisionState(), magnetActive);
       if (result.motesCollected > 0) {
         this.motes += result.motesCollected;
+        this.comboTimer = 0;
+        this.comboMultiplier = Math.min(COMBO_MAX, this.comboMultiplier + COMBO_STEP * result.motesCollected);
+        this.score += MOTE_SCORE_BASE * this.comboMultiplier * result.motesCollected;
         this.bursts.spawn(this.player.group.position.x, 0.9, PLAYER_Z, biomeForDistance(this.distance).palette.moteGlow);
         this.audio.playCollect();
       }
@@ -215,13 +276,13 @@ export class Game {
       if (result.hitObstacle && !this.player.isInvulnerable(time)) {
         this.status = 'dead';
         this.player.alive = false;
-        this.hud.showGameOver(this.distance, this.motes);
+        this.hud.showGameOver(this.distance, this.motes, this.score);
         this.audio.playHit();
         this.shakeTime = 0.4;
         this.shakeMagnitude = 0.35;
-        this.handleRunEnd(this.distance, this.motes);
+        this.handleRunEnd(this.distance, this.motes, this.score);
       }
-      this.hud.update(this.distance, this.motes);
+      this.hud.update(this.distance, this.motes, this.score, this.comboMultiplier);
       this.hud.setBuff(this.player.remainingBuffTime(time));
 
       const biome = biomeForDistance(this.distance);

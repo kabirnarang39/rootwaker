@@ -2,6 +2,7 @@ export interface LeaderboardEntry {
   name: string;
   distance: number;
   motes: number;
+  score: number;
 }
 
 export interface SubmitResult {
