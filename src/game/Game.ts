@@ -9,8 +9,8 @@ import { CameraRig, type ViewMode } from '../scene/CameraRig';
 import { createFox } from '../scene/createFox';
 import { createRootWraith, getAttackHitbox } from '../entities/rootWraith';
 import { getBoarHitbox } from '../entities/tuskBoar';
-import { getGuardHitbox } from '../entities/mountainGuard';
-import { getKingHitbox } from '../entities/createMountainKing';
+import { getGroveBearHitbox } from '../entities/createGroveBear';
+import { getElderBearKingHitbox } from '../entities/createElderBearKing';
 import { computeBossPhase, BOSS_PHASE_PARAMS } from '../entities/BossPhaseController';
 import type { GroundSlamState } from './GroundSlam';
 import type { GroveHare } from '../entities/groveHare';
@@ -37,7 +37,7 @@ const VIEW_MODE_NAMES: Record<ViewMode, string> = {
   foxEye: 'Fox Eyes',
 };
 const BOAR_HIT_DAMAGE = 12; // matches the root-wraith's melee hit — same claw-scale threat
-const GUARD_HIT_DAMAGE = 12; // same claw-scale threat as the wraith/boar
+const BEAR_HIT_DAMAGE = 12; // same claw-scale threat as the wraith/boar
 const PLAYER_COLLISION_RADIUS = 0.35;
 const PLAYER_COLLISION_HEIGHT = 0.9;
 const LEDGE_REST_RADIUS = 1.5; // meters — how close to a mountain ledge counts as "resting" on it
@@ -432,12 +432,12 @@ export class Game {
       }
     }
 
-    for (const guard of this.level.mountain.guards) {
-      const guardDistance = guard.group.position.distanceTo(this.playerController.body.position);
-      guard.update(time, delta, guardDistance);
-      if (guard.ai.shouldDealDamageThisFrame()) {
-        const hit = resolveMeleeHit(getGuardHitbox(guard), this.playerCombatant);
-        if (hit) applyDamage(this.playerCombatant, GUARD_HIT_DAMAGE);
+    for (const bear of this.level.bears) {
+      const bearDistance = bear.group.position.distanceTo(this.playerController.body.position);
+      bear.update(time, delta, bearDistance);
+      if (bear.ai.shouldDealDamageThisFrame()) {
+        const hit = resolveMeleeHit(getGroveBearHitbox(bear), this.playerCombatant);
+        if (hit) applyDamage(this.playerCombatant, BEAR_HIT_DAMAGE);
       }
     }
 
@@ -447,7 +447,7 @@ export class Game {
       king.update(time, delta, distanceToKing);
 
       if (king.ai.shouldDealDamageThisFrame()) {
-        const hit = resolveMeleeHit(getKingHitbox(king), this.playerCombatant);
+        const hit = resolveMeleeHit(getElderBearKingHitbox(king), this.playerCombatant);
         if (hit) {
           const phase = computeBossPhase(king.combatant.hp, king.combatant.maxHp);
           applyDamage(this.playerCombatant, BOSS_PHASE_PARAMS[phase].damage);
@@ -483,7 +483,9 @@ export class Game {
         this.audio.playArcComplete();
         this.audio.startVillageAmbience();
         this.hud.showArcComplete();
-        this.hud.setObjective('The village welcomes you home.');
+        this.abilityKit.unlock('kings-roar');
+        this.fox.revealCrown();
+        this.hud.setObjective('You are the new King of the Mountain.');
       }
     }
 
@@ -573,14 +575,14 @@ export class Game {
       }
     }
 
-    for (let i = this.level.mountain.guards.length - 1; i >= 0; i--) {
-      const guard = this.level.mountain.guards[i];
-      if (!resolveMeleeHit(attackHitbox, guard.combatant)) continue;
-      applyDamage(guard.combatant, CLAW_SWIPE.damage);
-      if (isDefeated(guard.combatant)) {
-        this.level.group.remove(guard.group);
-        this.level.mountain.guards.splice(i, 1);
-        // no new ability tied to guard defeat — out of scope per this chapter's design (boss fight/village-trust payoff excluded)
+    for (let i = this.level.bears.length - 1; i >= 0; i--) {
+      const bear = this.level.bears[i];
+      if (!resolveMeleeHit(attackHitbox, bear.combatant)) continue;
+      applyDamage(bear.combatant, CLAW_SWIPE.damage);
+      if (isDefeated(bear.combatant)) {
+        this.level.group.remove(bear.group);
+        this.level.bears.splice(i, 1);
+        this.abilityKit.unlock('bear-swipe');
       }
     }
   }
