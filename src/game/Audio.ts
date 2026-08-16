@@ -64,4 +64,39 @@ export class AudioFX {
   setAmbientLevel(level: number) {
     if (this.ambientGain) this.ambientGain.gain.value = 0.025 * level;
   }
+
+  playPounceAttempt(success: boolean): void {
+    if (success) {
+      this.tone(140, 0.22, 'sawtooth', 0.1);
+      this.tone(85, 0.3, 'sine', 0.07, 0.04);
+    } else {
+      this.tone(320, 0.12, 'sine', 0.04);
+    }
+  }
+
+  playAbilityUnlock(): void {
+    this.tone(392, 0.22, 'triangle', 0.08);
+    this.tone(523, 0.22, 'triangle', 0.07, 0.08);
+    this.tone(659, 0.3, 'triangle', 0.06, 0.16);
+  }
+
+  playFootstepRustle(): void {
+    if (!this.ctx) return;
+    const ctx = this.ctx;
+    const bufferSize = ctx.sampleRate * 0.08;
+    const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < bufferSize; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / bufferSize);
+    const noise = ctx.createBufferSource();
+    noise.buffer = buffer;
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'bandpass';
+    filter.frequency.value = 1200;
+    const gain = ctx.createGain();
+    gain.gain.value = 0.03;
+    noise.connect(filter);
+    filter.connect(gain);
+    gain.connect(ctx.destination);
+    noise.start();
+  }
 }
