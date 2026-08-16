@@ -86,7 +86,7 @@ export function sampleClip(clip: Clip, time: number): Map<JointName, Sample> {
 export function applyClipToRig(rig: Rig, clip: Clip, time: number): void {
   for (const [joint, sample] of sampleClip(clip, time)) {
     if (sample.rotation) rig.setLocalRotation(joint, ...sample.rotation);
-    if (sample.position) rig.setLocalPosition(joint, ...sample.position);
+    if (sample.position) rig.applyPositionOffset(joint, ...sample.position);
   }
 }
 
@@ -102,8 +102,8 @@ export function blendClips(rig: Rig, clipA: Clip, timeA: number, clipB: Clip, ti
     else if (sa?.rotation) rig.setLocalRotation(joint, ...sa.rotation);
     else if (sb?.rotation) rig.setLocalRotation(joint, ...sb.rotation);
 
-    if (sa?.position && sb?.position) rig.setLocalPosition(joint, ...lerpTuple(sa.position, sb.position, weight));
-    else if (sa?.position) rig.setLocalPosition(joint, ...sa.position);
-    else if (sb?.position) rig.setLocalPosition(joint, ...sb.position);
+    if (sa?.position && sb?.position) rig.applyPositionOffset(joint, ...lerpTuple(sa.position, sb.position, weight));
+    else if (sa?.position) rig.applyPositionOffset(joint, ...sa.position);
+    else if (sb?.position) rig.applyPositionOffset(joint, ...sb.position);
   }
 }

@@ -27,6 +27,7 @@ export function createTuskBoar(): TuskBoar {
   rig.setLocalPosition('head', 0, -0.05, 0.3);
   rig.setLocalPosition('tuskL', -0.08, -0.05, 0.1);
   rig.setLocalPosition('tuskR', 0.08, -0.05, 0.1);
+  rig.captureBasePose();
 
   const bodyMat = new THREE.MeshStandardMaterial({ color: BOAR_COLOR, flatShading: true, roughness: 0.9 });
   const tuskMat = new THREE.MeshStandardMaterial({ color: TUSK_COLOR, flatShading: true, roughness: 0.4 });

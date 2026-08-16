@@ -27,6 +27,7 @@ export function createMountainGuard(): MountainGuard {
   rig.setLocalPosition('head', 0, 0.15, 0.35);
   rig.setLocalPosition('shoulderL', -0.28, 0, 0.1);
   rig.setLocalPosition('shoulderR', 0.28, 0, 0.1);
+  rig.captureBasePose();
 
   const stoneMat = new THREE.MeshStandardMaterial({ color: GUARD_STONE_COLOR, flatShading: true, roughness: 0.95 });
   const trimMat = new THREE.MeshStandardMaterial({ color: GUARD_TRIM_COLOR, flatShading: true, roughness: 0.6, metalness: 0.3 });

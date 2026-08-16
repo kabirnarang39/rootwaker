@@ -33,6 +33,7 @@ export function createGroveHare(spawnPosition: THREE.Vector3): GroveHare {
   rig.setLocalPosition('hindpawR', 0.05, 0.05, -0.1);
   rig.setLocalPosition('forepawL', -0.04, -0.05, 0.08);
   rig.setLocalPosition('forepawR', 0.04, -0.05, 0.08);
+  rig.captureBasePose();
 
   const furMat = new THREE.MeshStandardMaterial({ color: 0x8a7256, flatShading: true, roughness: 0.9 });
   const earMat = new THREE.MeshStandardMaterial({ color: 0xb89a78, flatShading: true, roughness: 0.85 });

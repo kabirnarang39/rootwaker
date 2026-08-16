@@ -53,6 +53,7 @@ export function createFox(skin: FoxSkin = SKINS[0]): Fox {
   rig.setLocalPosition('hindpawR', 0, 0, 0);
   rig.setLocalPosition('tail0', 0, 0.07, -0.42);
   for (const t of ['tail1', 'tail2', 'tail3', 'tail4'] as const) rig.setLocalPosition(t, 0, 0.22, 0);
+  rig.captureBasePose();
 
   const fur = furMaterial(skin.furColor);
   const furDark = furMaterial(skin.furDark);
@@ -149,6 +150,12 @@ export function createFox(skin: FoxSkin = SKINS[0]): Fox {
   shadowMesh.rotation.x = -Math.PI / 2;
   shadowMesh.position.y = 0.01;
   rig.root.add(shadowMesh);
+
+  // Own-model exclusion for first-person view: no amount of eye-position tuning reliably clears
+  // wide/glowing parts like the ear cones and headShell at close range in a wide FOV — even
+  // clear of every mesh's bounding box, they can still fill the frame edges. Camera layer 1 is
+  // reserved for "the player's own body"; CameraRig disables it only in foxEye mode.
+  rig.root.traverse((obj) => obj.layers.set(1));
 
   const glowMaterials = [glowShellMat, glowCoreMat];
   let walkTime = 0;

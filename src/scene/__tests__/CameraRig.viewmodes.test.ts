@@ -178,6 +178,52 @@ describe('CameraRig hawk-eye and fox-eye view modes', () => {
     expect(rigWithObstacle.camera.position.y).toBeLessThan(rigNoObstacle.camera.position.y - 1);
   });
 
+  it('foxEye applyLookDelta clamps orbitYaw at accumulation time, so it never winds up past the glance range (regression: continuing to drag past the clamp used to require dragging back the excess before the view moved again)', () => {
+    const rig = new CameraRig();
+    rig.cycleViewMode();
+    rig.cycleViewMode();
+    rig.cycleViewMode(); // -> foxEye, base = 0
+    rig.applyLookDelta(4.0, 0); // way past the +1.2 range
+    expect(rig.orbitYaw).toBeCloseTo(1.2, 5);
+    rig.applyLookDelta(-0.5, 0); // should immediately reduce, not stay pinned while "unwinding" imaginary excess
+    expect(rig.orbitYaw).toBeCloseTo(0.7, 5);
+  });
+
+  it('foxEye resumes looking straight ahead after a climb interruption, even if yaw drifted while the fallback camera was active', () => {
+    const target = new THREE.Vector3(0, 0, 0);
+    const rig = new CameraRig();
+    rig.cycleViewMode();
+    rig.cycleViewMode();
+    rig.cycleViewMode(); // -> foxEye
+    rig.update(target, 'grounded', 1 / 60, undefined, 0); // establish base at yaw=0
+
+    rig.update(target, 'climbing', 1 / 60, undefined, 0); // fallback camera takes over
+    rig.applyLookDelta(1.0, 0); // drag while the fallback camera is on screen
+    for (let i = 0; i < 10; i++) rig.update(target, 'climbing', 1 / 60, undefined, 0);
+
+    for (let i = 0; i < 30; i++) rig.update(target, 'grounded', 1 / 60, undefined, 0); // dismount, facing=0
+
+    const lookDir = new THREE.Vector3();
+    rig.camera.getWorldDirection(lookDir);
+    expect(lookDir.z).toBeGreaterThan(0.9); // straight ahead again, not offset by the climb-time drag
+  });
+
+  it('foxEye eye point stays at eye height when pulled back by an obstacle (regression: raycasting from the feet used to drag the clamped eye down into the fox\'s own body)', () => {
+    const target = new THREE.Vector3(0, 0, 0);
+    const blocker = new THREE.Mesh(new THREE.BoxGeometry(2, 2, 0.1), new THREE.MeshBasicMaterial());
+    blocker.position.set(0, 0.82, 0.3); // close blocker, well within the 1.0m forward nudge
+    blocker.updateMatrixWorld(true);
+
+    const rig = new CameraRig();
+    rig.cycleViewMode();
+    rig.cycleViewMode();
+    rig.cycleViewMode(); // -> foxEye
+    for (let i = 0; i < 30; i++) rig.update(target, 'grounded', 1 / 60, [blocker], 0);
+
+    // even heavily clamped, the eye stays near FOX_EYE_HEIGHT (0.82), not dragged toward the feet
+    expect(rig.camera.position.y).toBeGreaterThan(0.7);
+  });
+
   it('follow and closeUp modes are unaffected by this change (regression check)', () => {
     const target = new THREE.Vector3(0, 0, 0);
     const rig = new CameraRig();

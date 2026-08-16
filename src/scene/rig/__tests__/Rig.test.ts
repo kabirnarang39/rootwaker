@@ -32,4 +32,30 @@ describe('Rig', () => {
     rig.setLocalRotation('root', 0, Math.PI / 2, 0);
     expect(rig.getJoint('root').rotation.y).toBeCloseTo(Math.PI / 2, 5);
   });
+
+  it('applyPositionOffset adds to the position captured by captureBasePose, not zero', () => {
+    const rig = new Rig(['root', 'spine']);
+    rig.setLocalPosition('spine', 0, 0.55, 0);
+    rig.captureBasePose();
+    rig.applyPositionOffset('spine', 0, 0.04, 0);
+    expect(rig.getJoint('spine').position.y).toBeCloseTo(0.59, 5);
+  });
+
+  it('applyPositionOffset falls back to a zero base if captureBasePose was never called', () => {
+    const rig = new Rig(['root', 'spine']);
+    rig.setLocalPosition('spine', 0, 0.55, 0);
+    // no captureBasePose() call
+    rig.applyPositionOffset('spine', 0, 0.04, 0);
+    expect(rig.getJoint('spine').position.y).toBeCloseTo(0.04, 5);
+  });
+
+  it('captureBasePose can be called again to re-baseline after moving a joint directly', () => {
+    const rig = new Rig(['root', 'spine']);
+    rig.setLocalPosition('spine', 0, 0.55, 0);
+    rig.captureBasePose();
+    rig.setLocalPosition('spine', 0, 1.0, 0); // moved directly, not via a clip
+    rig.captureBasePose(); // re-baseline
+    rig.applyPositionOffset('spine', 0, 0.04, 0);
+    expect(rig.getJoint('spine').position.y).toBeCloseTo(1.04, 5);
+  });
 });

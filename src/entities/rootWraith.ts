@@ -25,6 +25,7 @@ export function createRootWraith(): RootWraith {
   rig.attach('tail0', 'root');
   rig.attach('tail1', 'tail0');
   rig.attach('tail2', 'tail1');
+  rig.captureBasePose(); // no non-zero bind-pose offsets today, but rootWraithClips.ts does author position keyframes — capturing keeps this consistent with every other creature
 
   const mat = new THREE.MeshStandardMaterial({ color: ROOT_WRAITH_COLOR, flatShading: true, roughness: 0.95 });
   const glowMat = new THREE.MeshStandardMaterial({ color: ROOT_WRAITH_GLOW, emissive: ROOT_WRAITH_GLOW, emissiveIntensity: 0.6, flatShading: true });

@@ -31,6 +31,7 @@ export type JointName =
 export class Rig {
   readonly root: THREE.Group;
   private joints = new Map<JointName, THREE.Group>();
+  private basePositions = new Map<JointName, THREE.Vector3>();
 
   constructor(jointNames: JointName[]) {
     this.root = new THREE.Group();
@@ -60,5 +61,26 @@ export class Rig {
 
   setLocalPosition(name: JointName, x: number, y: number, z: number): void {
     this.getJoint(name).position.set(x, y, z);
+  }
+
+  /**
+   * Snapshots every joint's current local position as its bind pose. Call once, after every
+   * setLocalPosition() that establishes the rest pose, before any clip ever runs. Clips author
+   * position keyframes as small deltas around zero (e.g. a spine bob of [0,0,0]->[0,0.04,0]),
+   * intending them as offsets from the rest pose — applyPositionOffset() honors that; without
+   * this capture, a clip's first frame would silently overwrite the whole bind-pose offset.
+   */
+  captureBasePose(): void {
+    for (const [name, joint] of this.joints) {
+      this.basePositions.set(name, joint.position.clone());
+    }
+  }
+
+  /** Sets a joint's local position to its captured bind pose plus (dx,dy,dz) — used by Clip.ts
+   * instead of setLocalPosition, so applying a clip never wipes the rest pose. Falls back to a
+   * zero base if captureBasePose() was never called (defensive; every creature should call it). */
+  applyPositionOffset(name: JointName, dx: number, dy: number, dz: number): void {
+    const base = this.basePositions.get(name) ?? new THREE.Vector3();
+    this.getJoint(name).position.set(base.x + dx, base.y + dy, base.z + dz);
   }
 }

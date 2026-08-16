@@ -18,14 +18,19 @@ const PITCH_MAX = 0.9;
 
 const HAWK_EYE_HEIGHT = 9;
 const HAWK_EYE_HORIZONTAL = 2.5; // slight horizontal offset so it isn't a dead-vertical top-down view
-// Measured directly against createFox.ts's real rig (root-relative world bounding boxes of every
-// mesh, not local joint offsets, which the spine's own +0.55 offset would otherwise silently
-// throw off): the eye spheres sit at y 0.785-0.855, the forwardmost mesh (the snout tip) reaches
-// z=0.880, and the head-shell/ear cones extend up to y=1.197. Height 0.82 sits at true eye level,
-// clear of the ears above it; forward nudge 1.0 clears the snout tip with a real ~0.12m margin
-// (measured via a nearest-mesh-distance probe, not just the single snout-tip figure) — placing
-// the eye just past the fox's own face, matching the common FPS convention of keeping the whole
-// head model out of the first-person frustum entirely rather than trying to sit inside it.
+// Measured directly against createFox.ts's real BIND POSE (root-relative world bounding boxes
+// of every mesh via Box3.setFromObject, not local joint offsets — the spine's own +0.55 offset
+// would otherwise silently throw the numbers off): eye spheres at y 0.785-0.855, the forwardmost
+// mesh (the snout tip) at z=0.880, head-shell/ear cones extending up to y=1.197. These numbers
+// only hold at runtime because Rig.captureBasePose()/applyPositionOffset() (see rig/Clip.ts)
+// apply clip position keyframes as offsets from this bind pose rather than overwriting it — an
+// earlier version of this fix measured the ANIMATED pose while that bug was still live, which
+// had silently lost the spine's bind-pose offset and put "eye level" 0.55m too low. Height 0.82
+// sits at true eye level, clear of the ears above it; forward nudge 1.0 clears the snout tip
+// with a real ~0.12m margin (measured via a nearest-mesh-distance probe against every mesh, not
+// just the single snout-tip figure) — placing the eye just past the fox's own face, matching
+// the common FPS convention of keeping the whole head model out of the first-person frustum
+// entirely rather than trying to sit inside it.
 const FOX_EYE_HEIGHT = 0.82;
 const FOX_EYE_FORWARD_NUDGE = 1.0;
 const FOX_EYE_LOOK_YAW_RANGE = 1.2; // radians either side of straight-ahead — a fox can glance, not spin its head
@@ -45,14 +50,24 @@ export class CameraRig {
   private _viewMode: ViewMode = 'follow';
   // orbitYaw is a shared, unbounded accumulator with follow/closeUp/hawkEye — entering foxEye
   // with whatever yaw happened to be dragged up in another mode would otherwise point the
-  // first-person view at the fox's own body. Recording the yaw at entry and only applying the
-  // (clamped) DELTA since then keeps foxEye's look always starting straight ahead.
+  // first-person view at the fox's own body. Recording the yaw at entry and clamping orbitYaw
+  // itself around that base (in applyLookDelta, at accumulation time — see below) keeps
+  // foxEye's look always starting straight ahead with no windup deadzone.
   private _foxEyeYawBase = 0;
+  // The climbing fallback overrides which camera RENDERS without ever changing _viewMode, so
+  // cycleViewMode()'s entry-refresh alone can't see "foxEye resuming after a climb" as a
+  // transition — tracked separately here and refreshed in update() the frame climbing ends.
+  private _wasClimbingInFoxEye = false;
 
   constructor() {
     // ponytail: default 16:9 aspect ratio in tests; window.innerWidth/Height in production
     const aspect = typeof window !== 'undefined' ? window.innerWidth / window.innerHeight : 16 / 9;
     this.camera = new THREE.PerspectiveCamera(GROUNDED_FOV, aspect, 0.1, 100);
+    // Layer 1 is reserved for "the player's own body" (see createFox.ts) — enabled by default
+    // so follow/closeUp/hawkEye render the fox normally, disabled only in foxEye below, since
+    // no eye-position tuning reliably keeps wide/glowing parts like the ears out of a close-range
+    // first-person frustum.
+    this.camera.layers.enable(1);
   }
 
   get orbitYaw(): number {
@@ -65,6 +80,16 @@ export class CameraRig {
 
   applyLookDelta(deltaYaw: number, deltaPitch: number): void {
     this._orbitYaw += deltaYaw;
+    if (this._viewMode === 'foxEye') {
+      // Clamp the shared accumulator itself around the entry base — at accumulation time, not
+      // just when read — so continuing to drag past the glance range doesn't "wind up" extra
+      // yaw that then has to be dragged back before the view moves again.
+      this._orbitYaw = THREE.MathUtils.clamp(
+        this._orbitYaw,
+        this._foxEyeYawBase - FOX_EYE_LOOK_YAW_RANGE,
+        this._foxEyeYawBase + FOX_EYE_LOOK_YAW_RANGE,
+      );
+    }
     this._orbitPitch = THREE.MathUtils.clamp(this._orbitPitch + deltaPitch, PITCH_MIN, PITCH_MAX);
   }
 
@@ -125,6 +150,17 @@ export class CameraRig {
     // one combination; every other view mode is unaffected.
     const activeViewMode = this._viewMode === 'foxEye' && mode === 'climbing' ? 'follow' : this._viewMode;
 
+    const isClimbingInFoxEye = this._viewMode === 'foxEye' && mode === 'climbing';
+    if (this._viewMode === 'foxEye' && this._wasClimbingInFoxEye && !isClimbingInFoxEye) {
+      // Just finished climbing while foxEye was selected — refresh so the resumed first-person
+      // view doesn't inherit whatever yaw drifted while the fallback camera was on screen.
+      this._foxEyeYawBase = this._orbitYaw;
+    }
+    this._wasClimbingInFoxEye = isClimbingInFoxEye;
+
+    if (activeViewMode === 'foxEye') this.camera.layers.disable(1);
+    else this.camera.layers.enable(1);
+
     if (activeViewMode === 'hawkEye') {
       const lookOrigin = targetPosition.clone().add(new THREE.Vector3(0, 1, 0));
       const desired = this.clampAgainstObstacles(
@@ -148,14 +184,16 @@ export class CameraRig {
       // so dragging while in first-person visibly turns the view instead of silently doing
       // nothing (which previously left CameraRelativeMove's movement transform decoupled from
       // what the player could see).
-      const desiredEye = targetPosition
+      const eyeHeightPoint = targetPosition.clone().add(new THREE.Vector3(0, FOX_EYE_HEIGHT, 0));
+      const desiredEye = eyeHeightPoint
         .clone()
-        .add(new THREE.Vector3(0, FOX_EYE_HEIGHT, 0))
         .add(new THREE.Vector3(Math.sin(facing) * FOX_EYE_FORWARD_NUDGE, 0, Math.cos(facing) * FOX_EYE_FORWARD_NUDGE));
       // The forward nudge (1.0m) exceeds the player's own collision radius (0.35m), so without
       // this the eye point could end up past a tree trunk or wall the fox's body is still
-      // blocked by. Reuses the same raycast-clamp obstacle avoidance as every other view mode.
-      const eyePosition = this.clampAgainstObstacles(targetPosition, desiredEye, obstacles);
+      // blocked by. Reuses the same raycast-clamp obstacle avoidance as every other view mode —
+      // raycasting FROM eye height (not the feet) so a blocked ray pulls the eye straight back
+      // along the same height, never dragging it down into the fox's own head/body.
+      const eyePosition = this.clampAgainstObstacles(eyeHeightPoint, desiredEye, obstacles);
       this.camera.position.copy(eyePosition);
 
       // orbitYaw is shared, unbounded state — only the (clamped) delta since foxEye was

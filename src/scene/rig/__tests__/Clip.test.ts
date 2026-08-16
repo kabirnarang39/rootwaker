@@ -85,4 +85,47 @@ describe('Clip', () => {
     expect(sample.get('spine')?.rotation).toEqual([0, 0.5, 0]); // should hold prev's rotation
     expect(sample.get('spine')?.position).toEqual([1, 2, 3]); // should hold next's position
   });
+
+  it('applyClipToRig applies a position keyframe as an OFFSET from the captured bind pose, not an absolute overwrite (regression: every creature\'s rig was silently losing its bind-pose position the instant a clip ran)', () => {
+    const rig = new Rig(['root', 'spine']);
+    rig.setLocalPosition('spine', 0, 0.55, 0); // e.g. createFox.ts's real spine bind-pose offset
+    rig.captureBasePose();
+
+    const bobClip: Clip = {
+      name: 'bob',
+      duration: 1,
+      loop: true,
+      ease: linear,
+      keyframes: [{ time: 0, joint: 'spine', position: [0, 0.04, 0] }],
+    };
+    applyClipToRig(rig, bobClip, 0);
+
+    // base (0.55) + clip delta (0.04) = 0.59, not just the clip's raw 0.04
+    expect(rig.getJoint('spine').position.y).toBeCloseTo(0.59, 5);
+  });
+
+  it('blendClips applies position keyframes as offsets from the bind pose too, in all three weight branches', () => {
+    const rig = new Rig(['root', 'spine']);
+    rig.setLocalPosition('spine', 0, 0.5, 0);
+    rig.captureBasePose();
+
+    const a: Clip = { name: 'a', duration: 1, loop: true, ease: linear, keyframes: [{ time: 0, joint: 'spine', position: [0, 0, 0] }] };
+    const b: Clip = { name: 'b', duration: 1, loop: true, ease: linear, keyframes: [{ time: 0, joint: 'spine', position: [0, 0.1, 0] }] };
+
+    blendClips(rig, a, 0, b, 0, 0.5); // both branch: base 0.5 + lerp(0, 0.1, 0.5)=0.05 -> 0.55
+    expect(rig.getJoint('spine').position.y).toBeCloseTo(0.55, 5);
+
+    const rigA = new Rig(['root', 'spine']);
+    rigA.setLocalPosition('spine', 0, 0.5, 0);
+    rigA.captureBasePose();
+    const aOnly: Clip = { name: 'aOnly', duration: 1, loop: true, ease: linear, keyframes: [{ time: 0, joint: 'spine', rotation: [0, 0, 0] }] };
+    blendClips(rigA, a, 0, aOnly, 0, 0.5); // sa-only branch: base 0.5 + a's 0 -> 0.5
+    expect(rigA.getJoint('spine').position.y).toBeCloseTo(0.5, 5);
+
+    const rigB = new Rig(['root', 'spine']);
+    rigB.setLocalPosition('spine', 0, 0.5, 0);
+    rigB.captureBasePose();
+    blendClips(rigB, aOnly, 0, b, 0, 0.5); // sb-only branch: base 0.5 + b's 0.1 -> 0.6
+    expect(rigB.getJoint('spine').position.y).toBeCloseTo(0.6, 5);
+  });
 });
