@@ -5,6 +5,7 @@ import type { Ability } from './AbilityKit';
 export class HUD {
   private root: HTMLDivElement;
   private healthBarEl: HTMLDivElement;
+  private staminaBarEl: HTMLDivElement;
   private objectiveEl: HTMLDivElement;
   private huntPromptEl: HTMLDivElement;
   private abilityToastEl: HTMLDivElement;
@@ -30,6 +31,12 @@ export class HUD {
         <span class="rw-label">vitality</span>
         <div class="rw-health-track">
           <div class="rw-health-fill"></div>
+        </div>
+      </div>
+      <div class="rw-stamina-bar">
+        <span class="rw-label">stamina</span>
+        <div class="rw-stamina-track">
+          <div class="rw-stamina-fill"></div>
         </div>
       </div>
       <div class="rw-objective"></div>
@@ -122,6 +129,35 @@ export class HUD {
       }
       @media (prefers-reduced-motion: reduce) {
         .rw-health-bar.rw-critical .rw-health-fill { animation: none; }
+      }
+
+      /* Stamina: a sibling vein to vitality, same carved track/blade geometry, sitting
+         directly beneath it so the two read as one instrument cluster. Traced to
+         --spirit-amber (the HUD's already-established warm accent, used by the hunt
+         prompt's idle key and the skin/submit controls) rather than a new hue — keeps
+         the two meters legible at a glance without competing with vitality's cyan. */
+      .rw-stamina-bar {
+        position: fixed; top: 58px; left: 20px; z-index: 10;
+        font-family: var(--body-face);
+        color: var(--parchment);
+        display: flex; flex-direction: column; gap: 6px;
+        width: 190px;
+        pointer-events: none;
+      }
+      .rw-stamina-track {
+        position: relative;
+        height: 11px;
+        background: rgba(238,242,230,0.07);
+        box-shadow: inset 0 0 0 1px rgba(238,242,230,0.14), inset 0 1px 2px rgba(0,0,0,0.4);
+        clip-path: polygon(8px 0, 100% 0, calc(100% - 8px) 100%, 0 100%);
+        overflow: hidden;
+      }
+      .rw-stamina-fill {
+        position: absolute; inset: 0;
+        width: var(--rw-sp-pct, 100%);
+        background: linear-gradient(90deg, rgba(255,177,94,0.28), var(--spirit-amber));
+        box-shadow: 0 0 10px 1px rgba(255,177,94,0.55), 0 0 2px rgba(255,177,94,0.9);
+        transition: width 220ms ease-out;
       }
 
       /* Objective: bottom-center chapter prompt, styled as a carved bark plaque consistent
@@ -352,6 +388,7 @@ export class HUD {
     document.head.appendChild(style);
 
     this.healthBarEl = this.root.querySelector('.rw-health-bar')!;
+    this.staminaBarEl = this.root.querySelector('.rw-stamina-bar')!;
     this.objectiveEl = this.root.querySelector('.rw-objective')!;
     this.objectiveEl.textContent = 'Cross the hollow. Reach the climbing wall.';
     this.huntPromptEl = this.root.querySelector('.rw-hunt-prompt')!;
@@ -379,6 +416,12 @@ export class HUD {
     const pct = Math.max(0, Math.min(100, Math.round((hp / maxHp) * 100)));
     this.healthBarEl.style.setProperty('--rw-hp-pct', `${pct}%`);
     this.healthBarEl.classList.toggle('rw-critical', pct > 0 && pct <= 25);
+  }
+
+  /** Drives the stamina bar's fill width, mirroring updateHealth's clamp pattern. */
+  updateStamina(stamina: number, maxStamina: number) {
+    const pct = Math.max(0, Math.min(100, Math.round((stamina / maxStamina) * 100)));
+    this.staminaBarEl.style.setProperty('--rw-sp-pct', `${pct}%`);
   }
 
   /** Driven every frame by Game.ts's hunt logic — shows/updates the compact pounce prompt. */
