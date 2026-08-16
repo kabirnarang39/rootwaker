@@ -5,6 +5,8 @@ export type JointName =
   | 'spine'
   | 'head'
   | 'jaw'
+  | 'earL'
+  | 'earR'
   | 'shoulderL'
   | 'shoulderR'
   | 'forepawL'
