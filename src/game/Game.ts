@@ -188,6 +188,10 @@ export class Game {
     this.fox.group.position.copy(this.playerController.body.position);
     this.fox.update(time, delta, this.playerController.moveSpeed);
 
+    // Sync player combat hitbox to actual position every frame (was permanently pinned at world origin)
+    this.playerCombatant.hitbox.start.copy(this.playerController.body.position);
+    this.playerCombatant.hitbox.end.copy(this.playerController.body.position).add(new THREE.Vector3(0, 0.9, 0));
+
     const distanceToPlayer = this.wraith.group.position.distanceTo(this.playerController.body.position);
     this.wraith.update(time, delta, distanceToPlayer);
     if (this.wraith.ai.shouldDealDamageThisFrame()) {
