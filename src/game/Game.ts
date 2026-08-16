@@ -12,6 +12,11 @@ import { Bursts } from './Bursts';
 import { AudioFX } from './Audio';
 import { biomeForDistance } from './biomes';
 import { BASE_SPEED, MAX_SPEED, PLAYER_Z, SPEED_RAMP_PER_METER } from './constants';
+import { MockLeaderboardClient } from '../leaderboard/MockLeaderboardClient';
+import type { LeaderboardClient } from '../leaderboard/LeaderboardClient';
+
+const MIN_SUBMIT_DISTANCE = 5;
+const LAST_NAME_KEY = 'rootwaker.playerName';
 
 type GameStatus = 'idle' | 'running' | 'dead';
 
@@ -29,6 +34,7 @@ export class Game {
   private audio = new AudioFX();
   private input: Input;
   private hud: HUD;
+  private leaderboard: LeaderboardClient = new MockLeaderboardClient();
 
   private status: GameStatus = 'idle';
   private speed = BASE_SPEED;
@@ -106,6 +112,7 @@ export class Game {
         player: this.player,
         clock: this.clock,
         hud: this.hud,
+        game: this,
       };
     }
   }
@@ -147,6 +154,20 @@ export class Game {
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.composer.setSize(window.innerWidth, window.innerHeight);
   };
+
+  private async handleRunEnd(distance: number, motes: number) {
+    const top = await this.leaderboard.getTop(10);
+    this.hud.renderLeaderboard(top, null);
+
+    if (distance < MIN_SUBMIT_DISTANCE) return;
+    const defaultName = localStorage.getItem(LAST_NAME_KEY) ?? '';
+    this.hud.showSubmitPrompt(defaultName, async (name) => {
+      localStorage.setItem(LAST_NAME_KEY, name);
+      const result = await this.leaderboard.submit({ name, distance, motes });
+      this.hud.renderLeaderboard(result.top, result.rank <= result.top.length ? result.rank - 1 : null);
+      this.hud.hideSubmitPromptOnly();
+    });
+  }
 
   private restart() {
     this.player.reset();
@@ -198,6 +219,7 @@ export class Game {
         this.audio.playHit();
         this.shakeTime = 0.4;
         this.shakeMagnitude = 0.35;
+        this.handleRunEnd(this.distance, this.motes);
       }
       this.hud.update(this.distance, this.motes);
       this.hud.setBuff(this.player.remainingBuffTime(time));

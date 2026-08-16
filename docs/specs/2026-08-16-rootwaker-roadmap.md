@@ -105,6 +105,26 @@ Graphics is a **gate**, not a milestone at the end of a phase. A phase is not "d
 
 **Explicitly deferred beyond v1 (per design spec):** multiplayer/leaderboards/accounts, character selection, monetization, level editor/UGC.
 
+**Status: shipped 2026-08-16 — live at https://kabirnarang39.github.io/rootwaker/**
+
+---
+
+## Phase 7 — Global leaderboard (v2, post-launch)
+
+**Goal:** the one thing the design spec named as "a deliberately later phase" from day one — a real global leaderboard, without repeating the networking trap that stalled Vanguard.
+
+**Why this is the right next phase, not scope creep:** the spec explicitly reserved this — v1 shipped with zero network dependency on purpose, so the core game was never blocked on backend infra. Now that v1 is live and provably playable standalone, adding a network-dependent feature on top is safe: if the backend has problems, the game still fully works offline (`localStorage` high score stays as the fallback).
+
+**Build:**
+- `LeaderboardClient` interface, decoupled from the game loop — the death screen and HUD talk to an interface, not a concrete backend. Same reason the fox model is decoupled from the game loop: swap the implementation without touching gameplay code.
+- Prototype ships against a mock/local implementation first (seeded fake entries + the player's own local runs) to prove the UX — top-10 list, player's rank if outside top 10, name entry on a new high score — before committing to real backend infra.
+- Real backend is a deliberate follow-up decision, not bundled into this phase: needs an actual account (Cloudflare Workers KV, Supabase, Firebase, or similar) that I can't create on the user's behalf. Swapping the mock client for a real one is a small, isolated change once that account exists.
+- Abuse-resistance from day one once real: score submission needs basic sanity bounds (distance can't exceed max possible speed × elapsed time) — client-side cheating won't be eliminated by a solo build, but obviously-impossible scores get rejected.
+
+**Graphics gate:** the leaderboard panel matches the world's visual identity (glow/forest-myth styling, not a generic browser modal) — same rule as every other phase, UI included.
+
+**Explicitly out of scope for this phase:** accounts/auth, anti-cheat beyond basic bounds-checking, real-time updates (poll-on-death is enough), regional leaderboards.
+
 ---
 
 ## How this differs from a generic MVP roadmap

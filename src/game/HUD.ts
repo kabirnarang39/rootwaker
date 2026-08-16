@@ -1,3 +1,5 @@
+import type { LeaderboardEntry } from '../leaderboard/LeaderboardClient';
+
 export class HUD {
   private root: HTMLDivElement;
   private distanceEl: HTMLSpanElement;
@@ -8,6 +10,9 @@ export class HUD {
   private buffEl: HTMLDivElement;
   private buffLabelEl: HTMLSpanElement;
   private buffTimeEl: HTMLSpanElement;
+  private leaderboardEl: HTMLOListElement;
+  private submitForm: HTMLFormElement;
+  private submitInput: HTMLInputElement;
 
   constructor(container: HTMLElement) {
     this.root = document.createElement('div');
@@ -20,6 +25,11 @@ export class HUD {
       <div class="rw-overlay">
         <div class="rw-overlay-title">Rootwaker</div>
         <div class="rw-overlay-stats"></div>
+        <ol class="rw-leaderboard" style="display:none"></ol>
+        <form class="rw-submit-form" style="display:none">
+          <input class="rw-submit-input" type="text" maxlength="20" placeholder="your name" autocomplete="off" />
+          <button class="rw-submit-btn" type="submit">carve into the bark</button>
+        </form>
         <div class="rw-overlay-hint">press space / tap to run</div>
       </div>
     `;
@@ -48,6 +58,33 @@ export class HUD {
       .rw-overlay-title { font-size: 28px; letter-spacing: 0.04em; text-shadow: 0 0 16px rgba(95,247,255,0.55); }
       .rw-overlay-stats { font-size: 16px; opacity: 0.85; }
       .rw-overlay-hint { font-size: 12px; opacity: 0.55; text-transform: uppercase; letter-spacing: 0.08em; margin-top: 6px; }
+      .rw-leaderboard {
+        list-style: none; margin: 0; padding: 0; width: min(320px, 80vw);
+        display: flex; flex-direction: column; gap: 3px; pointer-events: auto;
+        max-height: 220px; overflow-y: auto;
+      }
+      .rw-leaderboard li {
+        display: flex; justify-content: space-between; gap: 10px;
+        font-size: 13px; padding: 3px 10px; border-radius: 4px;
+        background: rgba(95,247,255,0.04);
+      }
+      .rw-leaderboard li.rw-me { background: rgba(95,247,255,0.16); color: #eafff6; }
+      .rw-leaderboard .rw-rank { opacity: 0.5; width: 1.6em; text-align: right; flex-shrink: 0; }
+      .rw-leaderboard .rw-name { flex: 1; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .rw-leaderboard .rw-dist { font-variant-numeric: tabular-nums; opacity: 0.85; }
+      .rw-submit-form { display: flex; gap: 8px; pointer-events: auto; }
+      .rw-submit-input {
+        background: rgba(10,16,14,0.7); border: 1px solid rgba(95,247,255,0.35); border-radius: 4px;
+        color: #eafff6; padding: 6px 10px; font-size: 13px; width: 160px;
+        font-family: ui-sans-serif, system-ui, sans-serif;
+      }
+      .rw-submit-input:focus { outline: none; border-color: rgba(95,247,255,0.8); }
+      .rw-submit-btn {
+        background: rgba(95,247,255,0.14); border: 1px solid rgba(95,247,255,0.5); border-radius: 4px;
+        color: #eafff6; padding: 6px 12px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em;
+        cursor: pointer; font-family: ui-sans-serif, system-ui, sans-serif;
+      }
+      .rw-submit-btn:hover { background: rgba(95,247,255,0.26); }
     `;
     document.head.appendChild(style);
 
@@ -59,6 +96,12 @@ export class HUD {
     this.buffEl = this.root.querySelector('.rw-buff')!;
     this.buffLabelEl = this.root.querySelector('.rw-buff-label')!;
     this.buffTimeEl = this.root.querySelector('.rw-buff-time')!;
+    this.leaderboardEl = this.root.querySelector('.rw-leaderboard')!;
+    this.submitForm = this.root.querySelector('.rw-submit-form')!;
+    this.submitInput = this.root.querySelector('.rw-submit-input')!;
+
+    // typing a name shouldn't trigger the global space/enter restart listener
+    this.submitForm.addEventListener('keydown', (e) => e.stopPropagation());
   }
 
   update(distance: number, motes: number) {
@@ -90,5 +133,45 @@ export class HUD {
 
   hideGameOver() {
     this.overlay.classList.remove('rw-visible');
+    this.hideLeaderboard();
   }
+
+  renderLeaderboard(entries: LeaderboardEntry[], highlightIndex: number | null) {
+    this.leaderboardEl.innerHTML = '';
+    entries.forEach((e, i) => {
+      const li = document.createElement('li');
+      if (i === highlightIndex) li.classList.add('rw-me');
+      li.innerHTML = `<span class="rw-rank">${i + 1}</span><span class="rw-name">${escapeHtml(e.name)}</span><span class="rw-dist">${Math.floor(e.distance)}m</span>`;
+      this.leaderboardEl.appendChild(li);
+    });
+    this.leaderboardEl.style.display = entries.length ? 'flex' : 'none';
+  }
+
+  showSubmitPrompt(defaultName: string, onSubmit: (name: string) => void) {
+    this.submitInput.value = defaultName;
+    this.submitForm.style.display = 'flex';
+    const handler = (e: Event) => {
+      e.preventDefault();
+      const name = this.submitInput.value.trim() || 'a nameless spirit';
+      onSubmit(name);
+    };
+    this.submitForm.onsubmit = handler;
+  }
+
+  hideSubmitPromptOnly() {
+    this.submitForm.style.display = 'none';
+    this.submitForm.onsubmit = null;
+  }
+
+  hideLeaderboard() {
+    this.leaderboardEl.style.display = 'none';
+    this.leaderboardEl.innerHTML = '';
+    this.hideSubmitPromptOnly();
+  }
+}
+
+function escapeHtml(s: string): string {
+  const div = document.createElement('div');
+  div.textContent = s;
+  return div.innerHTML;
 }
