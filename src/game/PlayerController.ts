@@ -38,11 +38,10 @@ export class PlayerController {
   }
 
   update(input: MoveInput, delta: number, groundHeightAt: (x: number, z: number) => number): void {
-    if (this.mode === 'climbing') {
-      this.updateClimb(input, delta);
-      return;
-    }
-    if (this.mode !== 'grounded') return; // swimming/combat drive their own movement (Tasks 9+)
+    // Climbing/swimming are dispatched by the caller to updateClimb/updateSwim with their own
+    // (non-camera-relative) input shape — this must never self-forward into them, since `input`
+    // here may be camera-relative and climbing/swimming expect raw axis intent for some fields.
+    if (this.mode !== 'grounded') return;
 
     this.body.velocity.x = input.x * MOVE_SPEED;
     this.body.velocity.z = input.z * MOVE_SPEED;
