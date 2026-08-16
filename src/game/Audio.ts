@@ -6,7 +6,7 @@ export class AudioFX {
   unlock() {
     if (this.ctx) return;
     this.ctx = new AudioContext();
-    this.startAmbient();
+    this.startJungleAmbience();
   }
 
   private tone(freq: number, duration: number, type: OscillatorType, gainPeak: number, delay = 0) {
@@ -47,7 +47,11 @@ export class AudioFX {
     this.tone(330, 1.4, 'sine', 0.04, 0.15);
   }
 
-  private startAmbient() {
+  // Retired: single flat-drone ambience from the old runner build. Superseded by
+  // startJungleAmbience()'s vertically-layered soundscape, kept intact (not deleted)
+  // per this project's retirement convention. Not private, so tsc's noUnusedLocals
+  // doesn't flag it as dead code (mirrors Player.ts's retired handleAction).
+  startAmbient() {
     if (!this.ctx) return;
     const ctx = this.ctx;
     const osc = ctx.createOscillator();
@@ -59,6 +63,60 @@ export class AudioFX {
     gain.connect(ctx.destination);
     osc.start();
     this.ambientGain = gain;
+  }
+
+  startJungleAmbience(): void {
+    if (!this.ctx) return;
+    const ctx = this.ctx;
+
+    // Canopy layer: high, constant filtered-noise drone (insect chorus).
+    const canopyBufferSize = ctx.sampleRate * 2;
+    const canopyBuffer = ctx.createBuffer(1, canopyBufferSize, ctx.sampleRate);
+    const canopyData = canopyBuffer.getChannelData(0);
+    for (let i = 0; i < canopyBufferSize; i++) canopyData[i] = Math.random() * 2 - 1;
+    const canopyNoise = ctx.createBufferSource();
+    canopyNoise.buffer = canopyBuffer;
+    canopyNoise.loop = true;
+    const canopyFilter = ctx.createBiquadFilter();
+    canopyFilter.type = 'bandpass';
+    canopyFilter.frequency.value = 3800;
+    canopyFilter.Q.value = 0.6;
+    const canopyGain = ctx.createGain();
+    canopyGain.gain.value = 0.018;
+    canopyNoise.connect(canopyFilter);
+    canopyFilter.connect(canopyGain);
+    canopyGain.connect(ctx.destination);
+    canopyNoise.start();
+
+    // Floor layer: low, constant hum (distant wind/undergrowth).
+    const floorOsc = ctx.createOscillator();
+    floorOsc.type = 'sine';
+    floorOsc.frequency.value = 55;
+    const floorGain = ctx.createGain();
+    floorGain.gain.value = 0.02;
+    floorOsc.connect(floorGain);
+    floorGain.connect(ctx.destination);
+    floorOsc.start();
+
+    // Mid layer: sparse, randomized bird-call bursts.
+    const scheduleBirdCall = () => {
+      if (!this.ctx) return;
+      const freq = 1400 + Math.random() * 900;
+      this.tone(freq, 0.12, 'sine', 0.035);
+      this.tone(freq * 1.4, 0.08, 'sine', 0.02, 0.05);
+      const nextDelay = 2 + Math.random() * 6; // seconds — sparse, not a loop
+      setTimeout(scheduleBirdCall, nextDelay * 1000);
+    };
+    setTimeout(scheduleBirdCall, 1500);
+
+    // Water-drip layer: quiet, irregular single ticks.
+    const scheduleDrip = () => {
+      if (!this.ctx) return;
+      this.tone(1800 + Math.random() * 400, 0.05, 'sine', 0.015);
+      const nextDelay = 3 + Math.random() * 8;
+      setTimeout(scheduleDrip, nextDelay * 1000);
+    };
+    setTimeout(scheduleDrip, 4000);
   }
 
   setAmbientLevel(level: number) {
