@@ -18,3 +18,25 @@ describe('AudioFX hunting sounds', () => {
     expect(() => fx.playFootstepRustle()).not.toThrow();
   });
 });
+
+describe('AudioFX throne-room sounds', () => {
+  it('playGroundSlamTelegraph does not throw before unlock()', () => {
+    const fx = new AudioFX();
+    expect(() => fx.playGroundSlamTelegraph()).not.toThrow();
+  });
+
+  it('playGroundSlamImpact does not throw before unlock()', () => {
+    const fx = new AudioFX();
+    expect(() => fx.playGroundSlamImpact()).not.toThrow();
+  });
+
+  it('playArcComplete does not throw before unlock()', () => {
+    const fx = new AudioFX();
+    expect(() => fx.playArcComplete()).not.toThrow();
+  });
+
+  it('startVillageAmbience does not throw before unlock()', () => {
+    const fx = new AudioFX();
+    expect(() => fx.startVillageAmbience()).not.toThrow();
+  });
+});
