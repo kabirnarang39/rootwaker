@@ -29,13 +29,11 @@ describe('CameraRig orbit', () => {
     expect(Math.sign(rig.camera.position.z)).not.toBe(Math.sign(zAtYaw0));
   });
 
-  it('cycleViewMode toggles between follow and closeUp', () => {
+  it('cycleViewMode advances from follow to closeUp (full 4-mode cycle covered in CameraRig.viewmodes.test.ts)', () => {
     const rig = new CameraRig();
     expect(rig.viewMode).toBe('follow');
     rig.cycleViewMode();
     expect(rig.viewMode).toBe('closeUp');
-    rig.cycleViewMode();
-    expect(rig.viewMode).toBe('follow');
   });
 
   it('closeUp view mode results in a smaller distance from the target than follow mode', () => {
