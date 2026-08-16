@@ -21,6 +21,7 @@ export interface JungleLevel {
   hares: GroveHare[];
   boars: TuskBoar[];
   obstacleGrid: TreeObstacleGrid;
+  foliageMeshes: THREE.InstancedMesh[];
   update(time: number): void;
 }
 
@@ -351,6 +352,7 @@ export function createJungleLevel(): JungleLevel {
     hares,
     boars,
     obstacleGrid,
+    foliageMeshes,
     update: updateFoliage,
   };
 }

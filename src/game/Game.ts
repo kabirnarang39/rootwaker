@@ -265,7 +265,7 @@ export class Game {
     }
 
     const mode = this.playerController.mode;
-    this.cameraRig.update(this.playerController.body.position, mode, delta);
+    this.cameraRig.update(this.playerController.body.position, mode, delta, this.level.foliageMeshes);
 
     this.hud.updateHealth(this.playerCombatant.hp, this.playerCombatant.maxHp);
 
