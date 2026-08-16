@@ -17,12 +17,17 @@ const SWIM_BUOYANCY_SCALE = -0.6; // negative gravity scale = net upward pull to
 const SWIM_DRAG_PER_SECOND = 0.9;
 const SWIM_MOVE_SPEED = 2.5;
 const POUNCE_MAX_RANGE = 2; // meters — real fox pounces reach much further, but this is a stylized, readable gameplay range
+const MAX_STAMINA = 100;
+const STAMINA_DRAIN_PER_SECOND = 15; // climbing for ~6.7s at rest drains a full bar
+const STAMINA_REGEN_PER_SECOND = 25; // resting recovers faster than climbing drains — a real ledge pause matters
 
 export class PlayerController {
   readonly body: PhysicsBody;
   mode: LocomotionMode = 'grounded';
+  stamina = MAX_STAMINA;
   private grounded = true;
   private climbTopY = 0;
+  private lastLedgePosition: THREE.Vector3 | null = null;
 
   constructor(startPosition: THREE.Vector3) {
     this.body = { position: startPosition.clone(), velocity: new THREE.Vector3() };
@@ -58,15 +63,28 @@ export class PlayerController {
     }
   }
 
-  beginClimb(surfaceNormal: THREE.Vector3, topY: number): void {
+  beginClimb(surfaceNormal: THREE.Vector3, topY: number, ledgePosition?: THREE.Vector3): void {
     if (this.mode !== 'grounded') return; // canTransition('grounded', 'climbing') is the only legal entry
     this.mode = 'climbing';
     this.climbTopY = topY;
     this.body.velocity.set(0, 0, 0);
+    this.lastLedgePosition = ledgePosition ? ledgePosition.clone() : this.body.position.clone();
     void surfaceNormal; // reserved for wall-facing orientation in the CameraRig (Task 10), not needed for movement math here
   }
 
+  restStamina(delta: number): void {
+    this.stamina = Math.min(MAX_STAMINA, this.stamina + STAMINA_REGEN_PER_SECOND * delta);
+  }
+
   updateClimb(input: MoveInput, delta: number): void {
+    this.stamina = Math.max(0, this.stamina - STAMINA_DRAIN_PER_SECOND * delta);
+    if (this.stamina <= 0) {
+      if (this.lastLedgePosition) this.body.position.copy(this.lastLedgePosition);
+      this.mode = 'grounded';
+      this.grounded = true;
+      this.body.velocity.set(0, 0, 0);
+      return;
+    }
     this.body.position.y += input.z * CLIMB_SPEED * delta;
     this.body.position.x += input.x * CLIMB_SPEED * delta * 0.5; // lateral shuffle along the wall, slower than vertical
     if (this.body.position.y >= this.climbTopY) {
