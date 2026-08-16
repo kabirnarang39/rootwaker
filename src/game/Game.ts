@@ -18,11 +18,14 @@ import { HUD } from './HUD';
 import { AudioFX } from './Audio';
 import { AbilityKit } from './AbilityKit';
 import { SKINS } from '../scene/skins';
+import { resolvePlayerObstacleCollision } from './ObstacleCollision';
 
 // Mirrors PlayerController's own (unexported) pounce range so the hunt-prompt lights up
 // exactly when a pounce would actually succeed. Keep these two in sync by hand.
 const HUNT_PROMPT_RANGE = 2;
 const BOAR_HIT_DAMAGE = 12; // matches the root-wraith's melee hit — same claw-scale threat
+const PLAYER_COLLISION_RADIUS = 0.35;
+const PLAYER_COLLISION_HEIGHT = 0.9;
 
 export class Game {
   private scene = new THREE.Scene();
@@ -180,6 +183,20 @@ export class Game {
       this.playerController.updateSwim(this.moveInput, delta, this.level.water);
     } else {
       this.playerController.update(this.moveInput, delta, this.level.groundHeightAt);
+      // PLAYER_COLLISION_RADIUS (0.35m) must stay well under TreeObstacleGrid's cell size
+      // (3m default) — nearby() ignores its radius arg and always does a fixed 3x3-cell
+      // sweep, so a larger query radius could miss obstacles just outside that sweep.
+      const nearbyObstacles = this.level.obstacleGrid.nearby(
+        this.playerController.body.position.x,
+        this.playerController.body.position.z,
+        PLAYER_COLLISION_RADIUS,
+      );
+      resolvePlayerObstacleCollision(
+        this.playerController.body.position,
+        PLAYER_COLLISION_RADIUS,
+        PLAYER_COLLISION_HEIGHT,
+        nearbyObstacles,
+      );
       if (isInsideWaterBody(this.playerController.body.position, this.level.water)) {
         this.playerController.beginSwim();
       }
