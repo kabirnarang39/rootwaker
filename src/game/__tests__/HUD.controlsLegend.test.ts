@@ -127,6 +127,15 @@ describe('HUD boss bar + arc-complete toast — behavior (real HUD instance, fak
     expect(fillEl.style.setPropertyCalls).toContainEqual(['--fill', '100%']);
   });
 
+  it('updateBossHealth rounds to a clean integer percentage, mirroring updateHealth exactly (regression: a fraction-space clamp with no rounding previously produced long decimals like 33.33333333333333%)', async () => {
+    const { HUD } = await import('../HUD');
+    const hud = new HUD(fakeElement() as unknown as HTMLElement);
+    const fillEl = (hud as unknown as { bossHealthFillEl: ReturnType<typeof fakeElement> }).bossHealthFillEl;
+
+    hud.updateBossHealth(100, 300); // 33.33...% — a ratio that doesn't divide cleanly
+    expect(fillEl.style.setPropertyCalls).toContainEqual(['--fill', '33%']);
+  });
+
   it('hideBossBar removes the visible class', async () => {
     const { HUD } = await import('../HUD');
     const hud = new HUD(fakeElement() as unknown as HTMLElement);

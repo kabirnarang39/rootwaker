@@ -673,8 +673,8 @@ export class HUD {
 
   /** Drives the boss health bar's fill width, mirroring updateHealth's clamp pattern. */
   updateBossHealth(hp: number, maxHp: number): void {
-    const pct = Math.max(0, Math.min(1, hp / maxHp));
-    this.bossHealthFillEl.style.setProperty('--fill', `${pct * 100}%`);
+    const pct = Math.max(0, Math.min(100, Math.round((hp / maxHp) * 100)));
+    this.bossHealthFillEl.style.setProperty('--fill', `${pct}%`);
   }
 
   hideBossBar(): void {
