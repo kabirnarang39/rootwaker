@@ -1,6 +1,7 @@
 import * as THREE from 'three';
-import { applyGravity, integrate, type PhysicsBody } from './physics';
+import { applyGravity, damp, integrate, type PhysicsBody } from './physics';
 import type { LocomotionMode } from './LocomotionState';
+import type { WaterBody } from './WaterBody';
 
 export interface MoveInput {
   x: number; // -1..1, world-space lateral intent
@@ -11,6 +12,9 @@ export interface MoveInput {
 const MOVE_SPEED = 4.5; // m/s
 const JUMP_SPEED = 7.5; // m/s, initial upward velocity
 const CLIMB_SPEED = 2.2; // m/s, deliberately slower than ground move speed — climbing reads as effortful
+const SWIM_BUOYANCY_SCALE = -0.6; // negative gravity scale = net upward pull toward the surface
+const SWIM_DRAG_PER_SECOND = 0.9;
+const SWIM_MOVE_SPEED = 2.5;
 
 export class PlayerController {
   readonly body: PhysicsBody;
@@ -65,6 +69,28 @@ export class PlayerController {
     this.body.position.x += input.x * CLIMB_SPEED * delta * 0.5; // lateral shuffle along the wall, slower than vertical
     if (this.body.position.y >= this.climbTopY) {
       this.body.position.y = this.climbTopY;
+      this.mode = 'grounded';
+      this.grounded = true;
+    }
+  }
+
+  beginSwim(): void {
+    if (this.mode !== 'grounded') return;
+    this.mode = 'swimming';
+  }
+
+  updateSwim(input: MoveInput, delta: number, water: WaterBody): void {
+    this.body.velocity.x += input.x * SWIM_MOVE_SPEED * delta;
+    this.body.velocity.z += input.z * SWIM_MOVE_SPEED * delta;
+    this.body.velocity.addScaledVector(water.current, delta);
+
+    applyGravity(this.body, delta, SWIM_BUOYANCY_SCALE);
+    damp(this.body.velocity, SWIM_DRAG_PER_SECOND, delta);
+    integrate(this.body, delta);
+
+    if (this.body.position.y >= water.surfaceY) {
+      this.body.position.y = water.surfaceY;
+      this.body.velocity.y = 0;
       this.mode = 'grounded';
       this.grounded = true;
     }
