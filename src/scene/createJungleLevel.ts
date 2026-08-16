@@ -47,18 +47,20 @@ function buildFoliage(
   water: WaterBody,
   wallBounds: THREE.Box2,
 ): { trunkMesh: THREE.InstancedMesh; canopyMesh: THREE.InstancedMesh; update: (time: number) => void } {
-  const COUNT = 900;
-  const TRUNK_HEIGHT = 0.55;
+  const COUNT = 1300;
+  const TRUNK_HEIGHT = 1.7;
 
-  const trunkGeo = new THREE.CylinderGeometry(0.035, 0.05, TRUNK_HEIGHT, 5);
+  const trunkGeo = new THREE.CylinderGeometry(0.06, 0.09, TRUNK_HEIGHT, 6);
   trunkGeo.translate(0, TRUNK_HEIGHT / 2, 0);
   const trunkMat = new THREE.MeshStandardMaterial({ color: 0x3a2a1a, flatShading: true, roughness: 0.9 });
 
-  const icoA = new THREE.IcosahedronGeometry(0.34, 0);
-  icoA.translate(0, TRUNK_HEIGHT + 0.3, 0);
-  const icoB = new THREE.IcosahedronGeometry(0.24, 0);
-  icoB.translate(0.16, TRUNK_HEIGHT + 0.46, 0.1);
-  const canopyGeo = mergeGeometries([icoA, icoB], false);
+  const icoA = new THREE.IcosahedronGeometry(0.55, 0);
+  icoA.translate(0, TRUNK_HEIGHT + 0.5, 0);
+  const icoB = new THREE.IcosahedronGeometry(0.4, 0);
+  icoB.translate(0.24, TRUNK_HEIGHT + 0.8, 0.18);
+  const icoC = new THREE.IcosahedronGeometry(0.38, 0);
+  icoC.translate(-0.22, TRUNK_HEIGHT + 0.68, -0.2);
+  const canopyGeo = mergeGeometries([icoA, icoB, icoC], false);
   if (!canopyGeo) throw new Error('buildFoliage: failed to merge canopy geometry');
   const canopyMat = new THREE.MeshStandardMaterial({ color: 0x1f4d3a, flatShading: true, roughness: 0.9 });
 
@@ -80,7 +82,7 @@ function buildFoliage(
         #ifdef USE_INSTANCING
           mvPosition = instanceMatrix * mvPosition;
         #endif
-        float sway = sin(uTime * 1.6 + (instanceMatrix[3].x + instanceMatrix[3].z) * 0.5) * 0.06;
+        float sway = sin(uTime * 1.6 + (instanceMatrix[3].x + instanceMatrix[3].z) * 0.5) * 0.08;
         mvPosition.x += uWindDir.x * sway;
         mvPosition.z += uWindDir.y * sway;
         mvPosition = modelViewMatrix * mvPosition;
@@ -108,7 +110,7 @@ function buildFoliage(
     const inWall =
       x >= wallBounds.min.x - 0.4 && x <= wallBounds.max.x + 0.4 && z >= wallBounds.min.y - 0.4 && z <= wallBounds.max.y + 0.4;
     if (inWater || inWall) continue;
-    const scale = 0.7 + Math.random() * 0.7;
+    const scale = 0.65 + Math.random() * 0.85;
     dummy.position.set(x, heightAt(x, z), z);
     dummy.rotation.y = Math.random() * Math.PI * 2;
     dummy.scale.setScalar(scale);
