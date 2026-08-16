@@ -374,7 +374,7 @@ export class Game {
     }
 
     const mode = this.playerController.mode;
-    this.cameraRig.update(this.playerController.body.position, mode, delta, this.level.foliageMeshes);
+    this.cameraRig.update(this.playerController.body.position, mode, delta, this.level.foliageMeshes, this.foxFacingAngle);
 
     this.hud.updateHealth(this.playerCombatant.hp, this.playerCombatant.maxHp);
     this.hud.updateStamina(this.playerController.stamina, MAX_STAMINA);
