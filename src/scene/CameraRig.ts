@@ -7,6 +7,9 @@ const CLIMB_OFFSET = new THREE.Vector3(0, 1.2, 3.6);
 const GROUNDED_FOV = 55;
 const COMBAT_FOV = 48;
 const FOLLOW_LERP = 0.08;
+const CAMERA_CLEARANCE = 0.3;
+
+const raycaster = new THREE.Raycaster();
 
 function offsetFor(mode: LocomotionMode): THREE.Vector3 {
   if (mode === 'combat') return COMBAT_OFFSET;
@@ -23,9 +26,25 @@ export class CameraRig {
     this.camera = new THREE.PerspectiveCamera(GROUNDED_FOV, aspect, 0.1, 100);
   }
 
-  update(targetPosition: THREE.Vector3, mode: LocomotionMode, delta: number): void {
+  update(targetPosition: THREE.Vector3, mode: LocomotionMode, delta: number, obstacles?: THREE.Object3D[]): void {
     const offset = offsetFor(mode);
-    const desired = targetPosition.clone().add(offset);
+    let desired = targetPosition.clone().add(offset);
+
+    if (obstacles && obstacles.length > 0) {
+      const lookOrigin = targetPosition.clone().add(new THREE.Vector3(0, 1, 0));
+      const toDesired = desired.clone().sub(lookOrigin);
+      const desiredDistance = toDesired.length();
+      if (desiredDistance > 1e-4) {
+        raycaster.set(lookOrigin, toDesired.clone().normalize());
+        raycaster.far = desiredDistance;
+        const hits = raycaster.intersectObjects(obstacles, false);
+        if (hits.length > 0 && hits[0].distance < desiredDistance) {
+          const clampedDistance = Math.max(0.5, hits[0].distance - CAMERA_CLEARANCE);
+          desired = lookOrigin.clone().addScaledVector(toDesired.normalize(), clampedDistance);
+        }
+      }
+    }
+
     this.camera.position.lerp(desired, 1 - Math.pow(1 - FOLLOW_LERP, delta * 60));
 
     const targetFov = mode === 'combat' ? COMBAT_FOV : GROUNDED_FOV;
