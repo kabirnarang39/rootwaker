@@ -123,8 +123,19 @@ export class Game {
     // mountain's climb-segment ledges, so it needs the same "candidate floor" treatment here —
     // otherwise a player who crosses the summit gate falls straight through the arena floor.
     // Box2.y here holds world Z, same convention as climbableWall.bounds elsewhere in this file.
+    // Same playerY guard as the ledge loop above: the throne room's XZ footprint overlaps real
+    // walkable jungle ground (both share the level's coordinate space at ground level), so
+    // without this guard the floor candidate applies at EVERY altitude — a player walking
+    // through that XZ patch at ground level would be snapped straight up to the summit,
+    // skipping the whole climb.
     const { bounds } = this.level.throneRoom;
-    if (x >= bounds.min.x && x <= bounds.max.x && z >= bounds.min.y && z <= bounds.max.y) {
+    if (
+      x >= bounds.min.x &&
+      x <= bounds.max.x &&
+      z >= bounds.min.y &&
+      z <= bounds.max.y &&
+      playerY + LEDGE_SNAP_TOLERANCE >= this.level.mountain.summitGate.y
+    ) {
       best = Math.max(best, this.level.mountain.summitGate.y);
     }
     return best;
@@ -343,9 +354,12 @@ export class Game {
     }
 
     if (!this.summitGateCrossed) {
-      const dx = this.playerController.body.position.x - this.level.mountain.summitGate.x;
-      const dz = this.playerController.body.position.z - this.level.mountain.summitGate.z;
-      if (Math.hypot(dx, dz) <= SUMMIT_GATE_RADIUS) {
+      // Full 3D distance, not horizontal-only: the whole mountain is a vertical stack sharing
+      // one x/z footprint with the summit gate (every segment/wall is built at the same
+      // wallX/baseZ), so a horizontal-only check fires the instant the player reaches the
+      // mountain's BASE, 24m below the real gate — teleporting the checkpoint into the air and
+      // skipping the entire climb on the next death from anything.
+      if (this.playerController.body.position.distanceTo(this.level.mountain.summitGate) <= SUMMIT_GATE_RADIUS) {
         this.summitGateCrossed = true;
         // fair-defeat-handling: a player who dies to the King respawns at the summit gate,
         // not back at the mountain's base — same silent-checkpoint idiom as isDefeated() below.

@@ -12,6 +12,12 @@ const RECOVER_SECONDS = 0.8;
  */
 export class EnemyAI {
   state: AiState = 'idle';
+  // Mutable, defaults to the module constant — every existing enemy (root-wraith, tusk-boar,
+  // mountain-guard) constructs with `new EnemyAI()` and never touches this field, so their
+  // behavior is byte-identical to before. A boss with combat phases (e.g. an enraged state
+  // with a shorter reaction window) can reassign this at runtime without recreating the
+  // instance mid-fight, which would otherwise reset the whole state machine mid-attack.
+  telegraphSeconds = TELEGRAPH_SECONDS;
   private timeInState = 0;
   private justDealtDamage = false;
 
@@ -24,7 +30,7 @@ export class EnemyAI {
         if (distanceToPlayer <= AGGRO_RANGE) this.enter('telegraph');
         break;
       case 'telegraph':
-        if (this.timeInState >= TELEGRAPH_SECONDS) {
+        if (this.timeInState >= this.telegraphSeconds) {
           this.enter('attacking');
           this.justDealtDamage = true;
         }

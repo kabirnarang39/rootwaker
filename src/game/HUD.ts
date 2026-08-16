@@ -107,7 +107,7 @@ export class HUD {
 
     const style = document.createElement('style');
     style.textContent = `
-      .rw-health-bar, .rw-objective, .rw-overlay {
+      :root {
         --ink: #070a08;
         --parchment: #eef2e6;
         --moss: #4a7a5e;
@@ -677,9 +677,16 @@ export class HUD {
     this.bossHealthFillEl.style.setProperty('--fill', `${pct}%`);
   }
 
-  /** Updates the objective panel's text — was previously only ever set once, at construction. */
+  /** Updates the objective panel's text — was previously only ever set once, at construction.
+   * Replays the panel's own entry animation (rw-objective-in, `both`-filled directly on the
+   * base selector, so it otherwise only ever plays once on mount) via the standard inline-
+   * override + reflow trick, so a mid-game objective change reads as a real beat instead of a
+   * silent text swap. */
   setObjective(text: string): void {
     this.objectiveEl.textContent = text;
+    this.objectiveEl.style.animation = 'none';
+    void this.objectiveEl.offsetWidth;
+    this.objectiveEl.style.animation = '';
   }
 
   hideBossBar(): void {

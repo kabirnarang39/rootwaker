@@ -92,9 +92,14 @@ export function createMountainKing(): MountainKing {
     // gameplay ai.state only ever changes inside ai.update(), so this is behaviorally identical
     // to mountainGuard's cross-call prevAiState.
     const prevAiState: AiState = ai.state;
-    ai.update(distanceToPlayer, delta);
+    // Set BEFORE ai.update() runs, so this frame's telegraph-duration check already reads the
+    // current phase — without this, EnemyAI.telegraphSeconds would always lag one frame behind
+    // an HP-threshold crossing, and the enraged phase's shorter reaction window (the actual
+    // mechanical escalation, not just higher damage) would never take effect.
     const phase = computeBossPhase(combatant.hp, combatant.maxHp);
     const params = BOSS_PHASE_PARAMS[phase];
+    ai.telegraphSeconds = params.telegraphSeconds;
+    ai.update(distanceToPlayer, delta);
 
     const isIdle = ai.state === 'idle' || ai.state === 'aggro';
     if (isIdle) {
