@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { applyGravity, damp, integrate, type PhysicsBody } from './physics';
 import type { LocomotionMode } from './LocomotionState';
 import type { WaterBody } from './WaterBody';
+import { checkPounceRange } from './Stalking';
 
 export interface MoveInput {
   x: number; // -1..1, world-space lateral intent
@@ -15,6 +16,7 @@ const CLIMB_SPEED = 2.2; // m/s, deliberately slower than ground move speed — 
 const SWIM_BUOYANCY_SCALE = -0.6; // negative gravity scale = net upward pull toward the surface
 const SWIM_DRAG_PER_SECOND = 0.9;
 const SWIM_MOVE_SPEED = 2.5;
+const POUNCE_MAX_RANGE = 2; // meters — real fox pounces reach much further, but this is a stylized, readable gameplay range
 
 export class PlayerController {
   readonly body: PhysicsBody;
@@ -94,5 +96,11 @@ export class PlayerController {
       this.mode = 'grounded';
       this.grounded = true;
     }
+  }
+
+  tryPounce(preyPosition: THREE.Vector3): { success: boolean; distance: number } {
+    if (this.mode !== 'grounded') return { success: false, distance: this.body.position.distanceTo(preyPosition) };
+    const window = checkPounceRange(this.body.position, preyPosition, POUNCE_MAX_RANGE);
+    return { success: window.inRange, distance: window.distance };
   }
 }
