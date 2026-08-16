@@ -9,6 +9,7 @@ import { CameraRig } from '../scene/CameraRig';
 import { createFox } from '../scene/createFox';
 import { createRootWraith, getAttackHitbox } from '../entities/rootWraith';
 import { getBoarHitbox } from '../entities/tuskBoar';
+import { getGuardHitbox } from '../entities/mountainGuard';
 import type { GroveHare } from '../entities/groveHare';
 import { resolveMeleeHit, applyDamage, isDefeated, CLAW_SWIPE, type Combatant } from './Combat';
 import { Input, type PlayerAction } from './Input';
@@ -17,6 +18,7 @@ import { computeApproachSpeed, checkPounceRange } from './Stalking';
 import { HUD } from './HUD';
 import { AudioFX } from './Audio';
 import { AbilityKit } from './AbilityKit';
+import { WindGust, type GustState } from './WindGust';
 import { SKINS } from '../scene/skins';
 import { resolvePlayerObstacleCollision } from './ObstacleCollision';
 
@@ -24,8 +26,17 @@ import { resolvePlayerObstacleCollision } from './ObstacleCollision';
 // exactly when a pounce would actually succeed. Keep these two in sync by hand.
 const HUNT_PROMPT_RANGE = 2;
 const BOAR_HIT_DAMAGE = 12; // matches the root-wraith's melee hit — same claw-scale threat
+const GUARD_HIT_DAMAGE = 12; // same claw-scale threat as the wraith/boar
 const PLAYER_COLLISION_RADIUS = 0.35;
 const PLAYER_COLLISION_HEIGHT = 0.9;
+const LEDGE_REST_RADIUS = 1.5; // meters — how close to a mountain ledge counts as "resting" on it
+const MAX_STAMINA = 100; // mirrors PlayerController's own (unexported) MAX_STAMINA
+// ponytail: mountain ledges have no width/depth in ClimbSegment (only a center point), so this
+// is a circular approximation of each ledge's rectangular footprint (real half-extents are up to
+// 4x2m) rather than an exact box check. Upgrade to real bounds if a ledge ever proves too small
+// for this radius or two ledges' radii start overlapping.
+const MOUNTAIN_LEDGE_RADIUS = 4.5;
+const LEDGE_SNAP_TOLERANCE = 1; // meters of downward drift still counted as "on the ledge" this frame
 
 export class Game {
   private scene = new THREE.Scene();
@@ -47,6 +58,9 @@ export class Game {
 
   private audio = new AudioFX();
   private abilityKit = new AbilityKit();
+  private windGust = new WindGust();
+  private prevGustState: GustState = 'calm';
+  private mountainWindStarted = false;
   private prevPlayerPosition = this.playerController.body.position.clone();
 
   private input: Input;
@@ -54,6 +68,23 @@ export class Game {
 
   private moveInput = { x: 0, z: 0, jump: false };
   private jumpPressed = false;
+
+  // Base terrain heightAt() has no notion of the mountain's elevated ledges, so a player
+  // topping out a climb segment would otherwise free-fall straight back down to jungle-floor
+  // height next frame. Layer each nearby ledge in as a candidate floor, same shape as
+  // groundHeightAt but ledge-aware — the only caller is this.playerController.update() below.
+  private groundHeightWithLedges = (x: number, z: number): number => {
+    let best = this.level.groundHeightAt(x, z);
+    const playerY = this.playerController.body.position.y;
+    for (const segment of this.level.mountain.segments) {
+      const ledge = segment.ledgePosition;
+      const horizontalDist = Math.hypot(x - ledge.x, z - ledge.z);
+      if (horizontalDist <= MOUNTAIN_LEDGE_RADIUS && playerY + LEDGE_SNAP_TOLERANCE >= ledge.y) {
+        best = Math.max(best, ledge.y);
+      }
+    }
+    return best;
+  };
 
   constructor(container: HTMLElement) {
     this.scene.background = new THREE.Color(0x0a1420);
@@ -175,6 +206,25 @@ export class Game {
       if (nearWall && this.moveInput.z > 0) {
         this.playerController.beginClimb(this.level.climbableWall.normal, this.level.climbableWall.topY);
       }
+
+      if (this.playerController.mode === 'grounded' && this.moveInput.z > 0) {
+        for (const segment of this.level.mountain.segments) {
+          const { wall } = segment;
+          const nearSegmentWall =
+            this.playerController.body.position.x <= wall.bounds.max.x + 0.5 &&
+            this.playerController.body.position.x >= wall.bounds.min.x - 0.5 &&
+            this.playerController.body.position.z >= wall.bounds.min.y &&
+            this.playerController.body.position.z <= wall.bounds.max.y;
+          if (nearSegmentWall) {
+            this.playerController.beginClimb(wall.normal, wall.topY, segment.ledgePosition);
+            if (!this.mountainWindStarted) {
+              this.mountainWindStarted = true;
+              this.audio.startMountainWind(); // additive layer on top of jungle ambience — no zone-swap system exists in this project
+            }
+            break;
+          }
+        }
+      }
     }
 
     if (this.playerController.mode === 'climbing') {
@@ -182,7 +232,7 @@ export class Game {
     } else if (this.playerController.mode === 'swimming') {
       this.playerController.updateSwim(this.moveInput, delta, this.level.water);
     } else {
-      this.playerController.update(this.moveInput, delta, this.level.groundHeightAt);
+      this.playerController.update(this.moveInput, delta, this.groundHeightWithLedges);
       // PLAYER_COLLISION_RADIUS (0.35m) must stay well under TreeObstacleGrid's cell size
       // (3m default) — nearby() ignores its radius arg and always does a fixed 3x3-cell
       // sweep, so a larger query radius could miss obstacles just outside that sweep.
@@ -200,6 +250,26 @@ export class Game {
       if (isInsideWaterBody(this.playerController.body.position, this.level.water)) {
         this.playerController.beginSwim();
       }
+    }
+
+    if (this.playerController.mode === 'grounded') {
+      for (const segment of this.level.mountain.segments) {
+        if (this.playerController.body.position.distanceTo(segment.ledgePosition) <= LEDGE_REST_RADIUS) {
+          this.playerController.restStamina(delta);
+          break;
+        }
+      }
+    }
+
+    this.windGust.update(delta);
+    if (this.windGust.state === 'telegraph' && this.prevGustState !== 'telegraph') {
+      this.audio.playWindTelegraph();
+    } else if (this.windGust.state === 'gusting' && this.prevGustState !== 'gusting') {
+      this.audio.playGustHit();
+    }
+    this.prevGustState = this.windGust.state;
+    if (this.playerController.mode === 'climbing') {
+      this.playerController.body.position.add(this.windGust.forceVector().multiplyScalar(delta));
     }
 
     this.fox.group.position.copy(this.playerController.body.position);
@@ -247,6 +317,15 @@ export class Game {
       }
     }
 
+    for (const guard of this.level.mountain.guards) {
+      const guardDistance = guard.group.position.distanceTo(this.playerController.body.position);
+      guard.update(time, delta, guardDistance);
+      if (guard.ai.shouldDealDamageThisFrame()) {
+        const hit = resolveMeleeHit(getGuardHitbox(guard), this.playerCombatant);
+        if (hit) applyDamage(this.playerCombatant, GUARD_HIT_DAMAGE);
+      }
+    }
+
     if (isDefeated(this.playerCombatant)) {
       // silent checkpoint respawn — no game-over screen, matches the chapter-restart design spec
       this.playerController.body.position.copy(this.checkpoint);
@@ -268,6 +347,7 @@ export class Game {
     this.cameraRig.update(this.playerController.body.position, mode, delta, this.level.foliageMeshes);
 
     this.hud.updateHealth(this.playerCombatant.hp, this.playerCombatant.maxHp);
+    this.hud.updateStamina(this.playerController.stamina, MAX_STAMINA);
 
     // must run after every this-frame use of the old position (stalking's approach-speed calc above)
     this.prevPlayerPosition.copy(this.playerController.body.position);
@@ -322,6 +402,17 @@ export class Game {
         this.level.group.remove(boar.group);
         this.level.boars.splice(i, 1);
         this.abilityKit.unlock('boar-charge');
+      }
+    }
+
+    for (let i = this.level.mountain.guards.length - 1; i >= 0; i--) {
+      const guard = this.level.mountain.guards[i];
+      if (!resolveMeleeHit(attackHitbox, guard.combatant)) continue;
+      applyDamage(guard.combatant, CLAW_SWIPE.damage);
+      if (isDefeated(guard.combatant)) {
+        this.level.group.remove(guard.group);
+        this.level.mountain.guards.splice(i, 1);
+        // no new ability tied to guard defeat — out of scope per this chapter's design (boss fight/village-trust payoff excluded)
       }
     }
   }
