@@ -16,6 +16,11 @@ export class HUD {
   private viewModeToastEl: HTMLDivElement;
   private viewModeNameEl: HTMLDivElement;
   private viewModeToastTimer: number | null = null;
+  private bossBarEl: HTMLDivElement;
+  private bossNameEl: HTMLSpanElement;
+  private bossHealthFillEl: HTMLDivElement;
+  private arcCompleteEl: HTMLDivElement;
+  private arcCompleteTimer: number | null = null;
   private overlay: HTMLDivElement;
   private overlayStats: HTMLDivElement;
   private overlayTitle: HTMLDivElement;
@@ -55,6 +60,16 @@ export class HUD {
       </div>
       <div class="rw-view-mode-toast">
         <div class="rw-view-mode-name"></div>
+      </div>
+      <div class="rw-boss-bar">
+        <span class="rw-boss-name"></span>
+        <div class="rw-boss-track">
+          <div class="rw-boss-fill"></div>
+        </div>
+      </div>
+      <div class="rw-arc-complete">
+        <div class="rw-arc-eyebrow">Arc Complete</div>
+        <div class="rw-arc-title">The summit gate swings open</div>
       </div>
       <div class="rw-controls-legend">
         <div class="rw-legend-eyebrow">Controls</div>
@@ -99,6 +114,7 @@ export class HUD {
         --myth-cyan: #6ff2ff;
         --vitality-low: #d9667a;
         --spirit-amber: #ffb15e;
+        --ember: #ff6a3a;
         --bark: #140d09;
         --claim-red: #d9667a;
         --display-face: 'Fraunces', ui-serif, Georgia, serif;
@@ -307,6 +323,91 @@ export class HUD {
         .rw-view-mode-toast.rw-visible { animation: none; opacity: 1; transform: translate(-50%, 0); }
       }
 
+      /* Boss bar: same instrument language as vitality/stamina (carved track, gradient fill,
+         glow shadow), but housed in its own plaque (like the objective panel) since it needs
+         a name label above it and only appears for the throne-room fight. Sits at top:140px —
+         below the ability toast (20px) and view-mode toast (90px) so a toast firing mid-fight
+         never overlaps it — traced to a new --ember accent (molten/antagonist token, kept
+         separate from the player-identity --myth-cyan/--spirit-amber tokens) rather than reusing
+         vitality's cyan, so the player's own health and the boss's read as opposed forces. */
+      .rw-boss-bar {
+        position: fixed; top: 140px; left: 50%; transform: translateX(-50%); z-index: 12;
+        display: none; pointer-events: none; text-align: center;
+        font-family: var(--body-face); color: var(--parchment);
+        width: 260px;
+        padding: 10px 20px 9px;
+        background: linear-gradient(180deg, rgba(20,13,9,0.7), rgba(7,10,8,0.88));
+        border-top: 1px solid rgba(255,106,58,0.5);
+        box-shadow: 0 0 20px rgba(255,106,58,0.3), 0 10px 26px rgba(0,0,0,0.5);
+        clip-path: polygon(4% 0, 96% 0, 100% 100%, 0% 100%);
+      }
+      .rw-boss-bar.rw-visible {
+        display: block;
+        animation: rw-objective-in 420ms cubic-bezier(0.16, 1, 0.3, 1) both;
+      }
+      .rw-boss-name {
+        text-transform: uppercase; font-size: 11px; letter-spacing: 0.12em;
+        font-family: var(--display-face); font-weight: 600;
+        color: var(--ember); opacity: 0.9; display: block; margin-bottom: 6px;
+      }
+      .rw-boss-track {
+        position: relative;
+        height: 11px;
+        background: rgba(238,242,230,0.07);
+        box-shadow: inset 0 0 0 1px rgba(238,242,230,0.14), inset 0 1px 2px rgba(0,0,0,0.4);
+        clip-path: polygon(8px 0, 100% 0, calc(100% - 8px) 100%, 0 100%);
+        overflow: hidden;
+      }
+      .rw-boss-fill {
+        position: absolute; inset: 0;
+        width: var(--fill, 100%);
+        background: linear-gradient(90deg, #7a2a10, var(--ember));
+        box-shadow: 0 0 10px 1px rgba(255,106,58,0.55), 0 0 2px rgba(255,106,58,0.9);
+        transition: width 220ms ease-out;
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .rw-boss-bar.rw-visible { animation: none; }
+      }
+
+      /* Arc-complete toast: the ability toast's exact fade lifecycle, but centered on the
+         screen instead of top-anchored — this is the chapter's climax beat (throne room
+         cleared), not a routine pickup notification, so it gets the most prominent position
+         and the highest z-index in the file, plus a longer 4s hold (vs. the ability toast's
+         3s). Centering also means it never collides with any top-stacked panel (health/boss
+         bar/toasts) even if one happens to be visible at the same moment. Ember-accented to
+         match the boss bar it's paying off. */
+      .rw-arc-complete {
+        position: fixed; top: 50%; left: 50%; z-index: 16;
+        display: none; pointer-events: none; text-align: center;
+        font-family: var(--body-face); color: var(--parchment);
+        min-width: 260px; max-width: min(420px, 88vw);
+        padding: 16px 32px 14px;
+        background: linear-gradient(180deg, rgba(20,13,9,0.8), rgba(7,10,8,0.94));
+        border-top: 1px solid rgba(255,106,58,0.6);
+        box-shadow: 0 0 32px rgba(255,106,58,0.4), 0 18px 44px rgba(0,0,0,0.55);
+        clip-path: polygon(3% 0, 97% 0, 100% 100%, 0% 100%);
+      }
+      .rw-arc-complete.rw-visible {
+        display: block;
+        animation: rw-arc-complete-toast 4000ms cubic-bezier(0.16, 1, 0.3, 1) both;
+      }
+      .rw-arc-eyebrow {
+        text-transform: uppercase; font-size: 10px; letter-spacing: 0.18em;
+        color: var(--ember); opacity: 0.9; margin-bottom: 5px;
+      }
+      .rw-arc-title {
+        font-family: var(--display-face); font-weight: 600; font-size: 22px;
+        letter-spacing: 0.01em; text-shadow: 0 0 18px rgba(255,106,58,0.45);
+      }
+      @keyframes rw-arc-complete-toast {
+        0% { opacity: 0; transform: translate(-50%, calc(-50% - 14px)) scale(0.97); }
+        10%, 88% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+        100% { opacity: 0; transform: translate(-50%, calc(-50% - 10px)) scale(0.98); }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .rw-arc-complete.rw-visible { animation: none; opacity: 1; transform: translate(-50%, -50%); }
+      }
+
       /* Controls legend: opposite corner from the vitality/stamina cluster, same carved-bark
          plaque trapezoid and idle-amber key-badge treatment as the hunt prompt (rw-hunt-key)
          rather than a new visual language. Visible by default (a fresh player needs it before
@@ -484,6 +585,10 @@ export class HUD {
     this.controlsLegendEl = this.root.querySelector('.rw-controls-legend')!;
     this.viewModeToastEl = this.root.querySelector('.rw-view-mode-toast')!;
     this.viewModeNameEl = this.root.querySelector('.rw-view-mode-name')!;
+    this.bossBarEl = this.root.querySelector('.rw-boss-bar')!;
+    this.bossNameEl = this.root.querySelector('.rw-boss-name')!;
+    this.bossHealthFillEl = this.root.querySelector('.rw-boss-fill')!;
+    this.arcCompleteEl = this.root.querySelector('.rw-arc-complete')!;
     this.overlay = this.root.querySelector('.rw-overlay')!;
     this.overlayStats = this.root.querySelector('.rw-overlay-stats')!;
     this.overlayTitle = this.root.querySelector('.rw-overlay-title')!;
@@ -558,6 +663,36 @@ export class HUD {
       this.viewModeToastEl.classList.remove('rw-visible');
       this.viewModeToastTimer = null;
     }, 1200);
+  }
+
+  /** Reveals the boss health-bar plaque and sets the boss's name label. */
+  showBossBar(name: string): void {
+    this.bossNameEl.textContent = name;
+    this.bossBarEl.classList.add('rw-visible');
+  }
+
+  /** Drives the boss health bar's fill width, mirroring updateHealth's clamp pattern. */
+  updateBossHealth(hp: number, maxHp: number): void {
+    const pct = Math.max(0, Math.min(1, hp / maxHp));
+    this.bossHealthFillEl.style.setProperty('--fill', `${pct * 100}%`);
+  }
+
+  hideBossBar(): void {
+    this.bossBarEl.classList.remove('rw-visible');
+  }
+
+  /** One-shot climax toast for the chapter's arc completion; mirrors showAbilityUnlocked's
+   *  fade lifecycle but holds longer (4s vs 3s) since this is the payoff beat. */
+  showArcComplete(): void {
+    this.arcCompleteEl.classList.remove('rw-visible');
+    void this.arcCompleteEl.offsetWidth;
+    this.arcCompleteEl.classList.add('rw-visible');
+
+    if (this.arcCompleteTimer !== null) window.clearTimeout(this.arcCompleteTimer);
+    this.arcCompleteTimer = window.setTimeout(() => {
+      this.arcCompleteEl.classList.remove('rw-visible');
+      this.arcCompleteTimer = null;
+    }, 4000);
   }
 
   showGameOver(distance: number, motes: number, score: number) {

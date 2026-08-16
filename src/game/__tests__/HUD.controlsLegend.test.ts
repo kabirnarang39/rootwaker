@@ -12,13 +12,17 @@ import hudSource from '../HUD.ts?raw';
 
 function fakeElement(): any {
   const classSet = new Set<string>();
+  const setPropertyCalls: [string, string][] = [];
   const el: any = {
     classList: {
       add: (...names: string[]) => names.forEach((n) => classSet.add(n)),
       remove: (...names: string[]) => names.forEach((n) => classSet.delete(n)),
       contains: (n: string) => classSet.has(n),
     },
-    style: { setProperty: () => {} },
+    style: {
+      setProperty: (name: string, value: string) => setPropertyCalls.push([name, value]),
+      setPropertyCalls,
+    },
     textContent: '',
     value: '',
     appendChild: () => {},
@@ -33,9 +37,19 @@ beforeEach(() => {
     createElement: () => fakeElement(),
     head: fakeElement(),
   });
+  // showArcComplete/showAbilityUnlocked/showViewMode all use the real global `window` for
+  // their auto-dismiss timer (node test environment has no window — see Input.look.test.ts's
+  // fakeWindow() for the same reasoning). Fake timers keep the 4s auto-dismiss from actually
+  // blocking the test run.
+  vi.useFakeTimers();
+  vi.stubGlobal('window', {
+    setTimeout: (...args: Parameters<typeof setTimeout>) => setTimeout(...args),
+    clearTimeout: (...args: Parameters<typeof clearTimeout>) => clearTimeout(...args),
+  });
 });
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.unstubAllGlobals();
 });
 
@@ -77,5 +91,56 @@ describe('HUD controls legend — content (source-text check, no DOM needed)', (
   it('does NOT list Dodge or Interact — both keys are bound in Input.ts but Game.ts\'s onAction ignores both, so listing them would be a control that does nothing', () => {
     expect(legendMarkup).not.toMatch(/>Dodge</i);
     expect(legendMarkup).not.toMatch(/>Interact</i);
+  });
+});
+
+describe('HUD boss bar + arc-complete toast — behavior (real HUD instance, fake DOM)', () => {
+  it('showBossBar sets the name label and reveals the panel', async () => {
+    const { HUD } = await import('../HUD');
+    const hud = new HUD(fakeElement() as unknown as HTMLElement);
+    hud.showBossBar('Mountain King');
+    const h = hud as unknown as {
+      bossNameEl: ReturnType<typeof fakeElement>;
+      bossBarEl: ReturnType<typeof fakeElement>;
+    };
+    expect(h.bossNameEl.textContent).toBe('Mountain King');
+    expect(h.bossBarEl.classList.contains('rw-visible')).toBe(true);
+  });
+
+  it('updateBossHealth sets the fill custom property proportional to hp/maxHp', async () => {
+    const { HUD } = await import('../HUD');
+    const hud = new HUD(fakeElement() as unknown as HTMLElement);
+    hud.updateBossHealth(110, 220);
+    const fillEl = (hud as unknown as { bossHealthFillEl: ReturnType<typeof fakeElement> }).bossHealthFillEl;
+    expect(fillEl.style.setPropertyCalls).toContainEqual(['--fill', '50%']);
+  });
+
+  it('updateBossHealth clamps out-of-range hp to the 0–100% range', async () => {
+    const { HUD } = await import('../HUD');
+    const hud = new HUD(fakeElement() as unknown as HTMLElement);
+    const fillEl = (hud as unknown as { bossHealthFillEl: ReturnType<typeof fakeElement> }).bossHealthFillEl;
+
+    hud.updateBossHealth(-40, 220);
+    expect(fillEl.style.setPropertyCalls).toContainEqual(['--fill', '0%']);
+
+    hud.updateBossHealth(999, 220);
+    expect(fillEl.style.setPropertyCalls).toContainEqual(['--fill', '100%']);
+  });
+
+  it('hideBossBar removes the visible class', async () => {
+    const { HUD } = await import('../HUD');
+    const hud = new HUD(fakeElement() as unknown as HTMLElement);
+    hud.showBossBar('Mountain King');
+    hud.hideBossBar();
+    const bossBarEl = (hud as unknown as { bossBarEl: ReturnType<typeof fakeElement> }).bossBarEl;
+    expect(bossBarEl.classList.contains('rw-visible')).toBe(false);
+  });
+
+  it('showArcComplete adds the visible class to the arc-complete toast', async () => {
+    const { HUD } = await import('../HUD');
+    const hud = new HUD(fakeElement() as unknown as HTMLElement);
+    hud.showArcComplete();
+    const arcCompleteEl = (hud as unknown as { arcCompleteEl: ReturnType<typeof fakeElement> }).arcCompleteEl;
+    expect(arcCompleteEl.classList.contains('rw-visible')).toBe(true);
   });
 });
