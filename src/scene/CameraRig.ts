@@ -1,0 +1,38 @@
+import * as THREE from 'three';
+import type { LocomotionMode } from '../game/LocomotionState';
+
+const GROUNDED_OFFSET = new THREE.Vector3(0, 2.4, 4.2);
+const COMBAT_OFFSET = new THREE.Vector3(0, 1.9, 3.2);
+const CLIMB_OFFSET = new THREE.Vector3(0, 1.2, 3.6);
+const GROUNDED_FOV = 55;
+const COMBAT_FOV = 48;
+const FOLLOW_LERP = 0.08;
+
+function offsetFor(mode: LocomotionMode): THREE.Vector3 {
+  if (mode === 'combat') return COMBAT_OFFSET;
+  if (mode === 'climbing') return CLIMB_OFFSET;
+  return GROUNDED_OFFSET;
+}
+
+export class CameraRig {
+  readonly camera: THREE.PerspectiveCamera;
+
+  constructor() {
+    // ponytail: default 16:9 aspect ratio in tests; window.innerWidth/Height in production
+    const aspect = typeof window !== 'undefined' ? window.innerWidth / window.innerHeight : 16 / 9;
+    this.camera = new THREE.PerspectiveCamera(GROUNDED_FOV, aspect, 0.1, 100);
+  }
+
+  update(targetPosition: THREE.Vector3, mode: LocomotionMode, delta: number): void {
+    const offset = offsetFor(mode);
+    const desired = targetPosition.clone().add(offset);
+    this.camera.position.lerp(desired, 1 - Math.pow(1 - FOLLOW_LERP, delta * 60));
+
+    const targetFov = mode === 'combat' ? COMBAT_FOV : GROUNDED_FOV;
+    this.camera.fov = THREE.MathUtils.lerp(this.camera.fov, targetFov, 1 - Math.pow(1 - FOLLOW_LERP, delta * 60));
+    this.camera.updateProjectionMatrix();
+
+    const lookTarget = targetPosition.clone().add(new THREE.Vector3(0, 1, 0));
+    this.camera.lookAt(lookTarget);
+  }
+}
