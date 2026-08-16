@@ -1,4 +1,4 @@
-export type AbilityId = 'keen-ear' | 'boar-charge';
+export type AbilityId = 'keen-ear' | 'boar-charge' | 'bear-swipe' | 'kings-roar';
 
 export interface Ability {
   id: AbilityId;
@@ -16,6 +16,16 @@ export const ABILITIES: Record<AbilityId, Ability> = {
     id: 'boar-charge',
     name: "Boar's Charge",
     description: 'A low, driving charge-dash, learned from the tusk-boar itself.',
+  },
+  'bear-swipe': {
+    id: 'bear-swipe',
+    name: 'Bear Swipe',
+    description: "A heavier claw strike, learned from the Grove Bear's own weight and reach.",
+  },
+  'kings-roar': {
+    id: 'kings-roar',
+    name: "King's Roar",
+    description: 'A commanding roar, earned from the Elder Bear King — nearby foes falter at its sound.',
   },
 };
 
