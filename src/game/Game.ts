@@ -37,6 +37,15 @@ const MAX_STAMINA = 100; // mirrors PlayerController's own (unexported) MAX_STAM
 // for this radius or two ledges' radii start overlapping.
 const MOUNTAIN_LEDGE_RADIUS = 4.5;
 const LEDGE_SNAP_TOLERANCE = 1; // meters of downward drift still counted as "on the ledge" this frame
+const WALL_CLIMB_HEIGHT_TOLERANCE = 2.0; // meters — disambiguates stacked wall/segments sharing x/z footprint
+
+// All mountain wall/segments share a fixed 6-unit segment height, so each one's base is
+// wall.topY - 6. Gate proximity checks on this so stacked segments (same x/z, different
+// height) don't false-match each other.
+function isNearWallHeight(playerY: number, wallTopY: number, segmentHeight: number): boolean {
+  const wallBaseY = wallTopY - segmentHeight;
+  return Math.abs(playerY - wallBaseY) <= WALL_CLIMB_HEIGHT_TOLERANCE;
+}
 
 export class Game {
   private scene = new THREE.Scene();
@@ -202,7 +211,8 @@ export class Game {
         this.playerController.body.position.x <= this.level.climbableWall.bounds.max.x + 0.5 &&
         this.playerController.body.position.x >= this.level.climbableWall.bounds.min.x - 0.5 &&
         this.playerController.body.position.z >= this.level.climbableWall.bounds.min.y &&
-        this.playerController.body.position.z <= this.level.climbableWall.bounds.max.y;
+        this.playerController.body.position.z <= this.level.climbableWall.bounds.max.y &&
+        isNearWallHeight(this.playerController.body.position.y, this.level.climbableWall.topY, 6);
       if (nearWall && this.moveInput.z > 0) {
         this.playerController.beginClimb(this.level.climbableWall.normal, this.level.climbableWall.topY);
       }
@@ -214,7 +224,8 @@ export class Game {
             this.playerController.body.position.x <= wall.bounds.max.x + 0.5 &&
             this.playerController.body.position.x >= wall.bounds.min.x - 0.5 &&
             this.playerController.body.position.z >= wall.bounds.min.y &&
-            this.playerController.body.position.z <= wall.bounds.max.y;
+            this.playerController.body.position.z <= wall.bounds.max.y &&
+            isNearWallHeight(this.playerController.body.position.y, wall.topY, 6);
           if (nearSegmentWall) {
             this.playerController.beginClimb(wall.normal, wall.topY, segment.ledgePosition);
             if (!this.mountainWindStarted) {
