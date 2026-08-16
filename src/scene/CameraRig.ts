@@ -184,6 +184,11 @@ export class CameraRig {
         obstacles,
       );
       this.camera.position.lerp(desired, 1 - Math.pow(1 - FOLLOW_LERP, delta * 60));
+      // Dense canopy or a low mountain overhang can clamp hawkEye's high offset all the way
+      // down near chest height — same self-clip risk as follow/closeUp, same fix.
+      if (this.camera.position.distanceTo(lookOrigin) < NEAR_SELF_HIDE_DISTANCE) {
+        this.camera.layers.disable(1);
+      }
       this.camera.lookAt(targetPosition);
       this.camera.fov = THREE.MathUtils.lerp(this.camera.fov, GROUNDED_FOV, 1 - Math.pow(1 - FOLLOW_LERP, delta * 60));
       this.camera.updateProjectionMatrix();

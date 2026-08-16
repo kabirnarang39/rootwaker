@@ -196,6 +196,25 @@ describe('CameraRig hawk-eye and fox-eye view modes', () => {
     expect(rigWithObstacle.camera.position.y).toBeLessThan(rigNoObstacle.camera.position.y - 1);
   });
 
+  it('hawkEye also hides the fox\'s own body when a low obstacle (e.g. dense canopy or a mountain overhang) clamps the camera down near chest height', () => {
+    const target = new THREE.Vector3(0, 0, 0);
+    const lookOrigin = target.clone().add(new THREE.Vector3(0, 1, 0));
+
+    const blocker = new THREE.Mesh(new THREE.BoxGeometry(20, 0.1, 20), new THREE.MeshBasicMaterial());
+    blocker.position.set(0, 1.3, 0); // just above lookOrigin — a low ceiling right over the fox
+    blocker.updateMatrixWorld(true);
+
+    const rig = new CameraRig();
+    rig.cycleViewMode();
+    rig.cycleViewMode(); // -> hawkEye
+    for (let i = 0; i < 60; i++) rig.update(target, 'grounded', 1 / 60, [blocker]);
+
+    expect(rig.camera.position.distanceTo(lookOrigin)).toBeLessThan(0.6);
+    const foxOnlyLayer = new THREE.Layers();
+    foxOnlyLayer.set(1);
+    expect(rig.camera.layers.test(foxOnlyLayer)).toBe(false);
+  });
+
   it('foxEye applyLookDelta clamps orbitYaw at accumulation time, so it never winds up past the glance range (regression: continuing to drag past the clamp used to require dragging back the excess before the view moved again)', () => {
     const rig = new CameraRig();
     rig.cycleViewMode();
