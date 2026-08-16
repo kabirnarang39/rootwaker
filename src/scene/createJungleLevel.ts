@@ -28,6 +28,10 @@ export interface JungleLevel {
   boars: TuskBoar[];
   obstacleGrid: TreeObstacleGrid;
   foliageMeshes: THREE.InstancedMesh[];
+  // Wall/ledge/gate/guard meshes the camera should also raycast against (e.g. the hawk-eye
+  // view being blocked by an overhanging mountain ledge) — separate from foliageMeshes since
+  // callers may want to treat solid mountain geometry differently from foliage.
+  climbObstacleMeshes: THREE.Object3D[];
   mountain: {
     segments: ClimbSegment[];
     guards: MountainGuard[];
@@ -496,6 +500,7 @@ export function createJungleLevel(): JungleLevel {
     boars,
     obstacleGrid,
     foliageMeshes,
+    climbObstacleMeshes: [wallMesh, ...mountain.meshes],
     mountain: { segments: mountain.segments, guards: mountain.guards, summitGate: mountain.summitGate },
     update: updateFoliage,
   };

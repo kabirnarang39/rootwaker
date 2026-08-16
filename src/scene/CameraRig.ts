@@ -18,9 +18,12 @@ const PITCH_MAX = 0.9;
 
 const HAWK_EYE_HEIGHT = 9;
 const HAWK_EYE_HORIZONTAL = 2.5; // slight horizontal offset so it isn't a dead-vertical top-down view
-const HAWK_EYE_PITCH = -1.3; // radians, steep fixed downward look — a hawk looks down, not level
-const FOX_EYE_HEIGHT = 0.35; // meters above the target, roughly fox head height
-const FOX_EYE_FORWARD_NUDGE = 0.15; // meters forward of the target so the camera isn't inside the model's own head geometry
+// Measured directly against createFox.ts's real rig: the head joint sits at local (0, 0.23, 0.45)
+// and the snout tip reaches z~0.88 ahead of the root. FOX_EYE_HEIGHT/FORWARD_NUDGE must clear
+// both, or the first-person view sits inside the fox's own head/snout geometry.
+const FOX_EYE_HEIGHT = 0.3; // meters above the target, at fox eye/head height
+const FOX_EYE_FORWARD_NUDGE = 0.95; // meters forward of the target, clearing the snout tip (~0.88m)
+const FOX_SNOUT_TIP_Z = 0.88; // meters — the real measured clearance boundary the nudge above must exceed
 
 const raycaster = new THREE.Raycaster();
 
@@ -75,6 +78,28 @@ export class CameraRig {
     );
   }
 
+  // Raycasts from lookOrigin toward desired and pulls desired in along that same ray if an
+  // obstacle blocks the sightline — shared by the orbit follow/closeUp path and hawkEye, since
+  // an overhanging mountain ledge can occlude either exactly the same way a tree trunk can.
+  private clampAgainstObstacles(
+    lookOrigin: THREE.Vector3,
+    desired: THREE.Vector3,
+    obstacles?: THREE.Object3D[],
+  ): THREE.Vector3 {
+    if (!obstacles || obstacles.length === 0) return desired;
+    const toDesired = desired.clone().sub(lookOrigin);
+    const desiredDistance = toDesired.length();
+    if (desiredDistance <= 1e-4) return desired;
+    raycaster.set(lookOrigin, toDesired.clone().normalize());
+    raycaster.far = desiredDistance;
+    const hits = raycaster.intersectObjects(obstacles, false);
+    if (hits.length > 0 && hits[0].distance < desiredDistance) {
+      const clampedDistance = Math.max(0.5, hits[0].distance - CAMERA_CLEARANCE);
+      return lookOrigin.clone().addScaledVector(toDesired.normalize(), clampedDistance);
+    }
+    return desired;
+  }
+
   update(
     targetPosition: THREE.Vector3,
     mode: LocomotionMode,
@@ -82,49 +107,60 @@ export class CameraRig {
     obstacles?: THREE.Object3D[],
     facingAngle?: number,
   ): void {
-    if (this._viewMode === 'hawkEye') {
-      const desired = targetPosition
-        .clone()
-        .add(new THREE.Vector3(HAWK_EYE_HORIZONTAL * Math.sin(this._orbitYaw), HAWK_EYE_HEIGHT, HAWK_EYE_HORIZONTAL * Math.cos(this._orbitYaw)));
+    // foxEye's first-person eye point assumes solid ground under the fox — while climbing,
+    // the target is a wall-relative position and the facing angle is frozen pointing INTO the
+    // wall (the climb gate only fires while moving toward it), so first-person would look
+    // straight into rock with no way to turn away. Fall back to the follow camera for this
+    // one combination; every other view mode is unaffected.
+    const activeViewMode = this._viewMode === 'foxEye' && mode === 'climbing' ? 'follow' : this._viewMode;
+
+    if (activeViewMode === 'hawkEye') {
+      const lookOrigin = targetPosition.clone().add(new THREE.Vector3(0, 1, 0));
+      const desired = this.clampAgainstObstacles(
+        lookOrigin,
+        targetPosition
+          .clone()
+          .add(new THREE.Vector3(HAWK_EYE_HORIZONTAL * Math.sin(this._orbitYaw), HAWK_EYE_HEIGHT, HAWK_EYE_HORIZONTAL * Math.cos(this._orbitYaw))),
+        obstacles,
+      );
       this.camera.position.lerp(desired, 1 - Math.pow(1 - FOLLOW_LERP, delta * 60));
       this.camera.lookAt(targetPosition);
-      void HAWK_EYE_PITCH; // lookAt already produces a steep downward angle given the height/horizontal ratio above; named constant documents the intent for future tuning
       this.camera.fov = THREE.MathUtils.lerp(this.camera.fov, GROUNDED_FOV, 1 - Math.pow(1 - FOLLOW_LERP, delta * 60));
       this.camera.updateProjectionMatrix();
       return;
     }
 
-    if (this._viewMode === 'foxEye') {
-      const angle = facingAngle ?? 0;
+    if (activeViewMode === 'foxEye') {
+      const facing = facingAngle ?? 0;
+      // Eye point clears the snout using the pure facing direction (physical head/snout
+      // clearance) — the look DIRECTION separately layers the player's own mouse-look on top,
+      // so dragging while in first-person visibly turns the view instead of silently doing
+      // nothing (which previously left CameraRelativeMove's movement transform decoupled from
+      // what the player could see).
       const eyePosition = targetPosition
         .clone()
         .add(new THREE.Vector3(0, FOX_EYE_HEIGHT, 0))
-        .add(new THREE.Vector3(Math.sin(angle) * FOX_EYE_FORWARD_NUDGE, 0, Math.cos(angle) * FOX_EYE_FORWARD_NUDGE));
+        .add(new THREE.Vector3(Math.sin(facing) * FOX_EYE_FORWARD_NUDGE, 0, Math.cos(facing) * FOX_EYE_FORWARD_NUDGE));
+      void FOX_SNOUT_TIP_Z; // documents the real measured clearance boundary FOX_EYE_FORWARD_NUDGE must exceed; enforced by CameraRig.viewmodes.test.ts
       this.camera.position.copy(eyePosition);
-      const lookTarget = eyePosition.clone().add(new THREE.Vector3(Math.sin(angle), 0, Math.cos(angle)));
-      this.camera.lookAt(lookTarget);
-      this.camera.fov = THREE.MathUtils.lerp(this.camera.fov, GROUNDED_FOV, 1 - Math.pow(1 - FOLLOW_LERP, delta * 60));
+
+      const lookAngle = facing + this._orbitYaw;
+      const lookDir = new THREE.Vector3(
+        Math.cos(this._orbitPitch) * Math.sin(lookAngle),
+        Math.sin(this._orbitPitch),
+        Math.cos(this._orbitPitch) * Math.cos(lookAngle),
+      );
+      this.camera.lookAt(eyePosition.clone().add(lookDir));
+
+      const targetFov = mode === 'combat' ? COMBAT_FOV : GROUNDED_FOV;
+      this.camera.fov = THREE.MathUtils.lerp(this.camera.fov, targetFov, 1 - Math.pow(1 - FOLLOW_LERP, delta * 60));
       this.camera.updateProjectionMatrix();
       return;
     }
 
     const offset = this.orbitedOffset(mode);
-    let desired = targetPosition.clone().add(offset);
-
-    if (obstacles && obstacles.length > 0) {
-      const lookOrigin = targetPosition.clone().add(new THREE.Vector3(0, 1, 0));
-      const toDesired = desired.clone().sub(lookOrigin);
-      const desiredDistance = toDesired.length();
-      if (desiredDistance > 1e-4) {
-        raycaster.set(lookOrigin, toDesired.clone().normalize());
-        raycaster.far = desiredDistance;
-        const hits = raycaster.intersectObjects(obstacles, false);
-        if (hits.length > 0 && hits[0].distance < desiredDistance) {
-          const clampedDistance = Math.max(0.5, hits[0].distance - CAMERA_CLEARANCE);
-          desired = lookOrigin.clone().addScaledVector(toDesired.normalize(), clampedDistance);
-        }
-      }
-    }
+    const lookOrigin = targetPosition.clone().add(new THREE.Vector3(0, 1, 0));
+    const desired = this.clampAgainstObstacles(lookOrigin, targetPosition.clone().add(offset), obstacles);
 
     this.camera.position.lerp(desired, 1 - Math.pow(1 - FOLLOW_LERP, delta * 60));
 
@@ -132,7 +168,6 @@ export class CameraRig {
     this.camera.fov = THREE.MathUtils.lerp(this.camera.fov, targetFov, 1 - Math.pow(1 - FOLLOW_LERP, delta * 60));
     this.camera.updateProjectionMatrix();
 
-    const lookTarget = targetPosition.clone().add(new THREE.Vector3(0, 1, 0));
-    this.camera.lookAt(lookTarget);
+    this.camera.lookAt(lookOrigin);
   }
 }

@@ -13,6 +13,9 @@ export class HUD {
   private abilityDescEl: HTMLDivElement;
   private abilityToastTimer: number | null = null;
   private controlsLegendEl: HTMLDivElement;
+  private viewModeToastEl: HTMLDivElement;
+  private viewModeNameEl: HTMLDivElement;
+  private viewModeToastTimer: number | null = null;
   private overlay: HTMLDivElement;
   private overlayStats: HTMLDivElement;
   private overlayTitle: HTMLDivElement;
@@ -49,6 +52,9 @@ export class HUD {
         <div class="rw-ability-eyebrow">Ability Unlocked</div>
         <div class="rw-ability-name"></div>
         <div class="rw-ability-desc"></div>
+      </div>
+      <div class="rw-view-mode-toast">
+        <div class="rw-view-mode-name"></div>
       </div>
       <div class="rw-controls-legend">
         <div class="rw-legend-eyebrow">Controls</div>
@@ -272,6 +278,35 @@ export class HUD {
         .rw-ability-toast.rw-visible { animation: none; opacity: 1; transform: translate(-50%, 0); }
       }
 
+      /* View-mode toast: same fade-in/hold/fade-out lifecycle as the ability toast, but
+         amber-toned (matches the controls legend's key-badge accent) and offset lower so the
+         two never physically overlap even if both happen to fire close together. Shorter hold
+         (1200ms) since it's a one-word confirmation, not content to read. */
+      .rw-view-mode-toast {
+        position: fixed; top: 90px; left: 50%; z-index: 15;
+        display: none; pointer-events: none; text-align: center;
+        font-family: var(--display-face); font-weight: 600; letter-spacing: 0.04em;
+        color: var(--spirit-amber); font-size: 15px;
+        padding: 8px 22px 7px;
+        background: linear-gradient(180deg, rgba(20,13,9,0.72), rgba(7,10,8,0.9));
+        border-top: 1px solid rgba(255,177,94,0.5);
+        box-shadow: 0 0 18px rgba(255,177,94,0.3), 0 10px 24px rgba(0,0,0,0.45);
+        clip-path: polygon(4% 0, 96% 0, 100% 100%, 0% 100%);
+        text-transform: uppercase;
+      }
+      .rw-view-mode-toast.rw-visible {
+        display: block;
+        animation: rw-view-mode-toast 1200ms cubic-bezier(0.16, 1, 0.3, 1) both;
+      }
+      @keyframes rw-view-mode-toast {
+        0% { opacity: 0; transform: translate(-50%, -10px) scale(0.97); }
+        14%, 78% { opacity: 1; transform: translate(-50%, 0) scale(1); }
+        100% { opacity: 0; transform: translate(-50%, -8px) scale(0.98); }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .rw-view-mode-toast.rw-visible { animation: none; opacity: 1; transform: translate(-50%, 0); }
+      }
+
       /* Controls legend: opposite corner from the vitality/stamina cluster, same carved-bark
          plaque trapezoid and idle-amber key-badge treatment as the hunt prompt (rw-hunt-key)
          rather than a new visual language. Visible by default (a fresh player needs it before
@@ -447,6 +482,8 @@ export class HUD {
     this.abilityNameEl = this.root.querySelector('.rw-ability-name')!;
     this.abilityDescEl = this.root.querySelector('.rw-ability-desc')!;
     this.controlsLegendEl = this.root.querySelector('.rw-controls-legend')!;
+    this.viewModeToastEl = this.root.querySelector('.rw-view-mode-toast')!;
+    this.viewModeNameEl = this.root.querySelector('.rw-view-mode-name')!;
     this.overlay = this.root.querySelector('.rw-overlay')!;
     this.overlayStats = this.root.querySelector('.rw-overlay-stats')!;
     this.overlayTitle = this.root.querySelector('.rw-overlay-title')!;
@@ -506,6 +543,21 @@ export class HUD {
   /** Fades the controls-legend panel out; called once, on the player's first real input. */
   dismissLegend(): void {
     this.controlsLegendEl.classList.add('rw-legend-hidden');
+  }
+
+  /** Short-lived toast naming the camera view mode the player just cycled into. */
+  showViewMode(name: string): void {
+    this.viewModeNameEl.textContent = name;
+
+    this.viewModeToastEl.classList.remove('rw-visible');
+    void this.viewModeToastEl.offsetWidth;
+    this.viewModeToastEl.classList.add('rw-visible');
+
+    if (this.viewModeToastTimer !== null) window.clearTimeout(this.viewModeToastTimer);
+    this.viewModeToastTimer = window.setTimeout(() => {
+      this.viewModeToastEl.classList.remove('rw-visible');
+      this.viewModeToastTimer = null;
+    }, 1200);
   }
 
   showGameOver(distance: number, motes: number, score: number) {

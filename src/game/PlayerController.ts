@@ -68,7 +68,7 @@ export class PlayerController {
     this.climbTopY = topY;
     this.body.velocity.set(0, 0, 0);
     this.lastLedgePosition = ledgePosition ? ledgePosition.clone() : this.body.position.clone();
-    void surfaceNormal; // reserved for wall-facing orientation in the CameraRig (Task 10), not needed for movement math here
+    void surfaceNormal; // reserved for a future wall-facing camera treatment; not needed for movement math here
   }
 
   restStamina(delta: number): void {

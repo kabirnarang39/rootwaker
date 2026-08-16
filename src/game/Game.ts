@@ -5,7 +5,7 @@ import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { createJungleLevel } from '../scene/createJungleLevel';
 import { PlayerController } from './PlayerController';
-import { CameraRig } from '../scene/CameraRig';
+import { CameraRig, type ViewMode } from '../scene/CameraRig';
 import { createFox } from '../scene/createFox';
 import { createRootWraith, getAttackHitbox } from '../entities/rootWraith';
 import { getBoarHitbox } from '../entities/tuskBoar';
@@ -27,6 +27,12 @@ import { computeFacingAngle } from './FoxFacing';
 // Mirrors PlayerController's own (unexported) pounce range so the hunt-prompt lights up
 // exactly when a pounce would actually succeed. Keep these two in sync by hand.
 const HUNT_PROMPT_RANGE = 2;
+const VIEW_MODE_NAMES: Record<ViewMode, string> = {
+  follow: 'Follow Cam',
+  closeUp: 'Close Cam',
+  hawkEye: 'Hawk Eye',
+  foxEye: 'Fox Eyes',
+};
 const BOAR_HIT_DAMAGE = 12; // matches the root-wraith's melee hit — same claw-scale threat
 const GUARD_HIT_DAMAGE = 12; // same claw-scale threat as the wraith/boar
 const PLAYER_COLLISION_RADIUS = 0.35;
@@ -56,6 +62,10 @@ export class Game {
   private clock = new THREE.Clock();
 
   private level = createJungleLevel();
+  // Static after level creation — computed once rather than re-spread every animate() frame.
+  // Includes mountain wall/ledge/gate geometry so hawkEye's overhead sightline is checked
+  // against overhanging rock the same way follow/closeUp already check against tree trunks.
+  private cameraObstacles = [...this.level.foliageMeshes, ...this.level.climbObstacleMeshes];
   private playerController = new PlayerController(new THREE.Vector3(0, 0, 12));
   private fox = createFox(SKINS[0]);
   private cameraRig = new CameraRig();
@@ -157,7 +167,10 @@ export class Game {
       if (action === 'jump') this.jumpPressed = true;
       if (action === 'attack') this.tryAttack();
       if (action === 'pounce') this.tryPounce();
-      if (action === 'cycleView') this.cameraRig.cycleViewMode();
+      if (action === 'cycleView') {
+        this.cameraRig.cycleViewMode();
+        this.hud.showViewMode(VIEW_MODE_NAMES[this.cameraRig.viewMode]);
+      }
     });
 
     this.hud = new HUD(container);
@@ -167,6 +180,11 @@ export class Game {
     window.addEventListener('keydown', () => this.audio.unlock(), { once: true });
 
     window.addEventListener('resize', this.onResize);
+
+    // Touch input has no real control scheme wired up yet (Input.ts is keyboard/mouse-drag
+    // only), so a touch player can never fire onMove/onLook/onAction to dismiss the legend —
+    // it would otherwise sit on screen permanently, listing controls a touch player can't use.
+    this.renderer.domElement.addEventListener('touchstart', () => this.dismissLegendOnce(), { once: true, passive: true });
 
     if (import.meta.env.DEV) {
       (window as unknown as { __rw: unknown }).__rw = {
@@ -390,7 +408,7 @@ export class Game {
     }
 
     const mode = this.playerController.mode;
-    this.cameraRig.update(this.playerController.body.position, mode, delta, this.level.foliageMeshes, this.foxFacingAngle);
+    this.cameraRig.update(this.playerController.body.position, mode, delta, this.cameraObstacles, this.foxFacingAngle);
 
     this.hud.updateHealth(this.playerCombatant.hp, this.playerCombatant.maxHp);
     this.hud.updateStamina(this.playerController.stamina, MAX_STAMINA);
