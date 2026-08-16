@@ -34,6 +34,12 @@ describe('createElderBearKing', () => {
     expect(king.groundSlam.state).toBe('telegraph');
   });
 
+  it('sets ai.strikeRange from its own combatant hitbox radius, alongside telegraphSeconds, before ai.update() runs', () => {
+    const king = createElderBearKing();
+    king.update(0, 1 / 60, 1);
+    expect(king.ai.strikeRange).toBeCloseTo(king.combatant.hitbox.radius + 0.4 - 0.05, 5);
+  });
+
   it('getElderBearKingHitbox tracks the spine joint\'s world position after update()', () => {
     const king = createElderBearKing();
     king.group.position.set(5, 0, 5);

@@ -7,6 +7,7 @@ import { computeBossPhase, BOSS_PHASE_PARAMS } from './BossPhaseController';
 import { GroundSlam } from '../game/GroundSlam';
 import type { Combatant } from '../game/Combat';
 import type { Capsule } from '../game/collision';
+import { computeStrikeRange } from '../game/EnemyChase';
 
 // Darker, greyed fur vs. the Grove Bear's warmer brown — reads as elder, not a recolor.
 const KING_FUR_COLOR = 0x3e3226;
@@ -139,6 +140,7 @@ export function createElderBearKing(): ElderBearKing {
     const phase = computeBossPhase(combatant.hp, combatant.maxHp);
     const params = BOSS_PHASE_PARAMS[phase];
     ai.telegraphSeconds = params.telegraphSeconds;
+    ai.strikeRange = computeStrikeRange(combatant.hitbox.radius);
     ai.update(distanceToPlayer, delta);
 
     const isIdle = ai.state === 'idle' || ai.state === 'aggro';

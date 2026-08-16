@@ -5,6 +5,7 @@ import { idleClip, chargeClip } from './tuskBoarClips';
 import { EnemyAI, type AiState } from './EnemyAI';
 import type { Combatant } from '../game/Combat';
 import type { Capsule } from '../game/collision';
+import { computeStrikeRange } from '../game/EnemyChase';
 
 const BOAR_COLOR = 0x4a3626;
 const BOAR_DARK = 0x2e2015;
@@ -124,6 +125,7 @@ export function createTuskBoar(): TuskBoar {
   let prevAiState: AiState = 'idle';
 
   function update(time: number, delta: number, distanceToPlayer: number) {
+    ai.strikeRange = computeStrikeRange(combatant.hitbox.radius);
     ai.update(distanceToPlayer, delta);
     const isIdle = ai.state === 'idle' || ai.state === 'aggro';
     if (isIdle) {

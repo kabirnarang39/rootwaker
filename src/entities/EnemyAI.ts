@@ -18,6 +18,14 @@ export class EnemyAI {
   // with a shorter reaction window) can reassign this at runtime without recreating the
   // instance mid-fight, which would otherwise reset the whole state machine mid-attack.
   telegraphSeconds = TELEGRAPH_SECONDS;
+  // How close the player must actually be for a completed telegraph to launch the attack.
+  // Defaults to Infinity — every enemy built before real chase movement existed never sets
+  // this, so a telegraph that finishes its timer always fires regardless of distance, exactly
+  // as before (byte-identical). Enemies with real pursuit (EnemyChase.ts) set this to their own
+  // melee contact distance so a telegraph that finishes while still far away (aggro was only
+  // just triggered, chase hasn't closed the gap yet) holds in telegraph — still visibly winding
+  // up and still closing distance — instead of guaranteeing a whiff.
+  strikeRange = Infinity;
   private timeInState = 0;
   private justDealtDamage = false;
   private stunTimer = 0;
@@ -47,7 +55,7 @@ export class EnemyAI {
         if (distanceToPlayer <= AGGRO_RANGE) this.enter('telegraph');
         break;
       case 'telegraph':
-        if (this.timeInState >= this.telegraphSeconds) {
+        if (this.timeInState >= this.telegraphSeconds && distanceToPlayer <= this.strikeRange) {
           this.enter('attacking');
           this.justDealtDamage = true;
         }

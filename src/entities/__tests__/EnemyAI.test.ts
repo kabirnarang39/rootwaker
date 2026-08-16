@@ -39,6 +39,23 @@ describe('EnemyAI', () => {
     expect(ai.shouldDealDamageThisFrame()).toBe(false);
   });
 
+  it('strikeRange gates the telegraph->attacking transition (regression: a telegraph completing while the player is still far away used to guarantee a whiff — now it holds in telegraph, still closing distance via chase, until actually in range)', () => {
+    const ai = new EnemyAI();
+    ai.strikeRange = 1;
+    ai.update(3, 0.001); // enters telegraph at distance 3, outside strikeRange
+    ai.update(3, TELEGRAPH_SECONDS + 0.01); // timer elapses, but still far away
+    expect(ai.state).toBe('telegraph');
+    expect(ai.shouldDealDamageThisFrame()).toBe(false);
+    ai.update(0.5, 0.001); // now within strikeRange
+    expect(ai.state).toBe('attacking');
+    expect(ai.shouldDealDamageThisFrame()).toBe(true);
+  });
+
+  it('defaults strikeRange to Infinity so every enemy built before real chase movement existed is unaffected (byte-identical: a telegraph that finishes always fires regardless of distance)', () => {
+    const ai = new EnemyAI();
+    expect(ai.strikeRange).toBe(Infinity);
+  });
+
   it('stun() freezes progression (a mid-telegraph enemy never reaches attacking while stunned)', () => {
     const ai = new EnemyAI();
     ai.update(1, 0.001); // enter telegraph

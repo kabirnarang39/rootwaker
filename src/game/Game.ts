@@ -27,6 +27,7 @@ import { SKINS } from '../scene/skins';
 import { resolvePlayerObstacleCollision } from './ObstacleCollision';
 import { toCameraRelative } from './CameraRelativeMove';
 import { computeFacingAngle } from './FoxFacing';
+import { chaseTowardPlayer } from './EnemyChase';
 
 // Mirrors PlayerController's own (unexported) pounce range so the hunt-prompt lights up
 // exactly when a pounce would actually succeed. Keep these two in sync by hand.
@@ -71,6 +72,18 @@ const ROAR_STUN_SECONDS = 2.5;
 const ROAR_KNOCKBACK = 1.2;
 const SENSE_SECONDS = 6; // Keen Ear's temporary extended hunt-sense window
 const SENSE_RANGE_MULTIPLIER = 3;
+
+// Real pursuit: an aggroed enemy (any non-'idle' AI state) closes real ground toward the player
+// every frame instead of standing still and only "hitting" whoever happens to already be
+// standing on top of it. The stop distance each enemy closes to is its own ai.strikeRange
+// (EnemyAI.ts, set inside each entity's own update() from its combatant hitbox radius) — the
+// same distance EnemyAI itself gates a completed telegraph on, so the chase and the attack gate
+// never disagree about "in range." Speeds are per-species: the wraith slithers, the boar/bear
+// surge, the King lumbers but hits harder.
+const WRAITH_CHASE_SPEED = 3.2;
+const BOAR_CHASE_SPEED = 4.5; // a boar's real charge is a real sprint, not a walk
+const BEAR_CHASE_SPEED = 3.4;
+const KING_CHASE_SPEED = 2.6;
 
 // All mountain wall/segments share a fixed 6-unit segment height, so each one's base is
 // wall.topY - 6. Gate proximity checks on this so stacked segments (same x/z, different
@@ -437,6 +450,10 @@ export class Game {
 
     const distanceToPlayer = this.wraith.group.position.distanceTo(this.playerController.body.position);
     this.wraith.update(time, delta, distanceToPlayer);
+    if (this.wraith.ai.state !== 'idle') {
+      chaseTowardPlayer(this.wraith.group.position, this.playerController.body.position, WRAITH_CHASE_SPEED, delta, this.wraith.ai.strikeRange);
+      this.wraith.group.position.y = this.level.groundHeightAt(this.wraith.group.position.x, this.wraith.group.position.z);
+    }
     if (this.wraith.ai.shouldDealDamageThisFrame()) {
       const hit = resolveMeleeHit(getAttackHitbox(this.wraith), this.playerCombatant);
       if (hit) this.hurtPlayer(12);
@@ -467,6 +484,10 @@ export class Game {
     for (const boar of this.level.boars) {
       const boarDistance = boar.group.position.distanceTo(this.playerController.body.position);
       boar.update(time, delta, boarDistance);
+      if (boar.ai.state !== 'idle') {
+        chaseTowardPlayer(boar.group.position, this.playerController.body.position, BOAR_CHASE_SPEED, delta, boar.ai.strikeRange);
+        boar.group.position.y = this.level.groundHeightAt(boar.group.position.x, boar.group.position.z);
+      }
       if (boar.ai.shouldDealDamageThisFrame()) {
         const hit = resolveMeleeHit(getBoarHitbox(boar), this.playerCombatant);
         if (hit) this.hurtPlayer(BOAR_HIT_DAMAGE);
@@ -476,6 +497,10 @@ export class Game {
     for (const bear of this.level.bears) {
       const bearDistance = bear.group.position.distanceTo(this.playerController.body.position);
       bear.update(time, delta, bearDistance);
+      if (bear.ai.state !== 'idle') {
+        chaseTowardPlayer(bear.group.position, this.playerController.body.position, BEAR_CHASE_SPEED, delta, bear.ai.strikeRange);
+        bear.group.position.y = this.level.groundHeightAt(bear.group.position.x, bear.group.position.z);
+      }
       if (bear.ai.shouldDealDamageThisFrame()) {
         const hit = resolveMeleeHit(getGroveBearHitbox(bear), this.playerCombatant);
         if (hit) this.hurtPlayer(BEAR_HIT_DAMAGE);
@@ -486,6 +511,10 @@ export class Game {
       const king = this.level.throneRoom.king;
       const distanceToKing = king.group.position.distanceTo(this.playerController.body.position);
       king.update(time, delta, distanceToKing);
+      if (king.ai.state !== 'idle') {
+        chaseTowardPlayer(king.group.position, this.playerController.body.position, KING_CHASE_SPEED, delta, king.ai.strikeRange);
+        king.group.position.y = this.level.groundHeightAt(king.group.position.x, king.group.position.z);
+      }
 
       if (king.ai.shouldDealDamageThisFrame()) {
         const hit = resolveMeleeHit(getElderBearKingHitbox(king), this.playerCombatant);

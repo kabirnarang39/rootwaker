@@ -5,6 +5,7 @@ import { idleClip, clawSwipeClip } from './groveBearClips';
 import { EnemyAI, type AiState } from './EnemyAI';
 import type { Combatant } from '../game/Combat';
 import type { Capsule } from '../game/collision';
+import { computeStrikeRange } from '../game/EnemyChase';
 
 const BEAR_FUR_COLOR = 0x5a4530;
 const BEAR_FUR_DARK = 0x3a2c1c;
@@ -129,6 +130,7 @@ export function createGroveBear(): GroveBear {
   let prevAiState: AiState = 'idle';
 
   function update(time: number, delta: number, distanceToPlayer: number) {
+    ai.strikeRange = computeStrikeRange(combatant.hitbox.radius);
     ai.update(distanceToPlayer, delta);
     const isIdle = ai.state === 'idle' || ai.state === 'aggro';
     if (isIdle) {

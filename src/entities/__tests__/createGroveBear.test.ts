@@ -23,4 +23,10 @@ describe('createGroveBear', () => {
     bear.update(0, 1 / 60, 1); // within EnemyAI's default aggro range
     expect(bear.ai.state).toBe('telegraph');
   });
+
+  it('sets ai.strikeRange from its own combatant hitbox radius (real pursuit: a telegraph completing while still far away must not guarantee a hit)', () => {
+    const bear = createGroveBear();
+    bear.update(0, 1 / 60, 1);
+    expect(bear.ai.strikeRange).toBeCloseTo(bear.combatant.hitbox.radius + 0.4 - 0.05, 5);
+  });
 });

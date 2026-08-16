@@ -5,6 +5,7 @@ import { crawlClip, lungeClip } from './rootWraithClips';
 import { EnemyAI, type AiState } from './EnemyAI';
 import type { Combatant } from '../game/Combat';
 import type { Capsule } from '../game/collision';
+import { computeStrikeRange } from '../game/EnemyChase';
 
 const ROOT_WRAITH_COLOR = 0x2a1a12;
 const ROOT_WRAITH_GLOW = 0x8a3a5a;
@@ -67,6 +68,7 @@ export function createRootWraith(): RootWraith {
   let prevAiState: AiState = 'idle';
 
   function update(time: number, delta: number, distanceToPlayer: number) {
+    ai.strikeRange = computeStrikeRange(combatant.hitbox.radius);
     ai.update(distanceToPlayer, delta);
     const isIdle = ai.state === 'idle' || ai.state === 'aggro';
     if (isIdle) {
