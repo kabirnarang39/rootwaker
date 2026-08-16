@@ -8,11 +8,21 @@ import { PlayerController } from './PlayerController';
 import { CameraRig } from '../scene/CameraRig';
 import { createFox } from '../scene/createFox';
 import { createRootWraith, getAttackHitbox } from '../entities/rootWraith';
+import { getBoarHitbox } from '../entities/tuskBoar';
+import type { GroveHare } from '../entities/groveHare';
 import { resolveMeleeHit, applyDamage, isDefeated, CLAW_SWIPE, type Combatant } from './Combat';
 import { Input, type PlayerAction } from './Input';
 import { isInsideWaterBody } from './WaterBody';
+import { computeApproachSpeed, checkPounceRange } from './Stalking';
 import { HUD } from './HUD';
+import { AudioFX } from './Audio';
+import { AbilityKit } from './AbilityKit';
 import { SKINS } from '../scene/skins';
+
+// Mirrors PlayerController's own (unexported) pounce range so the hunt-prompt lights up
+// exactly when a pounce would actually succeed. Keep these two in sync by hand.
+const HUNT_PROMPT_RANGE = 2;
+const BOAR_HIT_DAMAGE = 12; // matches the root-wraith's melee hit — same claw-scale threat
 
 export class Game {
   private scene = new THREE.Scene();
@@ -31,6 +41,10 @@ export class Game {
     hitbox: { start: new THREE.Vector3(), end: new THREE.Vector3(), radius: 0.4 },
   };
   private checkpoint = new THREE.Vector3(0, 0, 12);
+
+  private audio = new AudioFX();
+  private abilityKit = new AbilityKit();
+  private prevPlayerPosition = this.playerController.body.position.clone();
 
   private input: Input;
   private hud: HUD;
@@ -80,9 +94,14 @@ export class Game {
     this.input.onAction((action: PlayerAction) => {
       if (action === 'jump') this.jumpPressed = true;
       if (action === 'attack') this.tryAttack();
+      if (action === 'pounce') this.tryPounce();
     });
 
     this.hud = new HUD(container);
+
+    // AudioContext requires a user gesture to start — first keypress unlocks it and
+    // kicks off the layered jungle ambience.
+    window.addEventListener('keydown', () => this.audio.unlock(), { once: true });
 
     window.addEventListener('resize', this.onResize);
 
@@ -175,6 +194,31 @@ export class Game {
       const hit = resolveMeleeHit(getAttackHitbox(this.wraith), this.playerCombatant);
       if (hit) applyDamage(this.playerCombatant, 12);
     }
+
+    for (const hare of this.level.hares) {
+      const hareDistance = hare.position.distanceTo(this.playerController.body.position);
+      const approachSpeed = computeApproachSpeed(
+        this.playerController.body.position,
+        this.prevPlayerPosition,
+        hare.position,
+        delta,
+      );
+      hare.update(time, delta, hareDistance, approachSpeed);
+      if (hare.ai.state === 'fleeing') {
+        const awayFromDir = hare.position.clone().sub(this.playerController.body.position).normalize();
+        hare.fleeStep(delta, awayFromDir);
+      }
+    }
+
+    for (const boar of this.level.boars) {
+      const boarDistance = boar.group.position.distanceTo(this.playerController.body.position);
+      boar.update(time, delta, boarDistance);
+      if (boar.ai.shouldDealDamageThisFrame()) {
+        const hit = resolveMeleeHit(getBoarHitbox(boar), this.playerCombatant);
+        if (hit) applyDamage(this.playerCombatant, BOAR_HIT_DAMAGE);
+      }
+    }
+
     if (isDefeated(this.playerCombatant)) {
       // silent checkpoint respawn — no game-over screen, matches the chapter-restart design spec
       this.playerController.body.position.copy(this.checkpoint);
@@ -183,14 +227,53 @@ export class Game {
       this.playerCombatant.hp = this.playerCombatant.maxHp;
     }
 
+    if (this.findNearestHareInRange()) this.hud.showHuntPrompt(true);
+    else this.hud.hideHuntPrompt();
+
+    const unlockedAbility = this.abilityKit.unlockedThisFrame();
+    if (unlockedAbility) {
+      this.hud.showAbilityUnlocked(unlockedAbility);
+      this.audio.playAbilityUnlock();
+    }
+
     const mode = this.playerController.mode;
     this.cameraRig.update(this.playerController.body.position, mode, delta);
 
     this.hud.updateHealth(this.playerCombatant.hp, this.playerCombatant.maxHp);
 
+    // must run after every this-frame use of the old position (stalking's approach-speed calc above)
+    this.prevPlayerPosition.copy(this.playerController.body.position);
+
     this.composer.render();
     requestAnimationFrame(this.animate);
   };
+
+  private findNearestHareInRange(): GroveHare | null {
+    let nearest: GroveHare | null = null;
+    let nearestDistance = Infinity;
+    for (const hare of this.level.hares) {
+      const { inRange, distance } = checkPounceRange(this.playerController.body.position, hare.position, HUNT_PROMPT_RANGE);
+      if (inRange && distance < nearestDistance) {
+        nearestDistance = distance;
+        nearest = hare;
+      }
+    }
+    return nearest;
+  }
+
+  private tryPounce() {
+    const nearestHare = this.findNearestHareInRange();
+    if (!nearestHare) return;
+    const result = this.playerController.tryPounce(nearestHare.position);
+    this.audio.playPounceAttempt(result.success);
+    if (!result.success) return;
+    const idx = this.level.hares.indexOf(nearestHare);
+    if (idx !== -1) {
+      this.level.group.remove(nearestHare.group);
+      this.level.hares.splice(idx, 1);
+    }
+    this.abilityKit.unlock('keen-ear');
+  }
 
   private tryAttack() {
     const forward = new THREE.Vector3(0, 0, -1); // facing direction — refined once a facing/aim system exists; forward-only swipe is correct for this chapter's single enemy
@@ -201,6 +284,17 @@ export class Game {
     };
     if (resolveMeleeHit(attackHitbox, this.wraith.combatant)) {
       applyDamage(this.wraith.combatant, CLAW_SWIPE.damage);
+    }
+
+    for (let i = this.level.boars.length - 1; i >= 0; i--) {
+      const boar = this.level.boars[i];
+      if (!resolveMeleeHit(attackHitbox, boar.combatant)) continue;
+      applyDamage(boar.combatant, CLAW_SWIPE.damage);
+      if (isDefeated(boar.combatant)) {
+        this.level.group.remove(boar.group);
+        this.level.boars.splice(i, 1);
+        this.abilityKit.unlock('boar-charge');
+      }
     }
   }
 }

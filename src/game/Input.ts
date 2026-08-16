@@ -1,4 +1,4 @@
-export type PlayerAction = 'attack' | 'dodge' | 'jump' | 'interact';
+export type PlayerAction = 'attack' | 'dodge' | 'jump' | 'interact' | 'pounce';
 
 const FORWARD_KEYS = ['KeyW', 'ArrowUp'];
 const BACK_KEYS = ['KeyS', 'ArrowDown'];
@@ -51,6 +51,7 @@ export class Input {
     else if (e.code === 'KeyJ') this.emitAction('attack');
     else if (e.code === 'KeyK') this.emitAction('dodge');
     else if (e.code === 'KeyE') this.emitAction('interact');
+    else if (e.code === 'KeyL') this.emitAction('pounce');
   };
 
   private onKeyUp = (e: KeyboardEvent) => {
