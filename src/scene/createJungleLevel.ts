@@ -2,6 +2,8 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import type { WaterBody } from '../game/WaterBody';
 import { createSky } from './createSky';
+import { createGroveHare, type GroveHare } from '../entities/groveHare';
+import { createTuskBoar, type TuskBoar } from '../entities/tuskBoar';
 
 export interface ClimbableWall {
   normal: THREE.Vector3;
@@ -15,6 +17,8 @@ export interface JungleLevel {
   climbableWall: ClimbableWall;
   water: WaterBody;
   chapterBounds: THREE.Box3;
+  hares: GroveHare[];
+  boars: TuskBoar[];
   update(time: number): void;
 }
 
@@ -153,6 +157,22 @@ function buildTreeSpeciesMeshes(
   return { trunkMesh, canopyMesh, uniforms };
 }
 
+const EXCLUSION_MARGIN = 0.4; // meters — keeps foliage/wildlife clear of water and wall footprints
+
+function isPlaceable(x: number, z: number, water: WaterBody, wallBounds: THREE.Box2): boolean {
+  const inWater =
+    x >= water.bounds.min.x - EXCLUSION_MARGIN &&
+    x <= water.bounds.max.x + EXCLUSION_MARGIN &&
+    z >= water.bounds.min.z - EXCLUSION_MARGIN &&
+    z <= water.bounds.max.z + EXCLUSION_MARGIN;
+  const inWall =
+    x >= wallBounds.min.x - EXCLUSION_MARGIN &&
+    x <= wallBounds.max.x + EXCLUSION_MARGIN &&
+    z >= wallBounds.min.y - EXCLUSION_MARGIN &&
+    z <= wallBounds.max.y + EXCLUSION_MARGIN;
+  return !inWater && !inWall;
+}
+
 function buildFoliage(
   heightAt: (x: number, z: number) => number,
   water: WaterBody,
@@ -168,19 +188,12 @@ function buildFoliage(
   const dummy = new THREE.Object3D();
   let totalPlaced = 0;
   let attempts = 0;
-  const waterMinX = water.bounds.min.x - 0.4;
-  const waterMaxX = water.bounds.max.x + 0.4;
-  const waterMinZ = water.bounds.min.z - 0.4;
-  const waterMaxZ = water.bounds.max.z + 0.4;
 
   while (totalPlaced < COUNT && attempts < COUNT * 4) {
     attempts++;
     const x = (Math.random() - 0.5) * CHAPTER_SIZE;
     const z = (Math.random() - 0.5) * CHAPTER_SIZE;
-    const inWater = x >= waterMinX && x <= waterMaxX && z >= waterMinZ && z <= waterMaxZ;
-    const inWall =
-      x >= wallBounds.min.x - 0.4 && x <= wallBounds.max.x + 0.4 && z >= wallBounds.min.y - 0.4 && z <= wallBounds.max.y + 0.4;
-    if (inWater || inWall) continue;
+    if (!isPlaceable(x, z, water, wallBounds)) continue;
 
     const speciesIndex = Math.floor(Math.random() * TREE_SPECIES.length);
     if (placedPerSpecies[speciesIndex] >= perSpeciesCount) continue;
@@ -266,6 +279,36 @@ function buildWater(): { mesh: THREE.Mesh; water: WaterBody } {
   return { mesh, water };
 }
 
+function randomPlaceablePosition(
+  heightAt: (x: number, z: number) => number,
+  water: WaterBody,
+  wallBounds: THREE.Box2,
+): THREE.Vector3 {
+  let x = 0;
+  let z = 0;
+  let attempts = 0;
+  do {
+    x = (Math.random() - 0.5) * CHAPTER_SIZE;
+    z = (Math.random() - 0.5) * CHAPTER_SIZE;
+    attempts++;
+  } while (!isPlaceable(x, z, water, wallBounds) && attempts < 100);
+  return new THREE.Vector3(x, heightAt(x, z), z);
+}
+
+function buildWildlife(
+  heightAt: (x: number, z: number) => number,
+  water: WaterBody,
+  wallBounds: THREE.Box2,
+): { hares: GroveHare[]; boars: TuskBoar[] } {
+  const hares = Array.from({ length: 4 }, () => createGroveHare(randomPlaceablePosition(heightAt, water, wallBounds)));
+  const boars = Array.from({ length: 2 }, () => {
+    const boar = createTuskBoar();
+    boar.group.position.copy(randomPlaceablePosition(heightAt, water, wallBounds));
+    return boar;
+  });
+  return { hares, boars };
+}
+
 export function createJungleLevel(): JungleLevel {
   const group = new THREE.Group();
   group.name = 'jungle-level';
@@ -284,6 +327,10 @@ export function createJungleLevel(): JungleLevel {
   const { meshes: foliageMeshes, update: updateFoliage } = buildFoliage(heightAt, water, wall.bounds);
   group.add(...foliageMeshes);
 
+  const { hares, boars } = buildWildlife(heightAt, water, wall.bounds);
+  group.add(...hares.map((hare) => hare.group));
+  group.add(...boars.map((boar) => boar.group));
+
   const half = CHAPTER_SIZE / 2;
   const chapterBounds = new THREE.Box3(new THREE.Vector3(-half, -5, -half), new THREE.Vector3(half, 10, half));
 
@@ -293,6 +340,8 @@ export function createJungleLevel(): JungleLevel {
     climbableWall: wall,
     water,
     chapterBounds,
+    hares,
+    boars,
     update: updateFoliage,
   };
 }
