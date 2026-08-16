@@ -1,14 +1,19 @@
 import * as THREE from 'three';
 import { createFox, type Fox } from '../scene/createFox';
+import { createGlowMaterial } from '../shaders/glow';
 import {
+  DASH_DURATION,
   JUMP_DURATION,
   JUMP_HEIGHT,
   LANE_SWITCH_TIME,
   LANE_X,
+  MAGNET_DURATION,
   PLAYER_Z,
+  SHIELD_DURATION,
   SLIDE_DURATION,
 } from './constants';
 import type { PlayerAction } from './Input';
+import type { PowerUpType } from '../entities/createPowerUp';
 
 export interface PlayerCollisionState {
   lane: number;
@@ -31,10 +36,49 @@ export class Player {
 
   alive = true;
 
+  private invulnerableUntil = -1;
+  private magnetUntil = -1;
+  private aura: THREE.Mesh;
+  private auraMat: THREE.ShaderMaterial;
+
   constructor() {
     this.fox = createFox();
     this.group = this.fox.group;
     this.group.position.set(this.currentX, 0, PLAYER_Z);
+
+    this.auraMat = createGlowMaterial({
+      color: 0xc98fff,
+      rimColor: 0xffffff,
+      intensity: 1.6,
+      fresnelPower: 1.1,
+      pulseSpeed: 5,
+    });
+    this.aura = new THREE.Mesh(new THREE.IcosahedronGeometry(0.55, 1), this.auraMat);
+    this.aura.position.y = 0.55;
+    this.aura.visible = false;
+    this.group.add(this.aura);
+  }
+
+  applyPowerUp(type: PowerUpType, time: number) {
+    if (type === 'dash') this.invulnerableUntil = time + DASH_DURATION;
+    else if (type === 'shield') this.invulnerableUntil = time + SHIELD_DURATION;
+    else if (type === 'magnet') this.magnetUntil = time + MAGNET_DURATION;
+  }
+
+  isInvulnerable(time: number) {
+    return time < this.invulnerableUntil;
+  }
+
+  isMagnetActive(time: number) {
+    return time < this.magnetUntil;
+  }
+
+  remainingBuffTime(time: number): { label: string; seconds: number } | null {
+    const invuln = this.invulnerableUntil - time;
+    const magnet = this.magnetUntil - time;
+    if (invuln > 0 && invuln >= magnet) return { label: 'spirit ward', seconds: invuln };
+    if (magnet > 0) return { label: 'light-seed magnet', seconds: magnet };
+    return null;
   }
 
   handleAction(action: PlayerAction) {
@@ -98,6 +142,14 @@ export class Player {
     }
     this.group.scale.y = slideScale;
     this.group.position.y += (1 - slideScale) * -0.15; // hug the ground while sliding
+
+    const invulnerable = this.isInvulnerable(time);
+    this.aura.visible = invulnerable;
+    if (invulnerable) {
+      this.auraMat.uniforms.uTime.value = time;
+      const pulse = 1 + Math.sin(time * 8) * 0.06;
+      this.aura.scale.setScalar(pulse);
+    }
   }
 
   getCollisionState(): PlayerCollisionState {
@@ -119,5 +171,8 @@ export class Player {
     this.group.position.set(this.currentX, 0, PLAYER_Z);
     this.group.scale.set(1, 1, 1);
     this.alive = true;
+    this.invulnerableUntil = -1;
+    this.magnetUntil = -1;
+    this.aura.visible = false;
   }
 }

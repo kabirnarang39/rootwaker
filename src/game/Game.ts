@@ -7,6 +7,8 @@ import { Player } from './Player';
 import { TrackManager } from './TrackManager';
 import { Input } from './Input';
 import { HUD } from './HUD';
+import { WakeTrail } from './WakeTrail';
+import { biomeForDistance } from './biomes';
 import { BASE_SPEED, MAX_SPEED, PLAYER_Z, SPEED_RAMP_PER_METER } from './constants';
 
 type GameStatus = 'running' | 'dead';
@@ -20,6 +22,7 @@ export class Game {
 
   private player = new Player();
   private track = new TrackManager();
+  private wake = new WakeTrail();
   private input: Input;
   private hud: HUD;
 
@@ -27,6 +30,7 @@ export class Game {
   private speed = BASE_SPEED;
   private distance = 0;
   private motes = 0;
+  private currentBiomeName = '';
 
   constructor(container: HTMLElement) {
     this.scene.background = new THREE.Color(0x030509);
@@ -46,6 +50,7 @@ export class Game {
     this.setupLights();
     this.scene.add(this.player.group);
     this.scene.add(this.track.group);
+    this.scene.add(this.wake.group);
 
     this.composer = new EffectComposer(this.renderer);
     this.composer.addPass(new RenderPass(this.scene, this.camera));
@@ -103,10 +108,12 @@ export class Game {
   private restart() {
     this.player.reset();
     this.track.reset();
+    this.wake.reset();
     this.speed = BASE_SPEED;
     this.distance = 0;
     this.motes = 0;
     this.status = 'running';
+    this.currentBiomeName = '';
     this.hud.hideGameOver();
   }
 
@@ -123,16 +130,30 @@ export class Game {
       this.speed = Math.min(MAX_SPEED, BASE_SPEED + this.distance * SPEED_RAMP_PER_METER);
 
       this.player.update(time, delta);
-      this.track.update(time, delta, this.speed);
+      this.track.update(time, delta, this.speed, this.distance);
+      this.wake.update(delta, this.speed, this.player.group.position.x);
 
-      const result = this.track.checkCollisions(this.player.getCollisionState());
+      const magnetActive = this.player.isMagnetActive(time);
+      const result = this.track.checkCollisions(this.player.getCollisionState(), magnetActive);
       if (result.motesCollected > 0) this.motes += result.motesCollected;
-      if (result.hitObstacle) {
+      for (const type of result.powerUpsCollected) this.player.applyPowerUp(type, time);
+      if (result.hitObstacle && !this.player.isInvulnerable(time)) {
         this.status = 'dead';
         this.player.alive = false;
         this.hud.showGameOver(this.distance, this.motes);
       }
       this.hud.update(this.distance, this.motes);
+      this.hud.setBuff(this.player.remainingBuffTime(time));
+
+      const biome = biomeForDistance(this.distance);
+      if (biome.name !== this.currentBiomeName) {
+        this.currentBiomeName = biome.name;
+        this.wake.setColor(biome.palette.moteGlow);
+      }
+      const targetFog = new THREE.Color(biome.fogColor);
+      const targetBg = new THREE.Color(biome.bgColor);
+      (this.scene.fog as THREE.FogExp2).color.lerp(targetFog, delta * 0.3);
+      (this.scene.background as THREE.Color).lerp(targetBg, delta * 0.3);
     }
 
     const camTargetX = this.player.group.position.x * 0.6;

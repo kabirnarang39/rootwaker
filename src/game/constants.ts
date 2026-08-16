@@ -14,3 +14,8 @@ export const SLIDE_DURATION = 0.55;
 
 export const COLLISION_WINDOW = 0.42;
 export const MOTE_COLLECT_WINDOW = 0.55;
+export const POWERUP_COLLECT_WINDOW = 0.6;
+
+export const DASH_DURATION = 1.5;
+export const SHIELD_DURATION = 4;
+export const MAGNET_DURATION = 5;
