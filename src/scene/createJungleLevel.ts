@@ -14,6 +14,7 @@ export interface JungleLevel {
   climbableWall: ClimbableWall;
   water: WaterBody;
   chapterBounds: THREE.Box3;
+  update(time: number): void;
 }
 
 const CHAPTER_SIZE = 40; // meters, one bounded region
@@ -40,24 +41,66 @@ function buildTerrain(): { mesh: THREE.Mesh; heightAt: (x: number, z: number) =>
   return { mesh, heightAt };
 }
 
-function buildFoliage(heightAt: (x: number, z: number) => number): THREE.InstancedMesh {
+function buildFoliage(
+  heightAt: (x: number, z: number) => number,
+  water: WaterBody,
+  wallBounds: THREE.Box2,
+): { mesh: THREE.InstancedMesh; update: (time: number) => void } {
   const COUNT = 900;
   const geo = new THREE.ConeGeometry(0.18, 0.6, 5);
   const mat = new THREE.MeshStandardMaterial({ color: 0x1f4d3a, flatShading: true, roughness: 0.9 });
+
+  const windDir = WIND.clone().normalize();
+  const uniforms = { uTime: { value: 0 }, uWindDir: { value: new THREE.Vector2(windDir.x, windDir.z) } };
+  mat.onBeforeCompile = (shader) => {
+    shader.uniforms.uTime = uniforms.uTime;
+    shader.uniforms.uWindDir = uniforms.uWindDir;
+    shader.vertexShader = shader.vertexShader
+      .replace(
+        '#include <common>',
+        `#include <common>
+        uniform float uTime;
+        uniform vec2 uWindDir;`,
+      )
+      .replace(
+        '#include <begin_vertex>',
+        `#include <begin_vertex>
+        float swayAmount = (position.y + 0.3) / 0.6;
+        float sway = sin(uTime * 1.6 + (instanceMatrix[3].x + instanceMatrix[3].z) * 0.5) * 0.08 * swayAmount;
+        transformed.x += uWindDir.x * sway;
+        transformed.z += uWindDir.y * sway;`,
+      );
+  };
+
   const mesh = new THREE.InstancedMesh(geo, mat, COUNT);
+  mesh.castShadow = true;
   const dummy = new THREE.Object3D();
-  for (let i = 0; i < COUNT; i++) {
+  let placed = 0;
+  let attempts = 0;
+  const waterMinX = water.bounds.min.x - 0.4;
+  const waterMaxX = water.bounds.max.x + 0.4;
+  const waterMinZ = water.bounds.min.z - 0.4;
+  const waterMaxZ = water.bounds.max.z + 0.4;
+  while (placed < COUNT && attempts < COUNT * 4) {
+    attempts++;
     const x = (Math.random() - 0.5) * CHAPTER_SIZE;
     const z = (Math.random() - 0.5) * CHAPTER_SIZE;
+    const inWater = x >= waterMinX && x <= waterMaxX && z >= waterMinZ && z <= waterMaxZ;
+    const inWall =
+      x >= wallBounds.min.x - 0.4 && x <= wallBounds.max.x + 0.4 && z >= wallBounds.min.y - 0.4 && z <= wallBounds.max.y + 0.4;
+    if (inWater || inWall) continue;
     dummy.position.set(x, heightAt(x, z) + 0.3, z);
     dummy.rotation.y = Math.random() * Math.PI * 2;
     const scale = 0.6 + Math.random() * 0.8;
     dummy.scale.setScalar(scale);
     dummy.updateMatrix();
-    mesh.setMatrixAt(i, dummy.matrix);
+    mesh.setMatrixAt(placed, dummy.matrix);
+    placed++;
   }
+  mesh.count = placed;
   mesh.instanceMatrix.needsUpdate = true;
-  return mesh;
+
+  return { mesh, update: (time: number) => { uniforms.uTime.value = time; } };
 }
 
 function buildClimbableWall(heightAt: (x: number, z: number) => number): { mesh: THREE.Mesh; wall: ClimbableWall } {
@@ -117,13 +160,14 @@ export function createJungleLevel(): JungleLevel {
   const { mesh: terrainMesh, heightAt } = buildTerrain();
   group.add(terrainMesh);
 
-  group.add(buildFoliage(heightAt));
-
   const { mesh: wallMesh, wall } = buildClimbableWall(heightAt);
   group.add(wallMesh);
 
   const { mesh: waterMesh, water } = buildWater();
   group.add(waterMesh);
+
+  const { mesh: foliageMesh, update: updateFoliage } = buildFoliage(heightAt, water, wall.bounds);
+  group.add(foliageMesh);
 
   const half = CHAPTER_SIZE / 2;
   const chapterBounds = new THREE.Box3(new THREE.Vector3(-half, -5, -half), new THREE.Vector3(half, 10, half));
@@ -134,5 +178,6 @@ export function createJungleLevel(): JungleLevel {
     climbableWall: wall,
     water,
     chapterBounds,
+    update: updateFoliage,
   };
 }
