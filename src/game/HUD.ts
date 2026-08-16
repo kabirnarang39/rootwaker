@@ -1,10 +1,16 @@
 import type { LeaderboardEntry } from '../leaderboard/LeaderboardClient';
 import type { FoxSkin } from '../scene/skins';
+import type { Ability } from './AbilityKit';
 
 export class HUD {
   private root: HTMLDivElement;
   private healthBarEl: HTMLDivElement;
   private objectiveEl: HTMLDivElement;
+  private huntPromptEl: HTMLDivElement;
+  private abilityToastEl: HTMLDivElement;
+  private abilityNameEl: HTMLDivElement;
+  private abilityDescEl: HTMLDivElement;
+  private abilityToastTimer: number | null = null;
   private overlay: HTMLDivElement;
   private overlayStats: HTMLDivElement;
   private overlayTitle: HTMLDivElement;
@@ -27,6 +33,15 @@ export class HUD {
         </div>
       </div>
       <div class="rw-objective"></div>
+      <div class="rw-hunt-prompt">
+        <span class="rw-hunt-key">Space</span>
+        <span class="rw-hunt-label">Pounce</span>
+      </div>
+      <div class="rw-ability-toast">
+        <div class="rw-ability-eyebrow">Ability Unlocked</div>
+        <div class="rw-ability-name"></div>
+        <div class="rw-ability-desc"></div>
+      </div>
       <div class="rw-overlay">
         <div class="rw-panel">
           <div class="rw-overlay-title"></div>
@@ -131,6 +146,84 @@ export class HUD {
       }
       @media (prefers-reduced-motion: reduce) {
         .rw-objective { animation: none; }
+      }
+
+      /* Hunt prompt: a compact cousin of the objective plaque — same carved-bark gradient
+         and angled clip-path, shrunk down and sitting just above it. Idle state reads muted
+         amber (matches the skin-picker's interactive accent); once pounce is actually ready
+         the key hint switches to the myth-cyan glow, the same signal the vitality bar uses
+         for "alive and charged". */
+      .rw-hunt-prompt {
+        position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%); z-index: 10;
+        pointer-events: none; display: none; align-items: center; gap: 8px;
+        font-family: var(--body-face); color: var(--parchment);
+        padding: 7px 16px 6px;
+        background: linear-gradient(180deg, rgba(20,13,9,0.6), rgba(7,10,8,0.78));
+        border-top: 1px solid rgba(255,177,94,0.32);
+        box-shadow: 0 0 16px rgba(0,0,0,0.35);
+        clip-path: polygon(6% 0, 94% 0, 100% 100%, 0% 100%);
+        opacity: 0.75;
+        transition: opacity 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
+      }
+      .rw-hunt-prompt.rw-visible {
+        display: flex;
+        animation: rw-objective-in 320ms cubic-bezier(0.16, 1, 0.3, 1) both;
+      }
+      .rw-hunt-prompt.rw-hunt-ready {
+        opacity: 1;
+        border-top-color: rgba(111,242,255,0.55);
+        box-shadow: 0 0 18px rgba(111,242,255,0.3);
+      }
+      .rw-hunt-key {
+        font-family: var(--mono-face); font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em;
+        padding: 2px 7px; border-radius: 3px; line-height: 1.5;
+        background: rgba(255,177,94,0.12); border: 1px solid rgba(255,177,94,0.4);
+      }
+      .rw-hunt-ready .rw-hunt-key {
+        background: rgba(111,242,255,0.16); border-color: rgba(111,242,255,0.55); color: var(--myth-cyan);
+      }
+      .rw-hunt-label { text-transform: uppercase; font-size: 10px; letter-spacing: 0.1em; opacity: 0.85; }
+      @media (prefers-reduced-motion: reduce) {
+        .rw-hunt-prompt.rw-visible { animation: none; }
+      }
+
+      /* Ability toast: same plaque geometry as the objective/hunt prompts, but the
+         accent traces the vitality bar's own glow tokens (myth-cyan border + shadow,
+         moss-to-cyan gradient) so an unlock reads as "your vein of power just grew"
+         rather than a generic notification banner. Lifecycle (fade in / hold / fade
+         out) lives in one keyframe timed to the ~3s auto-dismiss in showAbilityUnlocked. */
+      .rw-ability-toast {
+        position: fixed; top: 20px; left: 50%; z-index: 15;
+        display: none; pointer-events: none; text-align: center;
+        font-family: var(--body-face); color: var(--parchment);
+        min-width: 220px; max-width: min(360px, 86vw);
+        padding: 12px 26px 11px;
+        background: linear-gradient(180deg, rgba(20,13,9,0.72), rgba(7,10,8,0.9));
+        border-top: 1px solid rgba(111,242,255,0.5);
+        box-shadow: 0 0 22px rgba(111,242,255,0.35), 0 12px 30px rgba(0,0,0,0.5);
+        clip-path: polygon(3% 0, 97% 0, 100% 100%, 0% 100%);
+      }
+      .rw-ability-toast.rw-visible {
+        display: block;
+        animation: rw-ability-toast 3000ms cubic-bezier(0.16, 1, 0.3, 1) both;
+      }
+      .rw-ability-eyebrow {
+        text-transform: uppercase; font-size: 9px; letter-spacing: 0.16em;
+        color: var(--myth-cyan); opacity: 0.85; margin-bottom: 4px;
+      }
+      .rw-ability-name {
+        font-family: var(--display-face); font-weight: 600; font-size: 18px;
+        letter-spacing: 0.01em; text-shadow: 0 0 16px rgba(111,242,255,0.4);
+        margin-bottom: 3px;
+      }
+      .rw-ability-desc { font-size: 12px; opacity: 0.8; line-height: 1.45; }
+      @keyframes rw-ability-toast {
+        0% { opacity: 0; transform: translate(-50%, -14px) scale(0.97); }
+        8%, 86% { opacity: 1; transform: translate(-50%, 0) scale(1); }
+        100% { opacity: 0; transform: translate(-50%, -10px) scale(0.98); }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .rw-ability-toast.rw-visible { animation: none; opacity: 1; transform: translate(-50%, 0); }
       }
 
       .rw-overlay {
@@ -261,6 +354,10 @@ export class HUD {
     this.healthBarEl = this.root.querySelector('.rw-health-bar')!;
     this.objectiveEl = this.root.querySelector('.rw-objective')!;
     this.objectiveEl.textContent = 'Cross the hollow. Reach the climbing wall.';
+    this.huntPromptEl = this.root.querySelector('.rw-hunt-prompt')!;
+    this.abilityToastEl = this.root.querySelector('.rw-ability-toast')!;
+    this.abilityNameEl = this.root.querySelector('.rw-ability-name')!;
+    this.abilityDescEl = this.root.querySelector('.rw-ability-desc')!;
     this.overlay = this.root.querySelector('.rw-overlay')!;
     this.overlayStats = this.root.querySelector('.rw-overlay-stats')!;
     this.overlayTitle = this.root.querySelector('.rw-overlay-title')!;
@@ -282,6 +379,33 @@ export class HUD {
     const pct = Math.max(0, Math.min(100, Math.round((hp / maxHp) * 100)));
     this.healthBarEl.style.setProperty('--rw-hp-pct', `${pct}%`);
     this.healthBarEl.classList.toggle('rw-critical', pct > 0 && pct <= 25);
+  }
+
+  /** Driven every frame by Game.ts's hunt logic — shows/updates the compact pounce prompt. */
+  showHuntPrompt(canPounce: boolean) {
+    this.huntPromptEl.classList.add('rw-visible');
+    this.huntPromptEl.classList.toggle('rw-hunt-ready', canPounce);
+  }
+
+  hideHuntPrompt() {
+    this.huntPromptEl.classList.remove('rw-visible', 'rw-hunt-ready');
+  }
+
+  /** Short-lived toast for a newly unlocked ability; auto-dismisses after ~3s. */
+  showAbilityUnlocked(ability: Ability) {
+    this.abilityNameEl.textContent = ability.name;
+    this.abilityDescEl.textContent = ability.description;
+
+    // restart the CSS lifecycle animation even if a toast is already mid-flight
+    this.abilityToastEl.classList.remove('rw-visible');
+    void this.abilityToastEl.offsetWidth;
+    this.abilityToastEl.classList.add('rw-visible');
+
+    if (this.abilityToastTimer !== null) window.clearTimeout(this.abilityToastTimer);
+    this.abilityToastTimer = window.setTimeout(() => {
+      this.abilityToastEl.classList.remove('rw-visible');
+      this.abilityToastTimer = null;
+    }, 3000);
   }
 
   showGameOver(distance: number, motes: number, score: number) {
