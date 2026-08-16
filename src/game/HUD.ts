@@ -3,44 +3,30 @@ import type { FoxSkin } from '../scene/skins';
 
 export class HUD {
   private root: HTMLDivElement;
-  private distanceEl: HTMLSpanElement;
-  private motesEl: HTMLSpanElement;
+  private healthBarEl: HTMLDivElement;
+  private objectiveEl: HTMLDivElement;
   private overlay: HTMLDivElement;
   private overlayStats: HTMLDivElement;
   private overlayTitle: HTMLDivElement;
-  private buffEl: HTMLDivElement;
-  private buffLabelEl: HTMLSpanElement;
-  private buffTimeEl: HTMLSpanElement;
   private leaderboardEl: HTMLOListElement;
   private submitForm: HTMLFormElement;
   private submitInput: HTMLInputElement;
-  private scoreEl: HTMLSpanElement;
-  private comboEl: HTMLSpanElement;
   private skinPickerEl: HTMLDivElement;
   private skinSwatchEl: HTMLSpanElement;
   private skinNameEl: HTMLSpanElement;
   private skinPrevBtn: HTMLButtonElement;
   private skinNextBtn: HTMLButtonElement;
-  private lastMultiplier = 1;
 
   constructor(container: HTMLElement) {
     this.root = document.createElement('div');
     this.root.innerHTML = `
-      <div class="rw-hud">
-        <div class="rw-hero-stat">
-          <span class="rw-label">score</span>
-          <span class="rw-score-row">
-            <span class="rw-score">0</span>
-            <span class="rw-combo"></span>
-          </span>
+      <div class="rw-health-bar">
+        <span class="rw-label">vitality</span>
+        <div class="rw-health-track">
+          <div class="rw-health-fill"></div>
         </div>
-        <div class="rw-sub-stats">
-          <span class="rw-stat"><span class="rw-distance">0</span>m</span>
-          <span class="rw-stat-dot">&middot;</span>
-          <span class="rw-stat"><span class="rw-motes">0</span> motes</span>
-        </div>
-        <div class="rw-stat rw-buff" style="display:none"><span class="rw-buff-label"></span> <span class="rw-buff-time"></span>s</div>
       </div>
+      <div class="rw-objective"></div>
       <div class="rw-overlay">
         <div class="rw-panel">
           <div class="rw-overlay-title"></div>
@@ -68,11 +54,12 @@ export class HUD {
 
     const style = document.createElement('style');
     style.textContent = `
-      .rw-hud, .rw-overlay {
+      .rw-health-bar, .rw-objective, .rw-overlay {
         --ink: #070a08;
         --parchment: #eef2e6;
         --moss: #4a7a5e;
         --myth-cyan: #6ff2ff;
+        --vitality-low: #d9667a;
         --spirit-amber: #ffb15e;
         --bark: #140d09;
         --claim-red: #d9667a;
@@ -81,40 +68,69 @@ export class HUD {
         --mono-face: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
       }
 
-      .rw-hud {
-        position: fixed; top: 20px; left: 20px; z-index: 10;
-        font-family: var(--body-face);
-        color: var(--parchment);
-        display: flex; flex-direction: column; gap: 5px;
-        pointer-events: none;
-      }
       .rw-label {
         text-transform: uppercase; font-size: 10px; letter-spacing: 0.12em;
         opacity: 0.55; display: block; margin-bottom: 1px;
       }
-      .rw-hero-stat { line-height: 1; }
-      .rw-score-row { display: inline-flex; align-items: baseline; gap: 8px; }
-      .rw-score {
-        font-family: var(--mono-face); font-size: 32px; font-weight: 600;
-        color: var(--spirit-amber); text-shadow: 0 0 14px rgba(255,177,94,0.5);
-        font-variant-numeric: tabular-nums; letter-spacing: -0.01em;
+
+      /* Vitality: a bioluminescent "vein" rather than a stock progress bar — angled blade
+         silhouette (echoes the claw/combat motif), fill color pulled from the fox-spirit's
+         own glow palette (SKINS[0].glowColor ≈ --myth-cyan), shifting to a warning red as
+         health runs low instead of a flat red/green default. */
+      .rw-health-bar {
+        position: fixed; top: 20px; left: 20px; z-index: 10;
+        font-family: var(--body-face);
+        color: var(--parchment);
+        display: flex; flex-direction: column; gap: 6px;
+        width: 190px;
+        pointer-events: none;
       }
-      .rw-combo {
-        font-family: var(--mono-face); font-size: 14px; font-weight: 600;
-        color: var(--spirit-amber); opacity: 0.85;
+      .rw-health-track {
+        position: relative;
+        height: 11px;
+        background: rgba(238,242,230,0.07);
+        box-shadow: inset 0 0 0 1px rgba(238,242,230,0.14), inset 0 1px 2px rgba(0,0,0,0.4);
+        clip-path: polygon(8px 0, 100% 0, calc(100% - 8px) 100%, 0 100%);
+        overflow: hidden;
       }
-      .rw-combo.rw-pop { animation: rw-combo-pop 320ms ease-out; }
-      .rw-sub-stats {
-        font-family: var(--mono-face); font-size: 13px; opacity: 0.75;
-        display: flex; align-items: center; gap: 7px;
+      .rw-health-fill {
+        position: absolute; inset: 0;
+        width: var(--rw-hp-pct, 100%);
+        background: linear-gradient(90deg, var(--moss), var(--myth-cyan));
+        box-shadow: 0 0 10px 1px rgba(111,242,255,0.55), 0 0 2px rgba(111,242,255,0.9);
+        transition: width 220ms ease-out, background 320ms ease;
       }
-      .rw-stat-dot { opacity: 0.4; }
-      .rw-distance, .rw-motes { font-variant-numeric: tabular-nums; }
-      .rw-buff {
-        font-family: var(--body-face); color: var(--myth-cyan);
-        text-shadow: 0 0 8px rgba(111,242,255,0.6);
-        text-transform: uppercase; font-size: 11px; letter-spacing: 0.08em;
-        margin-top: 3px;
+      .rw-health-bar.rw-critical .rw-health-fill {
+        background: linear-gradient(90deg, var(--claim-red), var(--vitality-low));
+        box-shadow: 0 0 10px 1px rgba(217,102,122,0.6), 0 0 2px rgba(217,102,122,0.9);
+        animation: rw-vitality-pulse 1.1s ease-in-out infinite;
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .rw-health-bar.rw-critical .rw-health-fill { animation: none; }
+      }
+
+      /* Objective: bottom-center chapter prompt, styled as a carved bark plaque consistent
+         with the overlay panel's material language rather than a floating toast. */
+      .rw-objective {
+        position: fixed; bottom: 26px; left: 50%; transform: translateX(-50%); z-index: 10;
+        pointer-events: none;
+        font-family: var(--body-face); font-size: 13px; letter-spacing: 0.01em;
+        color: var(--parchment); opacity: 0.92; text-align: center;
+        padding: 10px 22px 9px;
+        background: linear-gradient(180deg, rgba(20,13,9,0.62), rgba(7,10,8,0.8));
+        border-top: 1px solid rgba(111,242,255,0.28);
+        box-shadow: 0 0 24px rgba(0,0,0,0.4);
+        clip-path: polygon(2% 0, 98% 0, 100% 100%, 0% 100%);
+        animation: rw-objective-in 520ms cubic-bezier(0.16, 1, 0.3, 1) both;
+      }
+      .rw-objective::before {
+        content: 'Objective';
+        display: block;
+        text-transform: uppercase; font-size: 9px; letter-spacing: 0.14em;
+        opacity: 0.5; margin-bottom: 3px;
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .rw-objective { animation: none; }
       }
 
       .rw-overlay {
@@ -143,7 +159,6 @@ export class HUD {
       .rw-overlay.rw-visible .rw-panel { animation: rw-panel-in 460ms cubic-bezier(0.16, 1, 0.3, 1) both; }
       @media (prefers-reduced-motion: reduce) {
         .rw-overlay.rw-visible .rw-panel { animation: none; }
-        .rw-combo.rw-pop { animation: none; }
       }
 
       .rw-overlay-title {
@@ -232,27 +247,26 @@ export class HUD {
         from { opacity: 0; transform: translateY(10px) scale(0.97); }
         to { opacity: 1; transform: translateY(0) scale(1); }
       }
-      @keyframes rw-combo-pop {
-        0% { transform: scale(1); }
-        40% { transform: scale(1.35); }
-        100% { transform: scale(1); }
+      @keyframes rw-objective-in {
+        from { opacity: 0; transform: translate(-50%, 8px); }
+        to { opacity: 1; transform: translate(-50%, 0); }
+      }
+      @keyframes rw-vitality-pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.55; }
       }
     `;
     document.head.appendChild(style);
 
-    this.distanceEl = this.root.querySelector('.rw-distance')!;
-    this.motesEl = this.root.querySelector('.rw-motes')!;
+    this.healthBarEl = this.root.querySelector('.rw-health-bar')!;
+    this.objectiveEl = this.root.querySelector('.rw-objective')!;
+    this.objectiveEl.textContent = 'Cross the hollow. Reach the climbing wall.';
     this.overlay = this.root.querySelector('.rw-overlay')!;
     this.overlayStats = this.root.querySelector('.rw-overlay-stats')!;
     this.overlayTitle = this.root.querySelector('.rw-overlay-title')!;
-    this.buffEl = this.root.querySelector('.rw-buff')!;
-    this.buffLabelEl = this.root.querySelector('.rw-buff-label')!;
-    this.buffTimeEl = this.root.querySelector('.rw-buff-time')!;
     this.leaderboardEl = this.root.querySelector('.rw-leaderboard')!;
     this.submitForm = this.root.querySelector('.rw-submit-form')!;
     this.submitInput = this.root.querySelector('.rw-submit-input')!;
-    this.scoreEl = this.root.querySelector('.rw-score')!;
-    this.comboEl = this.root.querySelector('.rw-combo')!;
     this.skinPickerEl = this.root.querySelector('.rw-skin-picker')!;
     this.skinSwatchEl = this.root.querySelector('.rw-skin-swatch')!;
     this.skinNameEl = this.root.querySelector('.rw-skin-name')!;
@@ -263,28 +277,11 @@ export class HUD {
     this.submitForm.addEventListener('keydown', (e) => e.stopPropagation());
   }
 
-  update(distance: number, motes: number, score = 0, multiplier = 1) {
-    this.distanceEl.textContent = Math.floor(distance).toString();
-    this.motesEl.textContent = motes.toString();
-    this.scoreEl.textContent = Math.floor(score).toString();
-    this.comboEl.textContent = multiplier > 1 ? `×${multiplier.toFixed(1)}` : '';
-    if (multiplier > this.lastMultiplier) {
-      this.comboEl.classList.remove('rw-pop');
-      // force reflow so the animation restarts even if it's still running
-      void this.comboEl.offsetWidth;
-      this.comboEl.classList.add('rw-pop');
-    }
-    this.lastMultiplier = multiplier;
-  }
-
-  setBuff(buff: { label: string; seconds: number } | null) {
-    if (!buff) {
-      this.buffEl.style.display = 'none';
-      return;
-    }
-    this.buffEl.style.display = '';
-    this.buffLabelEl.textContent = buff.label;
-    this.buffTimeEl.textContent = buff.seconds.toFixed(1);
+  /** Drives the vitality bar's fill width and its low-health warning state. */
+  updateHealth(hp: number, maxHp: number) {
+    const pct = Math.max(0, Math.min(100, Math.round((hp / maxHp) * 100)));
+    this.healthBarEl.style.setProperty('--rw-hp-pct', `${pct}%`);
+    this.healthBarEl.classList.toggle('rw-critical', pct > 0 && pct <= 25);
   }
 
   showGameOver(distance: number, motes: number, score: number) {

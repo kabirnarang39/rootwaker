@@ -12,7 +12,6 @@ import {
   SHIELD_DURATION,
   SLIDE_DURATION,
 } from './constants';
-import type { PlayerAction } from './Input';
 import type { PowerUpType } from '../entities/createPowerUp';
 import { SKINS, type FoxSkin } from '../scene/skins';
 
@@ -82,7 +81,11 @@ export class Player {
     return null;
   }
 
-  handleAction(action: PlayerAction) {
+  // Retired lane-swipe vocabulary (Task 15 superseded this file with PlayerController's
+  // free-roam movement + the widened Input.PlayerAction). Kept as this file's own local
+  // type — decoupled from Input.ts's action union — since this class is no longer wired
+  // into the live game but stays in the repo intact per the phase-1 retirement plan.
+  handleAction(action: 'left' | 'right' | 'jump' | 'slide') {
     if (!this.alive) return;
     if (action === 'left') this.changeLane(-1);
     else if (action === 'right') this.changeLane(1);
