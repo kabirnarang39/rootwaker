@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import type { WaterBody } from '../game/WaterBody';
 import { createSky } from './createSky';
 
@@ -45,14 +46,25 @@ function buildFoliage(
   heightAt: (x: number, z: number) => number,
   water: WaterBody,
   wallBounds: THREE.Box2,
-): { mesh: THREE.InstancedMesh; update: (time: number) => void } {
+): { trunkMesh: THREE.InstancedMesh; canopyMesh: THREE.InstancedMesh; update: (time: number) => void } {
   const COUNT = 900;
-  const geo = new THREE.ConeGeometry(0.18, 0.6, 5);
-  const mat = new THREE.MeshStandardMaterial({ color: 0x1f4d3a, flatShading: true, roughness: 0.9 });
+  const TRUNK_HEIGHT = 0.55;
+
+  const trunkGeo = new THREE.CylinderGeometry(0.035, 0.05, TRUNK_HEIGHT, 5);
+  trunkGeo.translate(0, TRUNK_HEIGHT / 2, 0);
+  const trunkMat = new THREE.MeshStandardMaterial({ color: 0x3a2a1a, flatShading: true, roughness: 0.9 });
+
+  const icoA = new THREE.IcosahedronGeometry(0.34, 0);
+  icoA.translate(0, TRUNK_HEIGHT + 0.3, 0);
+  const icoB = new THREE.IcosahedronGeometry(0.24, 0);
+  icoB.translate(0.16, TRUNK_HEIGHT + 0.46, 0.1);
+  const canopyGeo = mergeGeometries([icoA, icoB], false);
+  if (!canopyGeo) throw new Error('buildFoliage: failed to merge canopy geometry');
+  const canopyMat = new THREE.MeshStandardMaterial({ color: 0x1f4d3a, flatShading: true, roughness: 0.9 });
 
   const windDir = WIND.clone().normalize();
   const uniforms = { uTime: { value: 0 }, uWindDir: { value: new THREE.Vector2(windDir.x, windDir.z) } };
-  mat.onBeforeCompile = (shader) => {
+  canopyMat.onBeforeCompile = (shader) => {
     shader.uniforms.uTime = uniforms.uTime;
     shader.uniforms.uWindDir = uniforms.uWindDir;
     shader.vertexShader = shader.vertexShader
@@ -68,8 +80,7 @@ function buildFoliage(
         #ifdef USE_INSTANCING
           mvPosition = instanceMatrix * mvPosition;
         #endif
-        float swayAmount = (position.y + 0.3) / 0.6;
-        float sway = sin(uTime * 1.6 + (instanceMatrix[3].x + instanceMatrix[3].z) * 0.5) * 0.08 * swayAmount;
+        float sway = sin(uTime * 1.6 + (instanceMatrix[3].x + instanceMatrix[3].z) * 0.5) * 0.06;
         mvPosition.x += uWindDir.x * sway;
         mvPosition.z += uWindDir.y * sway;
         mvPosition = modelViewMatrix * mvPosition;
@@ -77,8 +88,11 @@ function buildFoliage(
       );
   };
 
-  const mesh = new THREE.InstancedMesh(geo, mat, COUNT);
-  mesh.castShadow = true;
+  const trunkMesh = new THREE.InstancedMesh(trunkGeo, trunkMat, COUNT);
+  const canopyMesh = new THREE.InstancedMesh(canopyGeo, canopyMat, COUNT);
+  trunkMesh.castShadow = true;
+  canopyMesh.castShadow = true;
+
   const dummy = new THREE.Object3D();
   let placed = 0;
   let attempts = 0;
@@ -94,18 +108,21 @@ function buildFoliage(
     const inWall =
       x >= wallBounds.min.x - 0.4 && x <= wallBounds.max.x + 0.4 && z >= wallBounds.min.y - 0.4 && z <= wallBounds.max.y + 0.4;
     if (inWater || inWall) continue;
-    dummy.position.set(x, heightAt(x, z) + 0.3, z);
+    const scale = 0.7 + Math.random() * 0.7;
+    dummy.position.set(x, heightAt(x, z), z);
     dummy.rotation.y = Math.random() * Math.PI * 2;
-    const scale = 0.6 + Math.random() * 0.8;
     dummy.scale.setScalar(scale);
     dummy.updateMatrix();
-    mesh.setMatrixAt(placed, dummy.matrix);
+    trunkMesh.setMatrixAt(placed, dummy.matrix);
+    canopyMesh.setMatrixAt(placed, dummy.matrix);
     placed++;
   }
-  mesh.count = placed;
-  mesh.instanceMatrix.needsUpdate = true;
+  trunkMesh.count = placed;
+  canopyMesh.count = placed;
+  trunkMesh.instanceMatrix.needsUpdate = true;
+  canopyMesh.instanceMatrix.needsUpdate = true;
 
-  return { mesh, update: (time: number) => { uniforms.uTime.value = time; } };
+  return { trunkMesh, canopyMesh, update: (time: number) => { uniforms.uTime.value = time; } };
 }
 
 function buildClimbableWall(heightAt: (x: number, z: number) => number): { mesh: THREE.Mesh; wall: ClimbableWall } {
@@ -171,8 +188,8 @@ export function createJungleLevel(): JungleLevel {
   const { mesh: waterMesh, water } = buildWater();
   group.add(waterMesh);
 
-  const { mesh: foliageMesh, update: updateFoliage } = buildFoliage(heightAt, water, wall.bounds);
-  group.add(foliageMesh);
+  const { trunkMesh, canopyMesh, update: updateFoliage } = buildFoliage(heightAt, water, wall.bounds);
+  group.add(trunkMesh, canopyMesh);
 
   const half = CHAPTER_SIZE / 2;
   const chapterBounds = new THREE.Box3(new THREE.Vector3(-half, -5, -half), new THREE.Vector3(half, 10, half));

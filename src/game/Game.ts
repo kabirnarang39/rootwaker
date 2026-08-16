@@ -39,8 +39,8 @@ export class Game {
   private jumpPressed = false;
 
   constructor(container: HTMLElement) {
-    this.scene.background = new THREE.Color(0x030509);
-    this.scene.fog = new THREE.FogExp2(0x030509, 0.028);
+    this.scene.background = new THREE.Color(0x0a1420);
+    this.scene.fog = new THREE.FogExp2(0x0a1420, 0.014);
 
     // touch-primary devices are almost always the fill-rate-constrained ones (phone GPUs) —
     // cap resolution and shadow detail there; desktop keeps full quality.
@@ -50,7 +50,7 @@ export class Game {
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, isTouchPrimary ? 1.5 : 2));
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.0;
+    this.renderer.toneMappingExposure = 1.15;
     this.renderer.shadowMap.enabled = true;
     container.appendChild(this.renderer.domElement);
 
@@ -101,7 +101,7 @@ export class Game {
   }
 
   private setupLights(isTouchPrimary: boolean) {
-    const hemi = new THREE.HemisphereLight(0x4a7a8a, 0x14231a, 1.4);
+    const hemi = new THREE.HemisphereLight(0x4a7a8a, 0x1c3226, 1.9);
     this.scene.add(hemi);
 
     const moon = new THREE.DirectionalLight(0xafc8ff, 2.0);
@@ -109,15 +109,15 @@ export class Game {
     moon.castShadow = true;
     const shadowRes = isTouchPrimary ? 512 : 1024;
     moon.shadow.mapSize.set(shadowRes, shadowRes);
-    moon.shadow.camera.left = -6;
-    moon.shadow.camera.right = 6;
-    moon.shadow.camera.top = 6;
-    moon.shadow.camera.bottom = -6;
+    moon.shadow.camera.left = -18;
+    moon.shadow.camera.right = 18;
+    moon.shadow.camera.top = 18;
+    moon.shadow.camera.bottom = -18;
     moon.shadow.camera.near = 1;
-    moon.shadow.camera.far = 20;
+    moon.shadow.camera.far = 40;
     this.scene.add(moon);
 
-    const fill = new THREE.AmbientLight(0x203045, 0.6);
+    const fill = new THREE.AmbientLight(0x203045, 0.85);
     this.scene.add(fill);
 
     const rim = new THREE.PointLight(0x5ff7ff, 0.25, 8, 2);
