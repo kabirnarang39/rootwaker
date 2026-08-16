@@ -4,12 +4,18 @@ import type { WaterBody } from '../game/WaterBody';
 import { createSky } from './createSky';
 import { createGroveHare, type GroveHare } from '../entities/groveHare';
 import { createTuskBoar, type TuskBoar } from '../entities/tuskBoar';
+import { createMountainGuard, type MountainGuard } from '../entities/mountainGuard';
 import { TreeObstacleGrid, type TreeObstacle } from './TreeObstacleGrid';
 
 export interface ClimbableWall {
   normal: THREE.Vector3;
   topY: number;
   bounds: THREE.Box2; // x/z footprint at the wall's base
+}
+
+export interface ClimbSegment {
+  wall: ClimbableWall;
+  ledgePosition: THREE.Vector3;
 }
 
 export interface JungleLevel {
@@ -22,6 +28,11 @@ export interface JungleLevel {
   boars: TuskBoar[];
   obstacleGrid: TreeObstacleGrid;
   foliageMeshes: THREE.InstancedMesh[];
+  mountain: {
+    segments: ClimbSegment[];
+    guards: MountainGuard[];
+    summitGate: THREE.Vector3;
+  };
   update(time: number): void;
 }
 
@@ -263,6 +274,134 @@ function buildClimbableWall(heightAt: (x: number, z: number) => number): { mesh:
   return { mesh, wall };
 }
 
+const MOUNTAIN_WALL_COLOR = 0x2c2216; // matches the phase-1 climbable wall
+const MOUNTAIN_LEDGE_COLOR = 0x4a4842; // matches mountainGuard.ts's stone
+const MOUNTAIN_GATE_TRIM_COLOR = 0x8a6a3a; // matches mountainGuard.ts's trim
+
+// Generalized version of buildClimbableWall's pattern: stacked segments need an explicit
+// base Y (the ledge below them) rather than deriving it from ground terrain.
+function buildClimbSegment(
+  wallX: number,
+  baseZ: number,
+  baseY: number,
+  wallZWidth: number,
+  height: number,
+): { mesh: THREE.Mesh; wall: ClimbableWall } {
+  const geo = new THREE.BoxGeometry(0.6, height, wallZWidth);
+  const mat = new THREE.MeshStandardMaterial({ color: MOUNTAIN_WALL_COLOR, roughness: 1, flatShading: true });
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.position.set(wallX, baseY + height / 2, baseZ);
+  mesh.castShadow = true;
+
+  const wall: ClimbableWall = {
+    normal: new THREE.Vector3(1, 0, 0),
+    topY: baseY + height,
+    bounds: new THREE.Box2(
+      new THREE.Vector2(wallX - 0.3, baseZ - wallZWidth / 2),
+      new THREE.Vector2(wallX + 0.3, baseZ + wallZWidth / 2),
+    ),
+  };
+  return { mesh, wall };
+}
+
+function buildLedge(
+  centerX: number,
+  topY: number,
+  centerZ: number,
+  width: number,
+  depth: number,
+): { mesh: THREE.Mesh; position: THREE.Vector3 } {
+  const thickness = 0.3;
+  const geo = new THREE.BoxGeometry(width, thickness, depth);
+  const mat = new THREE.MeshStandardMaterial({ color: MOUNTAIN_LEDGE_COLOR, roughness: 0.95, flatShading: true });
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.position.set(centerX, topY - thickness / 2, centerZ);
+  mesh.receiveShadow = true;
+  return { mesh, position: new THREE.Vector3(centerX, topY, centerZ) };
+}
+
+function buildSummitGate(position: THREE.Vector3): THREE.Group {
+  const group = new THREE.Group();
+  const stoneMat = new THREE.MeshStandardMaterial({ color: MOUNTAIN_LEDGE_COLOR, roughness: 0.95, flatShading: true });
+  const trimMat = new THREE.MeshStandardMaterial({
+    color: MOUNTAIN_GATE_TRIM_COLOR,
+    roughness: 0.6,
+    metalness: 0.3,
+    flatShading: true,
+  });
+
+  const pillarGeo = new THREE.BoxGeometry(0.4, 2.2, 0.4);
+  const pillarL = new THREE.Mesh(pillarGeo, stoneMat);
+  pillarL.position.set(position.x - 1.2, position.y + 1.1, position.z);
+  pillarL.castShadow = true;
+  const pillarR = new THREE.Mesh(pillarGeo, stoneMat);
+  pillarR.position.set(position.x + 1.2, position.y + 1.1, position.z);
+  pillarR.castShadow = true;
+
+  const lintel = new THREE.Mesh(new THREE.BoxGeometry(2.8, 0.35, 0.5), trimMat);
+  lintel.position.set(position.x, position.y + 2.35, position.z);
+  lintel.castShadow = true;
+
+  group.add(pillarL, pillarR, lintel);
+  return group;
+}
+
+// Three linked climb segments stacked above the phase-1 wall's dismount point. Segment 2
+// branches into two parallel paths (different x offsets) that both feed into ledge 2 —
+// the design's required real branch. Guards stand on ledge 2 and ledge 3; ledge 1 stays
+// hazard-free so the player learns the stamina mechanic first.
+function buildMountain(
+  wallX: number,
+  baseZ: number,
+  startY: number,
+): {
+  meshes: THREE.Object3D[];
+  segments: ClimbSegment[];
+  guards: MountainGuard[];
+  summitGate: THREE.Vector3;
+} {
+  const meshes: THREE.Object3D[] = [];
+  const segments: ClimbSegment[] = [];
+  const segmentHeight = 6;
+  const wallZWidth = 6;
+  const branchOffset = 3;
+
+  // Segment 1: single path directly above the phase-1 wall's dismount point.
+  const seg1 = buildClimbSegment(wallX, baseZ, startY, wallZWidth, segmentHeight);
+  meshes.push(seg1.mesh);
+  const ledge1 = buildLedge(wallX, seg1.wall.topY, baseZ, 8, 4);
+  meshes.push(ledge1.mesh);
+  segments.push({ wall: seg1.wall, ledgePosition: ledge1.position });
+
+  // Segment 2: branches into two parallel paths that both lead to ledge 2.
+  const seg2a = buildClimbSegment(wallX - branchOffset, baseZ, ledge1.position.y, wallZWidth, segmentHeight);
+  const seg2b = buildClimbSegment(wallX + branchOffset, baseZ, ledge1.position.y, wallZWidth, segmentHeight);
+  meshes.push(seg2a.mesh, seg2b.mesh);
+  const ledge2 = buildLedge(wallX, seg2a.wall.topY, baseZ, 8, 4);
+  meshes.push(ledge2.mesh);
+  segments.push({ wall: seg2a.wall, ledgePosition: ledge2.position });
+  segments.push({ wall: seg2b.wall, ledgePosition: ledge2.position });
+
+  // Segment 3: single path to the summit.
+  const seg3 = buildClimbSegment(wallX, baseZ, ledge2.position.y, wallZWidth, segmentHeight);
+  meshes.push(seg3.mesh);
+  const ledge3 = buildLedge(wallX, seg3.wall.topY, baseZ, 6, 4);
+  meshes.push(ledge3.mesh);
+  segments.push({ wall: seg3.wall, ledgePosition: ledge3.position });
+
+  const guard2 = createMountainGuard();
+  guard2.group.position.copy(ledge2.position);
+  const guard3 = createMountainGuard();
+  guard3.group.position.copy(ledge3.position);
+  const guards = [guard2, guard3];
+  meshes.push(guard2.group, guard3.group);
+
+  const summitGate = ledge3.position.clone();
+  meshes.push(buildSummitGate(summitGate));
+
+  return { meshes, segments, guards, summitGate };
+}
+
 function buildWater(): { mesh: THREE.Mesh; water: WaterBody } {
   const width = 8;
   const depth = 6;
@@ -340,8 +479,11 @@ export function createJungleLevel(): JungleLevel {
   group.add(...hares.map((hare) => hare.group));
   group.add(...boars.map((boar) => boar.group));
 
+  const mountain = buildMountain(-12, 8, wall.topY);
+  group.add(...mountain.meshes);
+
   const half = CHAPTER_SIZE / 2;
-  const chapterBounds = new THREE.Box3(new THREE.Vector3(-half, -5, -half), new THREE.Vector3(half, 10, half));
+  const chapterBounds = new THREE.Box3(new THREE.Vector3(-half, -5, -half), new THREE.Vector3(half, 40, half));
 
   return {
     group,
@@ -353,6 +495,7 @@ export function createJungleLevel(): JungleLevel {
     boars,
     obstacleGrid,
     foliageMeshes,
+    mountain: { segments: mountain.segments, guards: mountain.guards, summitGate: mountain.summitGate },
     update: updateFoliage,
   };
 }
