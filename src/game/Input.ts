@@ -1,74 +1,64 @@
-export type PlayerAction = 'left' | 'right' | 'jump' | 'slide';
+export type PlayerAction = 'attack' | 'dodge' | 'jump' | 'interact';
 
-/** Keyboard (desktop) + swipe (touch) → one normalized action stream. */
+const FORWARD_KEYS = ['KeyW', 'ArrowUp'];
+const BACK_KEYS = ['KeyS', 'ArrowDown'];
+const LEFT_KEYS = ['KeyA', 'ArrowLeft'];
+const RIGHT_KEYS = ['KeyD', 'ArrowRight'];
+
+/** Pure: raw ±1 per axis from held keys. Diagonal normalization is the movement consumer's job. */
+export function resolveMoveVector(keysDown: Set<string>): { x: number; z: number } {
+  let z = 0;
+  let x = 0;
+  if (FORWARD_KEYS.some((k) => keysDown.has(k))) z += 1;
+  if (BACK_KEYS.some((k) => keysDown.has(k))) z -= 1;
+  if (RIGHT_KEYS.some((k) => keysDown.has(k))) x += 1;
+  if (LEFT_KEYS.some((k) => keysDown.has(k))) x -= 1;
+  return { x, z };
+}
+
+/** Keyboard (desktop) + on-screen stick/buttons (touch) → normalized move vector + discrete actions. */
 export class Input {
-  private handlers: Array<(action: PlayerAction) => void> = [];
-  private touchStartX = 0;
-  private touchStartY = 0;
-  private touchActive = false;
+  private keysDown = new Set<string>();
+  private actionHandlers: Array<(action: PlayerAction) => void> = [];
+  private moveHandlers: Array<(x: number, z: number) => void> = [];
 
-  constructor(target: HTMLElement) {
+  constructor(_target: HTMLElement) {
     window.addEventListener('keydown', this.onKeyDown);
-    target.addEventListener('touchstart', this.onTouchStart, { passive: true });
-    target.addEventListener('touchend', this.onTouchEnd, { passive: true });
+    window.addEventListener('keyup', this.onKeyUp);
   }
 
   onAction(handler: (action: PlayerAction) => void) {
-    this.handlers.push(handler);
+    this.actionHandlers.push(handler);
   }
 
-  private emit(action: PlayerAction) {
-    this.handlers.forEach((h) => h(action));
+  onMove(handler: (x: number, z: number) => void) {
+    this.moveHandlers.push(handler);
+  }
+
+  /** Called once per frame by the game loop to push the current move intent. */
+  pollMove() {
+    const { x, z } = resolveMoveVector(this.keysDown);
+    this.moveHandlers.forEach((h) => h(x, z));
+  }
+
+  private emitAction(action: PlayerAction) {
+    this.actionHandlers.forEach((h) => h(action));
   }
 
   private onKeyDown = (e: KeyboardEvent) => {
-    switch (e.code) {
-      case 'ArrowLeft':
-      case 'KeyA':
-        this.emit('left');
-        break;
-      case 'ArrowRight':
-      case 'KeyD':
-        this.emit('right');
-        break;
-      case 'ArrowUp':
-      case 'KeyW':
-      case 'Space':
-        this.emit('jump');
-        break;
-      case 'ArrowDown':
-      case 'KeyS':
-        this.emit('slide');
-        break;
-    }
+    this.keysDown.add(e.code);
+    if (e.code === 'Space') this.emitAction('jump');
+    else if (e.code === 'KeyJ') this.emitAction('attack');
+    else if (e.code === 'KeyK') this.emitAction('dodge');
+    else if (e.code === 'KeyE') this.emitAction('interact');
   };
 
-  private onTouchStart = (e: TouchEvent) => {
-    const t = e.changedTouches[0];
-    this.touchStartX = t.clientX;
-    this.touchStartY = t.clientY;
-    this.touchActive = true;
-  };
-
-  private onTouchEnd = (e: TouchEvent) => {
-    if (!this.touchActive) return;
-    this.touchActive = false;
-    const t = e.changedTouches[0];
-    const dx = t.clientX - this.touchStartX;
-    const dy = t.clientY - this.touchStartY;
-    const absX = Math.abs(dx);
-    const absY = Math.abs(dy);
-    const SWIPE_THRESHOLD = 30;
-    if (Math.max(absX, absY) < SWIPE_THRESHOLD) return;
-
-    if (absX > absY) {
-      this.emit(dx > 0 ? 'right' : 'left');
-    } else {
-      this.emit(dy > 0 ? 'slide' : 'jump');
-    }
+  private onKeyUp = (e: KeyboardEvent) => {
+    this.keysDown.delete(e.code);
   };
 
   dispose() {
     window.removeEventListener('keydown', this.onKeyDown);
+    window.removeEventListener('keyup', this.onKeyUp);
   }
 }
