@@ -40,3 +40,25 @@ describe('AudioFX throne-room sounds', () => {
     expect(() => fx.startVillageAmbience()).not.toThrow();
   });
 });
+
+describe('AudioFX combat-clarity sounds', () => {
+  it('playPlayerHurt does not throw before unlock()', () => {
+    const fx = new AudioFX();
+    expect(() => fx.playPlayerHurt()).not.toThrow();
+  });
+
+  it('playChargeDash does not throw before unlock()', () => {
+    const fx = new AudioFX();
+    expect(() => fx.playChargeDash()).not.toThrow();
+  });
+
+  it('playRoar does not throw before unlock()', () => {
+    const fx = new AudioFX();
+    expect(() => fx.playRoar()).not.toThrow();
+  });
+
+  it('playSensePulse does not throw before unlock()', () => {
+    const fx = new AudioFX();
+    expect(() => fx.playSensePulse()).not.toThrow();
+  });
+});

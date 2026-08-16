@@ -255,6 +255,51 @@ export class AudioFX {
     this.tone(587, 0.7, 'sine', 0.08, 0.3); // D5
   }
 
+  /** Sharp, high stab — distinct from playHit's low thud — for "the player took damage". */
+  playPlayerHurt(): void {
+    this.tone(720, 0.14, 'sawtooth', 0.1);
+    this.tone(340, 0.18, 'square', 0.06, 0.02);
+  }
+
+  /** A driving low charge-up chord for the boar-charge dash — reuses playPounceAttempt's
+   * sawtooth/sine pairing but longer and lower, reading as a heavier, sustained lunge. */
+  playChargeDash(): void {
+    this.tone(160, 0.28, 'sawtooth', 0.11);
+    this.tone(95, 0.34, 'sine', 0.08, 0.03);
+  }
+
+  /** A deep, filtered-noise roar for King's Roar — same noise-buffer technique as
+   * playGroundSlamTelegraph, but with a falling (not rising) filter sweep so it reads as an
+   * outward bellow rather than an incoming rumble. */
+  playRoar(): void {
+    if (!this.ctx) return;
+    const ctx = this.ctx;
+    const bufferSize = ctx.sampleRate * 0.6;
+    const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < bufferSize; i++) data[i] = Math.random() * 2 - 1;
+    const noise = ctx.createBufferSource();
+    noise.buffer = buffer;
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.setValueAtTime(1400, ctx.currentTime);
+    filter.frequency.exponentialRampToValueAtTime(120, ctx.currentTime + 0.6);
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0.16, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.6);
+    noise.connect(filter);
+    filter.connect(gain);
+    gain.connect(ctx.destination);
+    noise.start();
+  }
+
+  /** A quiet, wide echoing ping for Keen Ear — two soft sine layers a fifth apart, longer decay
+   * than playCollect so it reads as "sound traveling outward" rather than a pickup chime. */
+  playSensePulse(): void {
+    this.tone(660, 0.5, 'sine', 0.045);
+    this.tone(990, 0.6, 'sine', 0.03, 0.08);
+  }
+
   startVillageAmbience(): void {
     // A single warm, sustained drone — deliberately sparser than startJungleAmbience's
     // multi-layer canopy/floor/bird/water soundscape or startMountainWind's noise gusts: this is

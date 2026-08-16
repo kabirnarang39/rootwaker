@@ -23,4 +23,19 @@ describe('AbilityKit', () => {
     kit.unlock('boar-charge');
     expect(kit.unlockedThisFrame()).toBeNull();
   });
+
+  it('activate() fails for a locked ability and does not start its cooldown', () => {
+    const kit = new AbilityKit();
+    expect(kit.activate('boar-charge', 0)).toBe(false);
+    expect(kit.cooldownRemaining('boar-charge', 0)).toBe(0);
+  });
+
+  it('activate() succeeds once unlocked, then blocks until the cooldown elapses', () => {
+    const kit = new AbilityKit();
+    kit.unlock('boar-charge');
+    expect(kit.activate('boar-charge', 10)).toBe(true);
+    expect(kit.cooldownRemaining('boar-charge', 10)).toBe(ABILITIES['boar-charge'].cooldownSeconds);
+    expect(kit.activate('boar-charge', 10 + ABILITIES['boar-charge'].cooldownSeconds - 0.01)).toBe(false);
+    expect(kit.activate('boar-charge', 10 + ABILITIES['boar-charge'].cooldownSeconds)).toBe(true);
+  });
 });

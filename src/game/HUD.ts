@@ -1,6 +1,12 @@
 import type { LeaderboardEntry } from '../leaderboard/LeaderboardClient';
 import type { FoxSkin } from '../scene/skins';
-import type { Ability } from './AbilityKit';
+import { ABILITIES, ABILITY_SLOTS, type Ability, type AbilityId } from './AbilityKit';
+
+export interface PowerSlotState {
+  id: AbilityId;
+  unlocked: boolean;
+  ready: boolean;
+}
 
 export class HUD {
   private root: HTMLDivElement;
@@ -32,6 +38,9 @@ export class HUD {
   private skinNameEl: HTMLSpanElement;
   private skinPrevBtn: HTMLButtonElement;
   private skinNextBtn: HTMLButtonElement;
+  private damageFlashEl: HTMLDivElement;
+  private damageFlashTimer: number | null = null;
+  private powerSlotEls: Map<AbilityId, HTMLDivElement> = new Map();
 
   constructor(container: HTMLElement) {
     this.root = document.createElement('div');
@@ -47,6 +56,16 @@ export class HUD {
         <div class="rw-stamina-track">
           <div class="rw-stamina-fill"></div>
         </div>
+      </div>
+      <div class="rw-damage-flash"></div>
+      <div class="rw-power-bar">
+        ${ABILITY_SLOTS.map(
+          (id) => `
+          <div class="rw-power-slot" data-ability="${id}">
+            <span class="rw-power-key">${ABILITIES[id].key}</span>
+            <span class="rw-power-name">${ABILITIES[id].name}</span>
+          </div>`,
+        ).join('')}
       </div>
       <div class="rw-objective"></div>
       <div class="rw-hunt-prompt">
@@ -449,6 +468,64 @@ export class HUD {
         .rw-controls-legend { transition: opacity 1ms linear; }
       }
 
+      /* Damage flash: a full-screen red vignette pulse — the "you got hit" signal that was
+         previously missing entirely (health bar only reflected the new value, no immediate
+         cue). Sits above every other HUD layer (z-index 18) but below the arc-complete/overlay
+         beats, and never intercepts pointer events. */
+      .rw-damage-flash {
+        position: fixed; inset: 0; z-index: 18; pointer-events: none;
+        opacity: 0;
+        background: radial-gradient(ellipse at center, rgba(217,102,122,0) 45%, rgba(217,102,122,0.35) 100%);
+      }
+      .rw-damage-flash.rw-flash-active {
+        animation: rw-damage-flash 320ms ease-out;
+      }
+      @keyframes rw-damage-flash {
+        0% { opacity: 1; }
+        100% { opacity: 0; }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .rw-damage-flash.rw-flash-active { animation: none; }
+      }
+
+      /* Power bar: the four learned-ability slots, bottom-left — same carved-plaque key-badge
+         language as the controls legend (rw-legend-key), so activatable powers read as part of
+         the same instrument family rather than a new UI language. Locked slots sit dim/inert;
+         unlocked-but-cooling-down slots dim briefly (rw-power-cooldown); unlocked+ready slots
+         get the myth-cyan "charged" treatment vitality/hunt-prompt already use for "ready". */
+      .rw-power-bar {
+        position: fixed; bottom: 26px; left: 20px; z-index: 10;
+        pointer-events: none; display: flex; gap: 8px;
+        font-family: var(--body-face); color: var(--parchment);
+      }
+      .rw-power-slot {
+        display: flex; flex-direction: column; align-items: center; gap: 3px;
+        padding: 6px 10px 5px; min-width: 54px;
+        background: linear-gradient(180deg, rgba(20,13,9,0.55), rgba(7,10,8,0.72));
+        border-top: 1px solid rgba(238,242,230,0.14);
+        clip-path: polygon(10% 0, 90% 0, 100% 100%, 0% 100%);
+        opacity: 0.32;
+        transition: opacity 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
+      }
+      .rw-power-slot.rw-power-unlocked {
+        opacity: 0.55;
+        border-top-color: rgba(255,177,94,0.4);
+      }
+      .rw-power-slot.rw-power-ready {
+        opacity: 1;
+        border-top-color: rgba(111,242,255,0.55);
+        box-shadow: 0 0 14px rgba(111,242,255,0.28);
+      }
+      .rw-power-key {
+        font-family: var(--mono-face); font-size: 10px; text-transform: uppercase;
+        padding: 1px 6px; border-radius: 3px;
+        background: rgba(255,177,94,0.12); border: 1px solid rgba(255,177,94,0.4);
+      }
+      .rw-power-name {
+        font-size: 9px; text-transform: uppercase; letter-spacing: 0.06em; opacity: 0.85;
+        text-align: center; line-height: 1.3;
+      }
+
       .rw-overlay {
         position: fixed; inset: 0; z-index: 20;
         display: none; align-items: center; justify-content: center;
@@ -600,6 +677,10 @@ export class HUD {
     this.skinNameEl = this.root.querySelector('.rw-skin-name')!;
     this.skinPrevBtn = this.root.querySelector('.rw-skin-prev')!;
     this.skinNextBtn = this.root.querySelector('.rw-skin-next')!;
+    this.damageFlashEl = this.root.querySelector('.rw-damage-flash')!;
+    for (const id of ABILITY_SLOTS) {
+      this.powerSlotEls.set(id, this.root.querySelector(`[data-ability="${id}"]`)!);
+    }
 
     // typing a name shouldn't trigger the global space/enter restart listener
     this.submitForm.addEventListener('keydown', (e) => e.stopPropagation());
@@ -687,6 +768,29 @@ export class HUD {
     this.objectiveEl.style.animation = 'none';
     void this.objectiveEl.offsetWidth;
     this.objectiveEl.style.animation = '';
+  }
+
+  /** Full-screen red pulse for "the player just took damage"; restarts the CSS animation even
+   * if a flash is already mid-flight, same reflow trick as showAbilityUnlocked. */
+  flashDamage(): void {
+    this.damageFlashEl.classList.remove('rw-flash-active');
+    void this.damageFlashEl.offsetWidth;
+    this.damageFlashEl.classList.add('rw-flash-active');
+    if (this.damageFlashTimer !== null) window.clearTimeout(this.damageFlashTimer);
+    this.damageFlashTimer = window.setTimeout(() => {
+      this.damageFlashEl.classList.remove('rw-flash-active');
+      this.damageFlashTimer = null;
+    }, 320);
+  }
+
+  /** Driven every frame from AbilityKit's unlocked/cooldown state — locked/cooling-down/ready. */
+  updatePowers(states: PowerSlotState[]): void {
+    for (const { id, unlocked, ready } of states) {
+      const el = this.powerSlotEls.get(id);
+      if (!el) continue;
+      el.classList.toggle('rw-power-unlocked', unlocked);
+      el.classList.toggle('rw-power-ready', unlocked && ready);
+    }
   }
 
   hideBossBar(): void {

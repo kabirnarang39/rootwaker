@@ -38,4 +38,16 @@ describe('EnemyAI', () => {
     ai.update(1, 0.001);
     expect(ai.shouldDealDamageThisFrame()).toBe(false);
   });
+
+  it('stun() freezes progression (a mid-telegraph enemy never reaches attacking while stunned)', () => {
+    const ai = new EnemyAI();
+    ai.update(1, 0.001); // enter telegraph
+    ai.stun(1);
+    expect(ai.isStunned()).toBe(true);
+    ai.update(1, TELEGRAPH_SECONDS + 0.01); // would normally cross into 'attacking'
+    expect(ai.state).toBe('idle');
+    expect(ai.shouldDealDamageThisFrame()).toBe(false);
+    ai.update(1, 1.01); // stun timer elapses
+    expect(ai.isStunned()).toBe(false);
+  });
 });

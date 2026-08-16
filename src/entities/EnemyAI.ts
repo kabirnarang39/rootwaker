@@ -20,10 +20,27 @@ export class EnemyAI {
   telegraphSeconds = TELEGRAPH_SECONDS;
   private timeInState = 0;
   private justDealtDamage = false;
+  private stunTimer = 0;
+
+  /** Freezes the state machine (no aggro/telegraph/attack progression) for `seconds` — a
+   * roar/fear-style power. Never called by an enemy that doesn't grant this ability, so
+   * every pre-existing enemy stays byte-identical (stunTimer never leaves 0). */
+  stun(seconds: number): void {
+    this.stunTimer = Math.max(this.stunTimer, seconds);
+    this.enter('idle');
+  }
+
+  isStunned(): boolean {
+    return this.stunTimer > 0;
+  }
 
   update(distanceToPlayer: number, delta: number): void {
-    this.timeInState += delta;
     this.justDealtDamage = false;
+    if (this.stunTimer > 0) {
+      this.stunTimer -= delta;
+      return;
+    }
+    this.timeInState += delta;
 
     switch (this.state) {
       case 'idle':

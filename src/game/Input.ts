@@ -1,4 +1,14 @@
-export type PlayerAction = 'attack' | 'dodge' | 'jump' | 'interact' | 'pounce' | 'cycleView';
+export type PlayerAction =
+  | 'attack'
+  | 'dodge'
+  | 'jump'
+  | 'interact'
+  | 'pounce'
+  | 'cycleView'
+  | 'ability1'
+  | 'ability2'
+  | 'ability3'
+  | 'ability4';
 
 const FORWARD_KEYS = ['KeyW', 'ArrowUp'];
 const BACK_KEYS = ['KeyS', 'ArrowDown'];
@@ -100,6 +110,10 @@ export class Input {
     else if (e.code === 'KeyE') this.emitAction('interact');
     else if (e.code === 'KeyL') this.emitAction('pounce');
     else if (e.code === 'KeyC') this.emitAction('cycleView');
+    else if (e.code === 'Digit1') this.emitAction('ability1');
+    else if (e.code === 'Digit2') this.emitAction('ability2');
+    else if (e.code === 'Digit3') this.emitAction('ability3');
+    else if (e.code === 'Digit4') this.emitAction('ability4');
   };
 
   private onKeyUp = (e: KeyboardEvent) => {

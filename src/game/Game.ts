@@ -20,7 +20,8 @@ import { isInsideWaterBody } from './WaterBody';
 import { computeApproachSpeed, checkPounceRange } from './Stalking';
 import { HUD } from './HUD';
 import { AudioFX } from './Audio';
-import { AbilityKit } from './AbilityKit';
+import { AbilityKit, ABILITY_SLOTS, type AbilityId } from './AbilityKit';
+import type { EnemyAI } from '../entities/EnemyAI';
 import { WindGust, type GustState } from './WindGust';
 import { SKINS } from '../scene/skins';
 import { resolvePlayerObstacleCollision } from './ObstacleCollision';
@@ -51,6 +52,25 @@ const LEDGE_SNAP_TOLERANCE = 1; // meters of downward drift still counted as "on
 const WALL_CLIMB_HEIGHT_TOLERANCE = 2.0; // meters — disambiguates stacked wall/segments sharing x/z footprint
 const SUMMIT_GATE_RADIUS = 2; // meters — how close to the summit gate triggers the King encounter
 const GROUND_SLAM_RANGE = 3; // meters — how close to the King the ground-slam hazard still hits
+
+// Usable-powers tuning. Base attack stays CLAW_SWIPE-driven (Combat.ts); every power below is a
+// distinct real effect, not a stat reskin of the base attack.
+const ATTACK_KNOCKBACK = 0.3; // meters an enemy is pushed back on a normal hit
+const DASH_SPEED = 14; // m/s during boar-charge's forward lunge
+const DASH_SECONDS = 0.3; // duration of the lunge itself
+const DASH_DAMAGE = 16;
+const DASH_RADIUS = 0.7;
+const DASH_REACH = 3.2; // meters — the charge's forward hit capsule, well past the base attack's 1m reach
+const DASH_KNOCKBACK = 1.0;
+const HEAVY_SWIPE_DAMAGE = 14;
+const HEAVY_SWIPE_RADIUS = 0.9;
+const HEAVY_SWIPE_REACH = 1.3;
+const HEAVY_SWIPE_KNOCKBACK = 0.6;
+const ROAR_RADIUS = 5; // meters — King's Roar staggers every enemy within this range of the player
+const ROAR_STUN_SECONDS = 2.5;
+const ROAR_KNOCKBACK = 1.2;
+const SENSE_SECONDS = 6; // Keen Ear's temporary extended hunt-sense window
+const SENSE_RANGE_MULTIPLIER = 3;
 
 // All mountain wall/segments share a fixed 6-unit segment height, so each one's base is
 // wall.topY - 6. Gate proximity checks on this so stacked segments (same x/z, different
@@ -104,6 +124,10 @@ export class Game {
   private jumpPressed = false;
   private foxFacingAngle = 0;
   private legendDismissed = false;
+  private lastAttackTime = -Infinity;
+  private dashEndTime = -Infinity;
+  private dashDirection = new THREE.Vector3(0, 0, 1);
+  private senseActiveUntil = -Infinity;
 
   // Base terrain heightAt() has no notion of the mountain's elevated ledges, so a player
   // topping out a climb segment would otherwise free-fall straight back down to jungle-floor
@@ -199,6 +223,10 @@ export class Game {
         this.cameraRig.cycleViewMode();
         this.hud.showViewMode(VIEW_MODE_NAMES[this.cameraRig.viewMode]);
       }
+      if (action === 'ability1') this.tryActivateAbility(ABILITY_SLOTS[0]);
+      if (action === 'ability2') this.tryActivateAbility(ABILITY_SLOTS[1]);
+      if (action === 'ability3') this.tryActivateAbility(ABILITY_SLOTS[2]);
+      if (action === 'ability4') this.tryActivateAbility(ABILITY_SLOTS[3]);
     });
 
     this.hud = new HUD(container);
@@ -324,7 +352,20 @@ export class Game {
     } else if (this.playerController.mode === 'swimming') {
       this.playerController.updateSwim(this.moveInput, delta, this.level.water);
     } else {
-      this.playerController.update(this.moveInput, delta, this.groundHeightWithLedges);
+      if (time < this.dashEndTime) {
+        // Boar's Charge lunge — a direct position/velocity override for the dash window only,
+        // same "bypass the normal input->velocity mapping" idiom windGust already uses on the
+        // climbing branch above. Falls through to the shared obstacle-collision/water checks
+        // below exactly like a normal grounded frame.
+        this.playerController.body.position.addScaledVector(this.dashDirection, DASH_SPEED * delta);
+        this.playerController.body.position.y = this.groundHeightWithLedges(
+          this.playerController.body.position.x,
+          this.playerController.body.position.z,
+        );
+        this.playerController.body.velocity.set(this.dashDirection.x * DASH_SPEED, 0, this.dashDirection.z * DASH_SPEED);
+      } else {
+        this.playerController.update(this.moveInput, delta, this.groundHeightWithLedges);
+      }
       // PLAYER_COLLISION_RADIUS (0.35m) must stay well under TreeObstacleGrid's cell size
       // (3m default) — nearby() ignores its radius arg and always does a fixed 3x3-cell
       // sweep, so a larger query radius could miss obstacles just outside that sweep.
@@ -398,7 +439,7 @@ export class Game {
     this.wraith.update(time, delta, distanceToPlayer);
     if (this.wraith.ai.shouldDealDamageThisFrame()) {
       const hit = resolveMeleeHit(getAttackHitbox(this.wraith), this.playerCombatant);
-      if (hit) applyDamage(this.playerCombatant, 12);
+      if (hit) this.hurtPlayer(12);
     }
 
     for (const hare of this.level.hares) {
@@ -428,7 +469,7 @@ export class Game {
       boar.update(time, delta, boarDistance);
       if (boar.ai.shouldDealDamageThisFrame()) {
         const hit = resolveMeleeHit(getBoarHitbox(boar), this.playerCombatant);
-        if (hit) applyDamage(this.playerCombatant, BOAR_HIT_DAMAGE);
+        if (hit) this.hurtPlayer(BOAR_HIT_DAMAGE);
       }
     }
 
@@ -437,7 +478,7 @@ export class Game {
       bear.update(time, delta, bearDistance);
       if (bear.ai.shouldDealDamageThisFrame()) {
         const hit = resolveMeleeHit(getGroveBearHitbox(bear), this.playerCombatant);
-        if (hit) applyDamage(this.playerCombatant, BEAR_HIT_DAMAGE);
+        if (hit) this.hurtPlayer(BEAR_HIT_DAMAGE);
       }
     }
 
@@ -450,7 +491,7 @@ export class Game {
         const hit = resolveMeleeHit(getElderBearKingHitbox(king), this.playerCombatant);
         if (hit) {
           const phase = computeBossPhase(king.combatant.hp, king.combatant.maxHp);
-          applyDamage(this.playerCombatant, BOSS_PHASE_PARAMS[phase].damage);
+          this.hurtPlayer(BOSS_PHASE_PARAMS[phase].damage);
         }
       }
 
@@ -468,7 +509,7 @@ export class Game {
         const slamDz = this.playerController.body.position.z - king.group.position.z;
         if (Math.hypot(slamDx, slamDz) <= GROUND_SLAM_RANGE) {
           const phase = computeBossPhase(king.combatant.hp, king.combatant.maxHp);
-          applyDamage(this.playerCombatant, BOSS_PHASE_PARAMS[phase].damage);
+          this.hurtPlayer(BOSS_PHASE_PARAMS[phase].damage);
           this.groundSlamDamageApplied = true;
         }
       }
@@ -505,6 +546,13 @@ export class Game {
       this.hud.showAbilityUnlocked(unlockedAbility);
       this.audio.playAbilityUnlock();
     }
+    this.hud.updatePowers(
+      ABILITY_SLOTS.map((id) => ({
+        id,
+        unlocked: this.abilityKit.has(id),
+        ready: this.abilityKit.cooldownRemaining(id, time) <= 0,
+      })),
+    );
 
     const mode = this.playerController.mode;
     this.cameraRig.update(this.playerController.body.position, mode, delta, this.cameraObstacles, this.foxFacingAngle);
@@ -520,10 +568,12 @@ export class Game {
   };
 
   private findNearestHareInRange(): GroveHare | null {
+    const senseActive = this.clock.elapsedTime < this.senseActiveUntil;
+    const range = senseActive ? HUNT_PROMPT_RANGE * SENSE_RANGE_MULTIPLIER : HUNT_PROMPT_RANGE;
     let nearest: GroveHare | null = null;
     let nearestDistance = Infinity;
     for (const hare of this.level.hares) {
-      const { inRange, distance } = checkPounceRange(this.playerController.body.position, hare.position, HUNT_PROMPT_RANGE);
+      const { inRange, distance } = checkPounceRange(this.playerController.body.position, hare.position, range);
       if (inRange && distance < nearestDistance) {
         nearestDistance = distance;
         nearest = hare;
@@ -535,7 +585,9 @@ export class Game {
   private tryPounce() {
     const nearestHare = this.findNearestHareInRange();
     if (!nearestHare) return;
-    const result = this.playerController.tryPounce(nearestHare.position);
+    const senseActive = this.clock.elapsedTime < this.senseActiveUntil;
+    const range = senseActive ? HUNT_PROMPT_RANGE * SENSE_RANGE_MULTIPLIER : HUNT_PROMPT_RANGE;
+    const result = this.playerController.tryPounce(nearestHare.position, range);
     this.audio.playPounceAttempt(result.success);
     if (!result.success) return;
     const idx = this.level.hares.indexOf(nearestHare);
@@ -546,28 +598,55 @@ export class Game {
     this.abilityKit.unlock('keen-ear');
   }
 
-  private tryAttack() {
-    const forward = new THREE.Vector3(0, 0, -1); // facing direction — refined once a facing/aim system exists; forward-only swipe is correct for this chapter's single enemy
-    const attackHitbox = {
+  /** Applies damage to the player plus the real feedback that was previously missing entirely
+   * (no sound, no screen cue — only the health-bar width eventually changed). */
+  private hurtPlayer(amount: number): void {
+    applyDamage(this.playerCombatant, amount);
+    this.audio.playPlayerHurt();
+    this.hud.flashDamage();
+  }
+
+  /** Unit forward vector for the fox's actual facing angle (see FoxFacing.ts's atan2(x,z)
+   * convention: angle 0 == +Z). Every melee sweep uses this — never a hardcoded world axis. */
+  private facingForward(): THREE.Vector3 {
+    return new THREE.Vector3(Math.sin(this.foxFacingAngle), 0, Math.cos(this.foxFacingAngle));
+  }
+
+  /** Shared hit-resolution for every player melee move (base attack, Boar's Charge, Bear
+   * Swipe): a forward capsule of `radius` reaching `reach` meters along the fox's actual
+   * facing, dealing `damage` and shoving anything hit back by `knockback` meters. Boars/bears
+   * are removed and grant their ability on kill; the wraith and King are chapter-persistent
+   * targets handled by their own defeat logic elsewhere. */
+  private meleeSweep(damage: number, radius: number, reach: number, knockback: number): void {
+    const forward = this.facingForward();
+    const hitbox = {
       start: this.playerController.body.position.clone(),
-      end: this.playerController.body.position.clone().add(forward),
-      radius: 0.6,
+      end: this.playerController.body.position.clone().addScaledVector(forward, reach),
+      radius,
     };
-    if (resolveMeleeHit(attackHitbox, this.wraith.combatant)) {
-      applyDamage(this.wraith.combatant, CLAW_SWIPE.damage);
+    let hitAnything = false;
+
+    if (resolveMeleeHit(hitbox, this.wraith.combatant)) {
+      applyDamage(this.wraith.combatant, damage);
+      this.wraith.group.position.addScaledVector(forward, knockback);
+      hitAnything = true;
     }
 
     if (this.summitGateCrossed && !this.kingDefeated) {
       const king = this.level.throneRoom.king;
-      if (resolveMeleeHit(attackHitbox, king.combatant)) {
-        applyDamage(king.combatant, CLAW_SWIPE.damage);
+      if (resolveMeleeHit(hitbox, king.combatant)) {
+        applyDamage(king.combatant, damage);
+        king.group.position.addScaledVector(forward, knockback);
+        hitAnything = true;
       }
     }
 
     for (let i = this.level.boars.length - 1; i >= 0; i--) {
       const boar = this.level.boars[i];
-      if (!resolveMeleeHit(attackHitbox, boar.combatant)) continue;
-      applyDamage(boar.combatant, CLAW_SWIPE.damage);
+      if (!resolveMeleeHit(hitbox, boar.combatant)) continue;
+      applyDamage(boar.combatant, damage);
+      boar.group.position.addScaledVector(forward, knockback);
+      hitAnything = true;
       if (isDefeated(boar.combatant)) {
         this.level.group.remove(boar.group);
         this.level.boars.splice(i, 1);
@@ -577,13 +656,74 @@ export class Game {
 
     for (let i = this.level.bears.length - 1; i >= 0; i--) {
       const bear = this.level.bears[i];
-      if (!resolveMeleeHit(attackHitbox, bear.combatant)) continue;
-      applyDamage(bear.combatant, CLAW_SWIPE.damage);
+      if (!resolveMeleeHit(hitbox, bear.combatant)) continue;
+      applyDamage(bear.combatant, damage);
+      bear.group.position.addScaledVector(forward, knockback);
+      hitAnything = true;
       if (isDefeated(bear.combatant)) {
         this.level.group.remove(bear.group);
         this.level.bears.splice(i, 1);
         this.abilityKit.unlock('bear-swipe');
       }
     }
+
+    if (hitAnything) this.audio.playHit();
+  }
+
+  /** King's Roar: staggers (EnemyAI.stun) and shoves back every enemy within ROAR_RADIUS of the
+   * player — an area power, not a melee sweep, so it doesn't go through meleeSweep(). */
+  private roarStagger(): void {
+    const playerPos = this.playerController.body.position;
+    const targets: Array<{ position: THREE.Vector3; ai: EnemyAI }> = [
+      ...this.level.boars.map((b) => ({ position: b.group.position, ai: b.ai })),
+      ...this.level.bears.map((b) => ({ position: b.group.position, ai: b.ai })),
+    ];
+    if (this.summitGateCrossed && !this.kingDefeated) {
+      const king = this.level.throneRoom.king;
+      targets.push({ position: king.group.position, ai: king.ai });
+    }
+    for (const { position, ai } of targets) {
+      if (position.distanceTo(playerPos) > ROAR_RADIUS) continue;
+      ai.stun(ROAR_STUN_SECONDS);
+      const dx = position.x - playerPos.x;
+      const dz = position.z - playerPos.z;
+      const dist = Math.hypot(dx, dz) || 1;
+      position.x += (dx / dist) * ROAR_KNOCKBACK;
+      position.z += (dz / dist) * ROAR_KNOCKBACK;
+    }
+  }
+
+  /** Fires on a Digit1-4 press. Each unlocked power is a real activatable move with its own
+   * cooldown (AbilityKit.activate) — not the silent unlock-only flag this used to be. */
+  private tryActivateAbility(id: AbilityId): void {
+    const time = this.clock.elapsedTime;
+    if (!this.abilityKit.activate(id, time)) return;
+
+    switch (id) {
+      case 'keen-ear':
+        this.senseActiveUntil = time + SENSE_SECONDS;
+        this.audio.playSensePulse();
+        break;
+      case 'boar-charge':
+        this.dashEndTime = time + DASH_SECONDS;
+        this.dashDirection.copy(this.facingForward());
+        this.audio.playChargeDash();
+        this.meleeSweep(DASH_DAMAGE, DASH_RADIUS, DASH_REACH, DASH_KNOCKBACK);
+        break;
+      case 'bear-swipe':
+        this.meleeSweep(HEAVY_SWIPE_DAMAGE, HEAVY_SWIPE_RADIUS, HEAVY_SWIPE_REACH, HEAVY_SWIPE_KNOCKBACK);
+        break;
+      case 'kings-roar':
+        this.roarStagger();
+        this.audio.playRoar();
+        break;
+    }
+  }
+
+  private tryAttack() {
+    const time = this.clock.elapsedTime;
+    if (time - this.lastAttackTime < CLAW_SWIPE.recoverySeconds) return;
+    this.lastAttackTime = time;
+    this.meleeSweep(CLAW_SWIPE.damage, 0.6, 1, ATTACK_KNOCKBACK);
   }
 }

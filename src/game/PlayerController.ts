@@ -115,9 +115,11 @@ export class PlayerController {
     }
   }
 
-  tryPounce(preyPosition: THREE.Vector3): { success: boolean; distance: number } {
+  /** `maxRange` defaults to the normal pounce reach; Keen Ear passes an extended range so the
+   * HUD hunt-prompt (which mirrors this same reach) and the actual pounce stay consistent. */
+  tryPounce(preyPosition: THREE.Vector3, maxRange: number = POUNCE_MAX_RANGE): { success: boolean; distance: number } {
     if (this.mode !== 'grounded') return { success: false, distance: this.body.position.distanceTo(preyPosition) };
-    const window = checkPounceRange(this.body.position, preyPosition, POUNCE_MAX_RANGE);
+    const window = checkPounceRange(this.body.position, preyPosition, maxRange);
     return { success: window.inRange, distance: window.distance };
   }
 }
