@@ -145,6 +145,24 @@ describe('CameraRig hawk-eye and fox-eye view modes', () => {
     expect(rigBlocked.camera.position.z).toBeLessThan(rigClear.camera.position.z - 0.1);
   });
 
+  it('foxEye obstacle clamp never places the eye BEYOND a close obstacle (regression: a Math.max(0.5, ...) floor previously pushed the eye past obstacles closer than ~0.8m, which is routine in first-person)', () => {
+    const target = new THREE.Vector3(0, 0, 0);
+    // a blocker just 0.3m ahead — well inside the 1.0m forward nudge, and closer than the old
+    // floor's 0.8m breakeven point (0.5 + CAMERA_CLEARANCE)
+    const blocker = new THREE.Mesh(new THREE.BoxGeometry(2, 2, 0.1), new THREE.MeshBasicMaterial());
+    blocker.position.set(0, 0.82, 0.3);
+    blocker.updateMatrixWorld(true);
+    const blockerFrontFaceZ = 0.25;
+
+    const rig = new CameraRig();
+    rig.cycleViewMode();
+    rig.cycleViewMode();
+    rig.cycleViewMode(); // -> foxEye
+    for (let i = 0; i < 30; i++) rig.update(target, 'grounded', 1 / 60, [blocker], 0);
+
+    expect(rig.camera.position.z).toBeLessThan(blockerFrontFaceZ);
+  });
+
   it('foxEye falls back to the follow/climb camera while climbing (looking straight into the wall the player is climbing would otherwise be permanent)', () => {
     const target = new THREE.Vector3(0, 0, 0);
     const rig = new CameraRig();

@@ -130,7 +130,13 @@ export class CameraRig {
     raycaster.far = desiredDistance;
     const hits = raycaster.intersectObjects(obstacles, false);
     if (hits.length > 0 && hits[0].distance < desiredDistance) {
-      const clampedDistance = Math.max(0.5, hits[0].distance - CAMERA_CLEARANCE);
+      // Floored at a small epsilon rather than the old 0.5m: that larger floor could push the
+      // eye/camera PAST a hit closer than ~0.8m (hit.distance - CAMERA_CLEARANCE going negative,
+      // then getting floored back UP to 0.5, past the obstacle) — a real bug for foxEye, where
+      // obstacles routinely sit well under 1m away. 0.05 is always < hits[0].distance here (the
+      // raycast only reaches this branch when something was actually hit), so the camera never
+      // ends up beyond what the ray hit, no matter how close that hit is.
+      const clampedDistance = Math.max(0.05, hits[0].distance - CAMERA_CLEARANCE);
       return lookOrigin.clone().addScaledVector(toDesired.normalize(), clampedDistance);
     }
     return desired;
