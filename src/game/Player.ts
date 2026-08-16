@@ -110,7 +110,7 @@ export class Player {
   }
 
   update(time: number, delta: number) {
-    this.fox.update(time, delta);
+    this.fox.update(time, delta, 0);
 
     if (this.laneT < 1) {
       this.laneT = Math.min(1, this.laneT + delta / LANE_SWITCH_TIME);
