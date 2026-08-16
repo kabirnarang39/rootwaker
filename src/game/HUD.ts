@@ -677,6 +677,11 @@ export class HUD {
     this.bossHealthFillEl.style.setProperty('--fill', `${pct}%`);
   }
 
+  /** Updates the objective panel's text — was previously only ever set once, at construction. */
+  setObjective(text: string): void {
+    this.objectiveEl.textContent = text;
+  }
+
   hideBossBar(): void {
     this.bossBarEl.classList.remove('rw-visible');
   }

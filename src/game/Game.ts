@@ -351,6 +351,7 @@ export class Game {
         // not back at the mountain's base — same silent-checkpoint idiom as isDefeated() below.
         this.checkpoint.copy(this.level.mountain.summitGate);
         this.hud.showBossBar('King of the Mountain');
+        this.hud.setObjective('Defeat the King of the Mountain.');
       }
     }
 
@@ -468,6 +469,7 @@ export class Game {
         this.audio.playArcComplete();
         this.audio.startVillageAmbience();
         this.hud.showArcComplete();
+        this.hud.setObjective('The village welcomes you home.');
       }
     }
 
