@@ -10,6 +10,9 @@ import { createFox } from '../scene/createFox';
 import { createRootWraith, getAttackHitbox } from '../entities/rootWraith';
 import { getBoarHitbox } from '../entities/tuskBoar';
 import { getGuardHitbox } from '../entities/mountainGuard';
+import { getKingHitbox } from '../entities/createMountainKing';
+import { computeBossPhase, BOSS_PHASE_PARAMS } from '../entities/BossPhaseController';
+import type { GroundSlamState } from './GroundSlam';
 import type { GroveHare } from '../entities/groveHare';
 import { resolveMeleeHit, applyDamage, isDefeated, CLAW_SWIPE, type Combatant } from './Combat';
 import { Input, type PlayerAction } from './Input';
@@ -46,6 +49,8 @@ const MAX_STAMINA = 100; // mirrors PlayerController's own (unexported) MAX_STAM
 const MOUNTAIN_LEDGE_RADIUS = 4.5;
 const LEDGE_SNAP_TOLERANCE = 1; // meters of downward drift still counted as "on the ledge" this frame
 const WALL_CLIMB_HEIGHT_TOLERANCE = 2.0; // meters — disambiguates stacked wall/segments sharing x/z footprint
+const SUMMIT_GATE_RADIUS = 2; // meters — how close to the summit gate triggers the King encounter
+const GROUND_SLAM_RANGE = 3; // meters — how close to the King the ground-slam hazard still hits
 
 // All mountain wall/segments share a fixed 6-unit segment height, so each one's base is
 // wall.topY - 6. Gate proximity checks on this so stacked segments (same x/z, different
@@ -82,6 +87,10 @@ export class Game {
   private windGust = new WindGust();
   private prevGustState: GustState = 'calm';
   private mountainWindStarted = false;
+  private summitGateCrossed = false;
+  private kingDefeated = false;
+  private prevGroundSlamState: GroundSlamState = 'idle';
+  private groundSlamDamageApplied = false;
   private prevPlayerPosition = this.playerController.body.position.clone();
 
   private input: Input;
@@ -109,6 +118,14 @@ export class Game {
       if (horizontalDist <= MOUNTAIN_LEDGE_RADIUS && playerY + LEDGE_SNAP_TOLERANCE >= ledge.y) {
         best = Math.max(best, ledge.y);
       }
+    }
+    // The throne-room floor (built past the summit gate) is its own flat slab, not one of the
+    // mountain's climb-segment ledges, so it needs the same "candidate floor" treatment here —
+    // otherwise a player who crosses the summit gate falls straight through the arena floor.
+    // Box2.y here holds world Z, same convention as climbableWall.bounds elsewhere in this file.
+    const { bounds } = this.level.throneRoom;
+    if (x >= bounds.min.x && x <= bounds.max.x && z >= bounds.min.y && z <= bounds.max.y) {
+      best = Math.max(best, this.level.mountain.summitGate.y);
     }
     return best;
   };
@@ -325,6 +342,18 @@ export class Game {
       }
     }
 
+    if (!this.summitGateCrossed) {
+      const dx = this.playerController.body.position.x - this.level.mountain.summitGate.x;
+      const dz = this.playerController.body.position.z - this.level.mountain.summitGate.z;
+      if (Math.hypot(dx, dz) <= SUMMIT_GATE_RADIUS) {
+        this.summitGateCrossed = true;
+        // fair-defeat-handling: a player who dies to the King respawns at the summit gate,
+        // not back at the mountain's base — same silent-checkpoint idiom as isDefeated() below.
+        this.checkpoint.copy(this.level.mountain.summitGate);
+        this.hud.showBossBar('King of the Mountain');
+      }
+    }
+
     this.windGust.update(delta);
     if (this.windGust.state === 'telegraph' && this.prevGustState !== 'telegraph') {
       this.audio.playWindTelegraph();
@@ -397,6 +426,51 @@ export class Game {
       }
     }
 
+    if (this.summitGateCrossed && !this.kingDefeated) {
+      const king = this.level.throneRoom.king;
+      const distanceToKing = king.group.position.distanceTo(this.playerController.body.position);
+      king.update(time, delta, distanceToKing);
+
+      if (king.ai.shouldDealDamageThisFrame()) {
+        const hit = resolveMeleeHit(getKingHitbox(king), this.playerCombatant);
+        if (hit) {
+          const phase = computeBossPhase(king.combatant.hp, king.combatant.maxHp);
+          applyDamage(this.playerCombatant, BOSS_PHASE_PARAMS[phase].damage);
+        }
+      }
+
+      // Ground-slam hazard: sounds fire once per state transition (mirrors prevGustState's
+      // idiom), and the active-window damage applies once per window (not every frame) via
+      // groundSlamDamageApplied, reset only when a fresh 'active' window begins.
+      if (king.groundSlam.state === 'telegraph' && this.prevGroundSlamState !== 'telegraph') {
+        this.audio.playGroundSlamTelegraph();
+      } else if (king.groundSlam.state === 'active' && this.prevGroundSlamState !== 'active') {
+        this.audio.playGroundSlamImpact();
+        this.groundSlamDamageApplied = false;
+      }
+      if (king.groundSlam.isDamaging() && !this.groundSlamDamageApplied) {
+        const slamDx = this.playerController.body.position.x - king.group.position.x;
+        const slamDz = this.playerController.body.position.z - king.group.position.z;
+        if (Math.hypot(slamDx, slamDz) <= GROUND_SLAM_RANGE) {
+          const phase = computeBossPhase(king.combatant.hp, king.combatant.maxHp);
+          applyDamage(this.playerCombatant, BOSS_PHASE_PARAMS[phase].damage);
+          this.groundSlamDamageApplied = true;
+        }
+      }
+      this.prevGroundSlamState = king.groundSlam.state;
+
+      this.hud.updateBossHealth(king.combatant.hp, king.combatant.maxHp);
+
+      if (isDefeated(king.combatant)) {
+        this.kingDefeated = true;
+        this.hud.hideBossBar();
+        this.level.throneRoom.openGate();
+        this.audio.playArcComplete();
+        this.audio.startVillageAmbience();
+        this.hud.showArcComplete();
+      }
+    }
+
     if (isDefeated(this.playerCombatant)) {
       // silent checkpoint respawn — no game-over screen, matches the chapter-restart design spec
       this.playerController.body.position.copy(this.checkpoint);
@@ -463,6 +537,13 @@ export class Game {
     };
     if (resolveMeleeHit(attackHitbox, this.wraith.combatant)) {
       applyDamage(this.wraith.combatant, CLAW_SWIPE.damage);
+    }
+
+    if (this.summitGateCrossed && !this.kingDefeated) {
+      const king = this.level.throneRoom.king;
+      if (resolveMeleeHit(attackHitbox, king.combatant)) {
+        applyDamage(king.combatant, CLAW_SWIPE.damage);
+      }
     }
 
     for (let i = this.level.boars.length - 1; i >= 0; i--) {
