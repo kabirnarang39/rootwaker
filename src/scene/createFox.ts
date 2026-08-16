@@ -41,16 +41,16 @@ export function createFox(skin: FoxSkin = SKINS[0]): Fox {
   rig.attach('tail4', 'tail3');
 
   rig.setLocalPosition('spine', 0, 0.55, 0);
-  rig.setLocalPosition('head', 0, 0.23, 0.35);
-  rig.setLocalPosition('jaw', 0, -0.05, 0.2);
+  rig.setLocalPosition('head', 0, 0.23, 0.45);
+  rig.setLocalPosition('jaw', 0, -0.05, 0.27);
   rig.setLocalPosition('shoulderL', -0.16, -0.05, 0.24);
   rig.setLocalPosition('shoulderR', 0.16, -0.05, 0.24);
-  rig.setLocalPosition('forepawL', 0, -0.24, 0);
-  rig.setLocalPosition('forepawR', 0, -0.24, 0);
+  rig.setLocalPosition('forepawL', 0, -0.26, 0.04);
+  rig.setLocalPosition('forepawR', 0, -0.26, 0.04);
   rig.setLocalPosition('hipL', -0.16, 0.24, -0.22);
   rig.setLocalPosition('hipR', 0.16, 0.24, -0.22);
-  rig.setLocalPosition('hindpawL', 0, -0.24, 0);
-  rig.setLocalPosition('hindpawR', 0, -0.24, 0);
+  rig.setLocalPosition('hindpawL', 0, 0, 0);
+  rig.setLocalPosition('hindpawR', 0, 0, 0);
   rig.setLocalPosition('tail0', 0, 0.07, -0.42);
   for (const t of ['tail1', 'tail2', 'tail3', 'tail4'] as const) rig.setLocalPosition(t, 0, 0.22, 0);
 
@@ -93,7 +93,7 @@ export function createFox(skin: FoxSkin = SKINS[0]): Fox {
 
   const snout = new THREE.Mesh(new THREE.ConeGeometry(0.11, 0.32, 5), furDark);
   snout.rotation.x = Math.PI / 2;
-  snout.position.set(0, -0.05, 0.32);
+  snout.position.set(0, 0, 0);
   rig.getJoint('jaw').add(snout);
 
   const eyeGeo = new THREE.SphereGeometry(0.035, 6, 6);
@@ -123,10 +123,10 @@ export function createFox(skin: FoxSkin = SKINS[0]): Fox {
 
   for (const side of ['L', 'R'] as const) {
     const forepaw = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.055, 0.48, 5), furDark);
-    forepaw.position.y = -0.24;
+    forepaw.position.y = 0;
     rig.getJoint(`forepaw${side}`).add(forepaw);
     const hindpaw = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.055, 0.48, 5), furDark);
-    hindpaw.position.y = -0.24;
+    hindpaw.position.y = 0;
     rig.getJoint(`hindpaw${side}`).add(hindpaw);
   }
 
