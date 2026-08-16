@@ -36,4 +36,11 @@ describe('createFox', () => {
     expect(fox.rig.getJoint('head').position.z).toBeCloseTo(0.45, 2); // bind (0,0.23,0.45), no clip touches head position
     expect(fox.rig.getJoint('hipL').position.x).toBeCloseTo(-0.16, 2); // bind (-0.16,0.24,-0.22)
   });
+
+  it('the crown is hidden by default and only becomes visible after revealCrown()', () => {
+    const fox = createFox();
+    expect(fox.crownGroup.visible).toBe(false);
+    fox.revealCrown();
+    expect(fox.crownGroup.visible).toBe(true);
+  });
 });

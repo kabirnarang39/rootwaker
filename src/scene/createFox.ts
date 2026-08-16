@@ -8,7 +8,9 @@ import { walkClip, idleClip } from './foxClips';
 export interface Fox {
   group: THREE.Group;
   rig: Rig;
+  crownGroup: THREE.Group;
   update(time: number, delta: number, moveSpeed: number): void;
+  revealCrown(): void;
 }
 
 function furMaterial(color: THREE.ColorRepresentation) {
@@ -122,6 +124,22 @@ export function createFox(skin: FoxSkin = SKINS[0]): Fox {
   earInnerR.rotation.z = -0.25;
   rig.getJoint('head').add(earInnerL, earInnerR);
 
+  // Coronation crown, hidden until revealCrown() — same ring-of-cones technique as
+  // createMountainKing.ts's crown (radius 0.05/height 0.16 spikes, ring radius 0.22, y 0.34 on
+  // that king's 0.36-radius head), scaled down 2/3 to match this fox head's 0.24 radius so it
+  // sits on the skull instead of floating clear of it or clipping through at king-sized numbers.
+  const crownTrimMat = new THREE.MeshStandardMaterial({ color: 0xc9973a, flatShading: true, roughness: 0.45, metalness: 0.5 });
+  const crownGroup = new THREE.Group();
+  const crownSpikeGeo = new THREE.ConeGeometry(0.033, 0.107, 4);
+  for (let i = 0; i < 5; i++) {
+    const angle = (i / 5) * Math.PI * 2;
+    const spike = new THREE.Mesh(crownSpikeGeo, crownTrimMat);
+    spike.position.set(Math.cos(angle) * 0.147, 0.227, Math.sin(angle) * 0.147);
+    crownGroup.add(spike);
+  }
+  crownGroup.visible = false; // revealed only via revealCrown(), on the coronation ending beat
+  rig.getJoint('head').add(crownGroup);
+
   for (const side of ['L', 'R'] as const) {
     const forepaw = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.055, 0.48, 5), furDark);
     forepaw.position.y = 0;
@@ -180,5 +198,9 @@ export function createFox(skin: FoxSkin = SKINS[0]): Fox {
     blendClips(rig, idleClip, time, walkClip, walkTime, walkWeight);
   }
 
-  return { group: rig.root, rig, update };
+  function revealCrown() {
+    crownGroup.visible = true;
+  }
+
+  return { group: rig.root, rig, crownGroup, update, revealCrown };
 }
