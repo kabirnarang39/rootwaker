@@ -84,6 +84,7 @@ export class Game {
   private rawMoveInput = { x: 0, z: 0 };
   private jumpPressed = false;
   private foxFacingAngle = 0;
+  private legendDismissed = false;
 
   // Base terrain heightAt() has no notion of the mountain's elevated ledges, so a player
   // topping out a climb segment would otherwise free-fall straight back down to jungle-floor
@@ -142,9 +143,17 @@ export class Game {
       this.moveInput = { x: relative.x, z: relative.z, jump: this.jumpPressed };
       this.rawMoveInput = { x, z };
       this.jumpPressed = false;
+      // pollMove() fires every frame even with no keys held (x=0, z=0) — only a nonzero
+      // vector counts as the player's first real input.
+      if (x !== 0 || z !== 0) this.dismissLegendOnce();
     });
-    this.input.onLook((dy, dp) => this.cameraRig.applyLookDelta(dy, dp));
+    this.input.onLook((dy, dp) => {
+      this.cameraRig.applyLookDelta(dy, dp);
+      // pollLook() also fires every frame; only an actual drag delta counts.
+      if (dy !== 0 || dp !== 0) this.dismissLegendOnce();
+    });
     this.input.onAction((action: PlayerAction) => {
+      this.dismissLegendOnce();
       if (action === 'jump') this.jumpPressed = true;
       if (action === 'attack') this.tryAttack();
       if (action === 'pounce') this.tryPounce();
@@ -171,6 +180,13 @@ export class Game {
         game: this,
       };
     }
+  }
+
+  /** Fades the controls-legend HUD panel the first time any real input handler fires. */
+  private dismissLegendOnce() {
+    if (this.legendDismissed) return;
+    this.legendDismissed = true;
+    this.hud.dismissLegend();
   }
 
   private setupLights(isTouchPrimary: boolean) {

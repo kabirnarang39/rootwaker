@@ -12,6 +12,7 @@ export class HUD {
   private abilityNameEl: HTMLDivElement;
   private abilityDescEl: HTMLDivElement;
   private abilityToastTimer: number | null = null;
+  private controlsLegendEl: HTMLDivElement;
   private overlay: HTMLDivElement;
   private overlayStats: HTMLDivElement;
   private overlayTitle: HTMLDivElement;
@@ -48,6 +49,15 @@ export class HUD {
         <div class="rw-ability-eyebrow">Ability Unlocked</div>
         <div class="rw-ability-name"></div>
         <div class="rw-ability-desc"></div>
+      </div>
+      <div class="rw-controls-legend">
+        <div class="rw-legend-eyebrow">Controls</div>
+        <div class="rw-legend-row"><span class="rw-legend-key">W A S D</span><span class="rw-legend-label">Move</span></div>
+        <div class="rw-legend-row"><span class="rw-legend-key">Space</span><span class="rw-legend-label">Jump</span></div>
+        <div class="rw-legend-row"><span class="rw-legend-key">J</span><span class="rw-legend-label">Attack</span></div>
+        <div class="rw-legend-row"><span class="rw-legend-key">L</span><span class="rw-legend-label">Pounce</span></div>
+        <div class="rw-legend-row"><span class="rw-legend-key">Drag</span><span class="rw-legend-label">Look</span></div>
+        <div class="rw-legend-row"><span class="rw-legend-key">C</span><span class="rw-legend-label">View</span></div>
       </div>
       <div class="rw-overlay">
         <div class="rw-panel">
@@ -262,6 +272,47 @@ export class HUD {
         .rw-ability-toast.rw-visible { animation: none; opacity: 1; transform: translate(-50%, 0); }
       }
 
+      /* Controls legend: opposite corner from the vitality/stamina cluster, same carved-bark
+         plaque trapezoid and idle-amber key-badge treatment as the hunt prompt (rw-hunt-key)
+         rather than a new visual language. Visible by default (a fresh player needs it before
+         they've touched anything); dismissLegend() just fades it via class toggle, same
+         opacity/transform fade idiom the objective/toast panels already use. No auto-timer —
+         a player who never moves should keep seeing it. */
+      .rw-controls-legend {
+        position: fixed; top: 20px; right: 20px; z-index: 10;
+        pointer-events: none; text-align: right;
+        font-family: var(--body-face); color: var(--parchment);
+        padding: 10px 18px 10px;
+        background: linear-gradient(180deg, rgba(20,13,9,0.62), rgba(7,10,8,0.8));
+        border-top: 1px solid rgba(255,177,94,0.32);
+        box-shadow: 0 0 20px rgba(0,0,0,0.4);
+        clip-path: polygon(6% 0, 94% 0, 100% 100%, 0% 100%);
+        opacity: 0.92;
+        transition: opacity 420ms cubic-bezier(0.16, 1, 0.3, 1), transform 420ms cubic-bezier(0.16, 1, 0.3, 1);
+      }
+      .rw-controls-legend.rw-legend-hidden {
+        opacity: 0;
+        transform: translateY(-6px);
+      }
+      .rw-legend-eyebrow {
+        text-transform: uppercase; font-size: 9px; letter-spacing: 0.16em;
+        color: var(--spirit-amber); opacity: 0.85; margin-bottom: 6px;
+      }
+      .rw-legend-row {
+        display: flex; align-items: center; justify-content: flex-end; gap: 8px;
+        margin-top: 5px;
+      }
+      .rw-legend-row:first-of-type { margin-top: 0; }
+      .rw-legend-key {
+        font-family: var(--mono-face); font-size: 10px; text-transform: uppercase; letter-spacing: 0.03em;
+        padding: 2px 7px; border-radius: 3px; line-height: 1.5; min-width: 44px; text-align: center;
+        background: rgba(255,177,94,0.12); border: 1px solid rgba(255,177,94,0.4);
+      }
+      .rw-legend-label { text-transform: uppercase; font-size: 10px; letter-spacing: 0.1em; opacity: 0.85; }
+      @media (prefers-reduced-motion: reduce) {
+        .rw-controls-legend { transition: opacity 1ms linear; }
+      }
+
       .rw-overlay {
         position: fixed; inset: 0; z-index: 20;
         display: none; align-items: center; justify-content: center;
@@ -395,6 +446,7 @@ export class HUD {
     this.abilityToastEl = this.root.querySelector('.rw-ability-toast')!;
     this.abilityNameEl = this.root.querySelector('.rw-ability-name')!;
     this.abilityDescEl = this.root.querySelector('.rw-ability-desc')!;
+    this.controlsLegendEl = this.root.querySelector('.rw-controls-legend')!;
     this.overlay = this.root.querySelector('.rw-overlay')!;
     this.overlayStats = this.root.querySelector('.rw-overlay-stats')!;
     this.overlayTitle = this.root.querySelector('.rw-overlay-title')!;
@@ -449,6 +501,11 @@ export class HUD {
       this.abilityToastEl.classList.remove('rw-visible');
       this.abilityToastTimer = null;
     }, 3000);
+  }
+
+  /** Fades the controls-legend panel out; called once, on the player's first real input. */
+  dismissLegend(): void {
+    this.controlsLegendEl.classList.add('rw-legend-hidden');
   }
 
   showGameOver(distance: number, motes: number, score: number) {
