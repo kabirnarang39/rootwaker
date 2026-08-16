@@ -45,15 +45,19 @@ export class Game {
     this.camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.1, 100);
     this.camera.position.set(0, 2.2, PLAYER_Z + 4);
 
+    // touch-primary devices are almost always the fill-rate-constrained ones (phone GPUs) —
+    // cap resolution and shadow detail there; desktop keeps full quality.
+    const isTouchPrimary = window.matchMedia('(pointer: coarse)').matches;
+
     this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
     this.renderer.setSize(window.innerWidth, window.innerHeight);
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, isTouchPrimary ? 1.5 : 2));
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.0;
     this.renderer.shadowMap.enabled = true;
     container.appendChild(this.renderer.domElement);
 
-    this.setupLights();
+    this.setupLights(isTouchPrimary);
     this.scene.add(this.player.group);
     this.scene.add(this.track.group);
     this.scene.add(this.wake.group);
@@ -93,6 +97,17 @@ export class Game {
     this.hud.showStart();
 
     window.addEventListener('resize', this.onResize);
+
+    if (import.meta.env.DEV) {
+      (window as unknown as { __rw: unknown }).__rw = {
+        renderer: this.renderer,
+        scene: this.scene,
+        camera: this.camera,
+        player: this.player,
+        clock: this.clock,
+        hud: this.hud,
+      };
+    }
   }
 
   private beginRun() {
@@ -101,14 +116,21 @@ export class Game {
     this.hud.hideGameOver();
   }
 
-  private setupLights() {
+  private setupLights(isTouchPrimary: boolean) {
     const hemi = new THREE.HemisphereLight(0x4a7a8a, 0x14231a, 1.4);
     this.scene.add(hemi);
 
     const moon = new THREE.DirectionalLight(0xafc8ff, 2.0);
     moon.position.set(-4, 8, 3);
     moon.castShadow = true;
-    moon.shadow.mapSize.set(1024, 1024);
+    const shadowRes = isTouchPrimary ? 512 : 1024;
+    moon.shadow.mapSize.set(shadowRes, shadowRes);
+    moon.shadow.camera.left = -6;
+    moon.shadow.camera.right = 6;
+    moon.shadow.camera.top = 6;
+    moon.shadow.camera.bottom = -6;
+    moon.shadow.camera.near = 1;
+    moon.shadow.camera.far = 20;
     this.scene.add(moon);
 
     const fill = new THREE.AmbientLight(0x203045, 0.6);

@@ -73,6 +73,7 @@ export function createFox(): Fox {
   const head = new THREE.Mesh(new THREE.IcosahedronGeometry(0.24, 0), fur);
   head.scale.set(1, 0.92, 1.15);
   head.position.set(0, 0.78, 0.45);
+  head.castShadow = true;
   group.add(head);
 
   const headShell = new THREE.Mesh(head.geometry.clone(), glowShellMat);

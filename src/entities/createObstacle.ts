@@ -23,6 +23,7 @@ function buildBoulder(): THREE.Group {
   const main = new THREE.Mesh(new THREE.IcosahedronGeometry(0.5, 0), mat);
   main.position.y = 0.4;
   main.rotation.set(0.4, 0.6, 0.1);
+  main.castShadow = true;
   g.add(main);
   const small = new THREE.Mesh(new THREE.IcosahedronGeometry(0.24, 0), matDark);
   small.position.set(0.3, 0.18, 0.15);
@@ -52,6 +53,7 @@ function buildLog(): THREE.Group {
   const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.22, 3.2, 7), mat);
   trunk.rotation.z = Math.PI / 2;
   trunk.position.y = 0.62;
+  trunk.castShadow = true;
   g.add(trunk);
   for (const capZ of [-1.55, 1.55]) {
     const cap = new THREE.Mesh(new THREE.CircleGeometry(0.22, 7), matDark);

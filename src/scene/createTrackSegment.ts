@@ -55,6 +55,7 @@ function buildTree(rand: () => number, palette: TrackPalette): THREE.Group {
   );
   trunk.position.y = trunkHeight / 2;
   trunk.rotation.y = rand() * Math.PI;
+  trunk.castShadow = true;
   tree.add(trunk);
 
   const rootMat = new THREE.MeshStandardMaterial({ color: palette.barkDark, flatShading: true, roughness: 1 });
@@ -118,12 +119,14 @@ export function createTrackSegment(seed = 1, palette: TrackPalette = DEFAULT_PAL
   const floor = new THREE.Mesh(new THREE.PlaneGeometry(6, SEGMENT_LENGTH, 4, 8), floorMat);
   floor.rotation.x = -Math.PI / 2;
   floor.position.set(0, 0, 0);
+  floor.receiveShadow = true;
   group.add(floor);
 
   const pathMat = new THREE.MeshStandardMaterial({ color: palette.pathColor, roughness: 0.9, flatShading: true });
   const path = new THREE.Mesh(new THREE.PlaneGeometry(LANE_WIDTH * 3.2, SEGMENT_LENGTH), pathMat);
   path.rotation.x = -Math.PI / 2;
   path.position.y = 0.01;
+  path.receiveShadow = true;
   group.add(path);
 
   const laneLineMat = new THREE.MeshBasicMaterial({ color: 0x2f5f45, transparent: true, opacity: 0.5 });
