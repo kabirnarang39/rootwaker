@@ -1,7 +1,7 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { Input } from '../Input';
 
-// jsdom-style fake element with addEventListener, since Input's constructor takes an HTMLElement
+// Fake element with addEventListener, since Input's constructor takes an HTMLElement
 function fakeElement() {
   const listeners: Record<string, ((e: any) => void)[]> = {};
   return {
@@ -13,6 +13,45 @@ function fakeElement() {
     },
   };
 }
+
+// Input's constructor also attaches keydown/keyup listeners to the real global `window`.
+// Stub a minimal window + KeyboardEvent here (node test environment has neither) rather
+// than pulling in jsdom as a dependency just to run this one file.
+function fakeWindow() {
+  const listeners: Record<string, ((e: any) => void)[]> = {};
+  return {
+    addEventListener: (type: string, handler: (e: any) => void) => {
+      (listeners[type] ??= []).push(handler);
+    },
+    removeEventListener: (type: string, handler: (e: any) => void) => {
+      const arr = listeners[type];
+      if (!arr) return;
+      const i = arr.indexOf(handler);
+      if (i >= 0) arr.splice(i, 1);
+    },
+    dispatchEvent: (event: { type: string }) => {
+      (listeners[event.type] ?? []).forEach((h) => h(event));
+    },
+  };
+}
+
+class FakeKeyboardEvent {
+  type: string;
+  code: string;
+  constructor(type: string, init: { code: string }) {
+    this.type = type;
+    this.code = init.code;
+  }
+}
+
+beforeEach(() => {
+  vi.stubGlobal('window', fakeWindow());
+  vi.stubGlobal('KeyboardEvent', FakeKeyboardEvent);
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 describe('Input mouse-drag look', () => {
   it('accumulates a look delta between mousedown-drag-mouseup and reports it once via pollLook', () => {
