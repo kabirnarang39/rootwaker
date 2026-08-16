@@ -36,4 +36,16 @@ describe('createJungleLevel', () => {
       expect(guardObjects.has(obj)).toBe(false);
     }
   });
+
+  it('the throne room sits beyond the summit gate, with the king positioned further still, and the village hidden until openGate() is called', () => {
+    const level = createJungleLevel();
+    expect(level.throneRoom.kingSpawn.z).toBeGreaterThan(level.mountain.summitGate.z);
+    expect(level.throneRoom.gateOpen).toBe(false);
+    const firstVillager = level.throneRoom.villageMeshes[0];
+    expect(firstVillager.visible).toBe(false);
+
+    level.throneRoom.openGate();
+    expect(level.throneRoom.gateOpen).toBe(true);
+    expect(firstVillager.visible).toBe(true);
+  });
 });

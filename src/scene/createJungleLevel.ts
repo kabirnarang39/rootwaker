@@ -5,6 +5,7 @@ import { createSky } from './createSky';
 import { createGroveHare, type GroveHare } from '../entities/groveHare';
 import { createTuskBoar, type TuskBoar } from '../entities/tuskBoar';
 import { createMountainGuard, type MountainGuard } from '../entities/mountainGuard';
+import { createMountainKing, type MountainKing } from '../entities/createMountainKing';
 import { TreeObstacleGrid, type TreeObstacle } from './TreeObstacleGrid';
 
 export interface ClimbableWall {
@@ -16,6 +17,15 @@ export interface ClimbableWall {
 export interface ClimbSegment {
   wall: ClimbableWall;
   ledgePosition: THREE.Vector3;
+}
+
+export interface ThroneRoom {
+  bounds: THREE.Box2; // arena floor's x/z extent
+  kingSpawn: THREE.Vector3;
+  king: MountainKing;
+  villageMeshes: THREE.Object3D[];
+  gateOpen: boolean;
+  openGate(): void;
 }
 
 export interface JungleLevel {
@@ -37,6 +47,7 @@ export interface JungleLevel {
     guards: MountainGuard[];
     summitGate: THREE.Vector3;
   };
+  throneRoom: ThroneRoom;
   update(time: number): void;
 }
 
@@ -422,6 +433,79 @@ function buildMountain(
   return { meshes, climbMeshes, segments, guards, summitGate };
 }
 
+const THRONE_FLOOR_COLOR = 0x2e2c29; // colder, darker variant of MOUNTAIN_LEDGE_COLOR for the arena floor
+const VILLAGE_BODY_COLOR = 0xb5793a; // warm ochre — deliberately contrasts the mountain's cold stone palette
+const VILLAGE_TRIM_COLOR = 0xd9a441; // warm amber accent
+
+// Same capsule-body + icosahedron-head primitive shape every creature in this project uses
+// (see tuskBoar.ts, groveHare.ts) — but not rigged/animated, since these are non-interactive
+// set dressing for the reveal beat, not combatants.
+function buildVillager(position: THREE.Vector3): THREE.Group {
+  const group = new THREE.Group();
+  const bodyMat = new THREE.MeshStandardMaterial({ color: VILLAGE_BODY_COLOR, flatShading: true, roughness: 0.85 });
+  const headMat = new THREE.MeshStandardMaterial({ color: VILLAGE_TRIM_COLOR, flatShading: true, roughness: 0.6 });
+
+  const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.22, 0.5, 2, 6), bodyMat);
+  body.position.set(0, 0.55, 0);
+  body.castShadow = true;
+
+  const head = new THREE.Mesh(new THREE.IcosahedronGeometry(0.18, 0), headMat);
+  head.position.set(0, 0.95, 0);
+  head.castShadow = true;
+
+  group.add(body, head);
+  group.position.copy(position);
+  group.visible = false; // hidden behind the still-closed gate until openGate() is called
+  return group;
+}
+
+// Small bounded arena beyond the summit gate: the King's fight, then (hidden until the gate
+// opens) the village tableau — the payoff for climbing the mountain. Follows buildMountain's
+// {meshes, ...state} return shape so the call site adds meshes the same way.
+function buildThroneRoom(summitGate: THREE.Vector3): { meshes: THREE.Object3D[]; throneRoom: ThroneRoom } {
+  const arenaRadius = 6; // ~12m across
+  const arenaCenterZ = summitGate.z + 6;
+
+  const floorGeo = new THREE.CircleGeometry(arenaRadius, 24);
+  floorGeo.rotateX(-Math.PI / 2);
+  const floorMat = new THREE.MeshStandardMaterial({ color: THRONE_FLOOR_COLOR, roughness: 1, flatShading: true });
+  const floorMesh = new THREE.Mesh(floorGeo, floorMat);
+  floorMesh.position.set(summitGate.x, summitGate.y, arenaCenterZ);
+  floorMesh.receiveShadow = true;
+
+  const bounds = new THREE.Box2(
+    new THREE.Vector2(summitGate.x - arenaRadius, arenaCenterZ - arenaRadius),
+    new THREE.Vector2(summitGate.x + arenaRadius, arenaCenterZ + arenaRadius),
+  );
+
+  // Genuine approach distance from the gate before the fight starts.
+  const kingSpawn = new THREE.Vector3(summitGate.x, summitGate.y, summitGate.z + 10);
+  const king = createMountainKing();
+  king.group.position.copy(kingSpawn);
+
+  // Beyond the king, only revealed once the gate opens.
+  const villageMeshes: THREE.Object3D[] = [
+    buildVillager(new THREE.Vector3(summitGate.x - 1.2, summitGate.y, summitGate.z + 16)),
+    buildVillager(new THREE.Vector3(summitGate.x + 1.0, summitGate.y, summitGate.z + 17.5)),
+    buildVillager(new THREE.Vector3(summitGate.x - 0.4, summitGate.y, summitGate.z + 19)),
+    buildVillager(new THREE.Vector3(summitGate.x + 1.6, summitGate.y, summitGate.z + 20)),
+  ];
+
+  const throneRoom: ThroneRoom = {
+    bounds,
+    kingSpawn,
+    king,
+    villageMeshes,
+    gateOpen: false,
+    openGate: () => {
+      throneRoom.gateOpen = true;
+      for (const mesh of throneRoom.villageMeshes) mesh.visible = true;
+    },
+  };
+
+  return { meshes: [floorMesh, king.group, ...villageMeshes], throneRoom };
+}
+
 function buildWater(): { mesh: THREE.Mesh; water: WaterBody } {
   const width = 8;
   const depth = 6;
@@ -502,6 +586,9 @@ export function createJungleLevel(): JungleLevel {
   const mountain = buildMountain(-12, 8, wall.topY);
   group.add(...mountain.meshes);
 
+  const { meshes: throneRoomMeshes, throneRoom } = buildThroneRoom(mountain.summitGate);
+  group.add(...throneRoomMeshes);
+
   const half = CHAPTER_SIZE / 2;
   const chapterBounds = new THREE.Box3(new THREE.Vector3(-half, -5, -half), new THREE.Vector3(half, 40, half));
 
@@ -517,6 +604,7 @@ export function createJungleLevel(): JungleLevel {
     foliageMeshes,
     climbObstacleMeshes: [wallMesh, ...mountain.climbMeshes],
     mountain: { segments: mountain.segments, guards: mountain.guards, summitGate: mountain.summitGate },
+    throneRoom,
     update: updateFoliage,
   };
 }
