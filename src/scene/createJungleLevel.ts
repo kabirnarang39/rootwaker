@@ -42,30 +42,85 @@ function buildTerrain(): { mesh: THREE.Mesh; heightAt: (x: number, z: number) =>
   return { mesh, heightAt };
 }
 
-function buildFoliage(
-  heightAt: (x: number, z: number) => number,
-  water: WaterBody,
-  wallBounds: THREE.Box2,
-): { trunkMesh: THREE.InstancedMesh; canopyMesh: THREE.InstancedMesh; update: (time: number) => void } {
-  const COUNT = 1300;
-  const TRUNK_HEIGHT = 1.7;
+interface TreeSpeciesLobe {
+  radius: number;
+  offset: [number, number, number];
+}
 
-  const trunkGeo = new THREE.CylinderGeometry(0.06, 0.09, TRUNK_HEIGHT, 6);
-  trunkGeo.translate(0, TRUNK_HEIGHT / 2, 0);
+interface TreeSpecies {
+  trunkHeight: number;
+  trunkRadiusBottom: number;
+  trunkRadiusTop: number;
+  canopyLobes: TreeSpeciesLobe[];
+  canopyColor: number;
+}
+
+const TREE_SPECIES: TreeSpecies[] = [
+  {
+    trunkHeight: 1.9,
+    trunkRadiusBottom: 0.07,
+    trunkRadiusTop: 0.1,
+    canopyLobes: [
+      { radius: 0.45, offset: [0, 0.4, 0] },
+      { radius: 0.3, offset: [0.18, 0.62, 0.12] },
+    ],
+    canopyColor: 0x1f4d3a,
+  },
+  {
+    trunkHeight: 1.3,
+    trunkRadiusBottom: 0.09,
+    trunkRadiusTop: 0.13,
+    canopyLobes: [
+      { radius: 0.6, offset: [0, 0.35, 0] },
+      { radius: 0.42, offset: [-0.3, 0.55, -0.2] },
+      { radius: 0.35, offset: [0.28, 0.5, 0.22] },
+    ],
+    canopyColor: 0x2c6b4a,
+  },
+  {
+    trunkHeight: 2.1,
+    trunkRadiusBottom: 0.06,
+    trunkRadiusTop: 0.085,
+    canopyLobes: [
+      { radius: 0.4, offset: [0, 0.55, 0] },
+      { radius: 0.32, offset: [0.26, 0.85, 0.2] },
+      { radius: 0.3, offset: [-0.24, 0.72, -0.22] },
+    ],
+    canopyColor: 0x14392a,
+  },
+  {
+    trunkHeight: 1.1,
+    trunkRadiusBottom: 0.08,
+    trunkRadiusTop: 0.11,
+    canopyLobes: [
+      { radius: 0.5, offset: [0, 0.32, 0] },
+      { radius: 0.4, offset: [0.22, 0.5, -0.18] },
+      { radius: 0.38, offset: [-0.2, 0.48, 0.2] },
+      { radius: 0.3, offset: [0.05, 0.68, 0.05] },
+    ],
+    canopyColor: 0x1a4a3a,
+  },
+];
+
+function buildTreeSpeciesMeshes(
+  species: TreeSpecies,
+  count: number,
+  windDir: THREE.Vector2,
+): { trunkMesh: THREE.InstancedMesh; canopyMesh: THREE.InstancedMesh; uniforms: { uTime: { value: number } } } {
+  const trunkGeo = new THREE.CylinderGeometry(species.trunkRadiusTop, species.trunkRadiusBottom, species.trunkHeight, 6);
+  trunkGeo.translate(0, species.trunkHeight / 2, 0);
   const trunkMat = new THREE.MeshStandardMaterial({ color: 0x3a2a1a, flatShading: true, roughness: 0.9 });
 
-  const icoA = new THREE.IcosahedronGeometry(0.55, 0);
-  icoA.translate(0, TRUNK_HEIGHT + 0.5, 0);
-  const icoB = new THREE.IcosahedronGeometry(0.4, 0);
-  icoB.translate(0.24, TRUNK_HEIGHT + 0.8, 0.18);
-  const icoC = new THREE.IcosahedronGeometry(0.38, 0);
-  icoC.translate(-0.22, TRUNK_HEIGHT + 0.68, -0.2);
-  const canopyGeo = mergeGeometries([icoA, icoB, icoC], false);
-  if (!canopyGeo) throw new Error('buildFoliage: failed to merge canopy geometry');
-  const canopyMat = new THREE.MeshStandardMaterial({ color: 0x1f4d3a, flatShading: true, roughness: 0.9 });
+  const lobeGeoms = species.canopyLobes.map((lobe) => {
+    const geo = new THREE.IcosahedronGeometry(lobe.radius, 0);
+    geo.translate(lobe.offset[0], species.trunkHeight + lobe.offset[1], lobe.offset[2]);
+    return geo;
+  });
+  const canopyGeo = mergeGeometries(lobeGeoms, false);
+  if (!canopyGeo) throw new Error('buildTreeSpeciesMeshes: failed to merge canopy geometry');
+  const canopyMat = new THREE.MeshStandardMaterial({ color: species.canopyColor, flatShading: true, roughness: 0.9 });
 
-  const windDir = WIND.clone().normalize();
-  const uniforms = { uTime: { value: 0 }, uWindDir: { value: new THREE.Vector2(windDir.x, windDir.z) } };
+  const uniforms = { uTime: { value: 0 }, uWindDir: { value: windDir } };
   canopyMat.onBeforeCompile = (shader) => {
     shader.uniforms.uTime = uniforms.uTime;
     shader.uniforms.uWindDir = uniforms.uWindDir;
@@ -90,19 +145,35 @@ function buildFoliage(
       );
   };
 
-  const trunkMesh = new THREE.InstancedMesh(trunkGeo, trunkMat, COUNT);
-  const canopyMesh = new THREE.InstancedMesh(canopyGeo, canopyMat, COUNT);
+  const trunkMesh = new THREE.InstancedMesh(trunkGeo, trunkMat, count);
+  const canopyMesh = new THREE.InstancedMesh(canopyGeo, canopyMat, count);
   trunkMesh.castShadow = true;
   canopyMesh.castShadow = true;
 
+  return { trunkMesh, canopyMesh, uniforms };
+}
+
+function buildFoliage(
+  heightAt: (x: number, z: number) => number,
+  water: WaterBody,
+  wallBounds: THREE.Box2,
+): { meshes: THREE.InstancedMesh[]; update: (time: number) => void } {
+  const COUNT = 1300;
+  const windDir2 = new THREE.Vector2(WIND.x, WIND.z).normalize();
+
+  const perSpeciesCount = Math.ceil(COUNT / TREE_SPECIES.length);
+  const speciesMeshes = TREE_SPECIES.map((species) => buildTreeSpeciesMeshes(species, perSpeciesCount, windDir2));
+  const placedPerSpecies = new Array(TREE_SPECIES.length).fill(0);
+
   const dummy = new THREE.Object3D();
-  let placed = 0;
+  let totalPlaced = 0;
   let attempts = 0;
   const waterMinX = water.bounds.min.x - 0.4;
   const waterMaxX = water.bounds.max.x + 0.4;
   const waterMinZ = water.bounds.min.z - 0.4;
   const waterMaxZ = water.bounds.max.z + 0.4;
-  while (placed < COUNT && attempts < COUNT * 4) {
+
+  while (totalPlaced < COUNT && attempts < COUNT * 4) {
     attempts++;
     const x = (Math.random() - 0.5) * CHAPTER_SIZE;
     const z = (Math.random() - 0.5) * CHAPTER_SIZE;
@@ -110,21 +181,41 @@ function buildFoliage(
     const inWall =
       x >= wallBounds.min.x - 0.4 && x <= wallBounds.max.x + 0.4 && z >= wallBounds.min.y - 0.4 && z <= wallBounds.max.y + 0.4;
     if (inWater || inWall) continue;
+
+    const speciesIndex = Math.floor(Math.random() * TREE_SPECIES.length);
+    if (placedPerSpecies[speciesIndex] >= perSpeciesCount) continue;
+
     const scale = 0.65 + Math.random() * 0.85;
     dummy.position.set(x, heightAt(x, z), z);
     dummy.rotation.y = Math.random() * Math.PI * 2;
     dummy.scale.setScalar(scale);
     dummy.updateMatrix();
-    trunkMesh.setMatrixAt(placed, dummy.matrix);
-    canopyMesh.setMatrixAt(placed, dummy.matrix);
-    placed++;
-  }
-  trunkMesh.count = placed;
-  canopyMesh.count = placed;
-  trunkMesh.instanceMatrix.needsUpdate = true;
-  canopyMesh.instanceMatrix.needsUpdate = true;
 
-  return { trunkMesh, canopyMesh, update: (time: number) => { uniforms.uTime.value = time; } };
+    const { trunkMesh, canopyMesh } = speciesMeshes[speciesIndex];
+    const idx = placedPerSpecies[speciesIndex];
+    trunkMesh.setMatrixAt(idx, dummy.matrix);
+    canopyMesh.setMatrixAt(idx, dummy.matrix);
+    placedPerSpecies[speciesIndex] = idx + 1;
+    totalPlaced++;
+  }
+
+  const meshes: THREE.InstancedMesh[] = [];
+  speciesMeshes.forEach(({ trunkMesh, canopyMesh }, i) => {
+    trunkMesh.count = placedPerSpecies[i];
+    canopyMesh.count = placedPerSpecies[i];
+    trunkMesh.instanceMatrix.needsUpdate = true;
+    canopyMesh.instanceMatrix.needsUpdate = true;
+    meshes.push(trunkMesh, canopyMesh);
+  });
+
+  return {
+    meshes,
+    update: (time: number) => {
+      speciesMeshes.forEach(({ uniforms }) => {
+        uniforms.uTime.value = time;
+      });
+    },
+  };
 }
 
 function buildClimbableWall(heightAt: (x: number, z: number) => number): { mesh: THREE.Mesh; wall: ClimbableWall } {
@@ -190,8 +281,8 @@ export function createJungleLevel(): JungleLevel {
   const { mesh: waterMesh, water } = buildWater();
   group.add(waterMesh);
 
-  const { trunkMesh, canopyMesh, update: updateFoliage } = buildFoliage(heightAt, water, wall.bounds);
-  group.add(trunkMesh, canopyMesh);
+  const { meshes: foliageMeshes, update: updateFoliage } = buildFoliage(heightAt, water, wall.bounds);
+  group.add(...foliageMeshes);
 
   const half = CHAPTER_SIZE / 2;
   const chapterBounds = new THREE.Box3(new THREE.Vector3(-half, -5, -half), new THREE.Vector3(half, 10, half));
