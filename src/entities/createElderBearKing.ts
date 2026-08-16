@@ -9,8 +9,10 @@ import type { Combatant } from '../game/Combat';
 import type { Capsule } from '../game/collision';
 
 // Darker, greyed fur vs. the Grove Bear's warmer brown — reads as elder, not a recolor.
-const KING_FUR_COLOR = 0x2e241a;
+const KING_FUR_COLOR = 0x3e3226;
+const KING_FUR_DARK = 0x241c12;
 const KING_CLAW_COLOR = 0x1a140d;
+const KING_EYE_COLOR = 0xffcf6b;
 const KING_HP = 220; // matches the old humanoid King exactly — visual redesign, not a rebalance
 
 export interface ElderBearKing {
@@ -22,22 +24,45 @@ export interface ElderBearKing {
 }
 
 export function createElderBearKing(): ElderBearKing {
-  const rig = new Rig(['root', 'spine', 'head', 'shoulderL', 'shoulderR']);
+  const rig = new Rig([
+    'root', 'spine', 'head', 'jaw', 'earL', 'earR',
+    'shoulderL', 'shoulderR', 'forepawL', 'forepawR',
+    'hipL', 'hipR', 'hindpawL', 'hindpawR',
+  ]);
   rig.attach('spine', 'root');
   rig.attach('head', 'spine');
-  rig.attach('shoulderL', 'spine');
-  rig.attach('shoulderR', 'spine');
+  rig.attach('jaw', 'head');
+  rig.attach('earL', 'head');
+  rig.attach('earR', 'head');
+  for (const side of ['L', 'R'] as const) {
+    rig.attach(`shoulder${side}`, 'spine');
+    rig.attach(`forepaw${side}`, `shoulder${side}`);
+    rig.attach(`hip${side}`, 'spine');
+    rig.attach(`hindpaw${side}`, `hip${side}`);
+  }
 
   // Scaled up from the Grove Bear's proportions (spine 0.32 / head 0.05,0.32 / shoulders
-  // 0.22,0.14) to read as genuinely larger and elder, not a recolor.
+  // 0.22,0.14) to read as genuinely larger and elder, not a recolor. Body underside sits at
+  // spine.y - radius (0.62 - 0.6 = 0.02, near ground) — legs bridge shoulder/hip height down.
   rig.setLocalPosition('spine', 0, 0.62, 0);
   rig.setLocalPosition('head', 0, 0.1, 0.6);
-  rig.setLocalPosition('shoulderL', -0.42, -0.04, 0.26);
-  rig.setLocalPosition('shoulderR', 0.42, -0.04, 0.26);
+  rig.setLocalPosition('jaw', 0, -0.15, 0.3);
+  rig.setLocalPosition('earL', -0.24, 0.3, -0.04);
+  rig.setLocalPosition('earR', 0.24, 0.3, -0.04);
+  rig.setLocalPosition('shoulderL', -0.4, -0.06, 0.26);
+  rig.setLocalPosition('shoulderR', 0.4, -0.06, 0.26);
+  rig.setLocalPosition('forepawL', 0, -0.3, 0);
+  rig.setLocalPosition('forepawR', 0, -0.3, 0);
+  rig.setLocalPosition('hipL', -0.4, -0.06, -0.34);
+  rig.setLocalPosition('hipR', 0.4, -0.06, -0.34);
+  rig.setLocalPosition('hindpawL', 0, -0.3, 0);
+  rig.setLocalPosition('hindpawR', 0, -0.3, 0);
   rig.captureBasePose();
 
-  const furMat = new THREE.MeshStandardMaterial({ color: KING_FUR_COLOR, flatShading: true, roughness: 0.95 });
+  const furMat = new THREE.MeshStandardMaterial({ color: KING_FUR_COLOR, flatShading: true, roughness: 0.85 });
+  const furDarkMat = new THREE.MeshStandardMaterial({ color: KING_FUR_DARK, flatShading: true, roughness: 0.9 });
   const clawMat = new THREE.MeshStandardMaterial({ color: KING_CLAW_COLOR, flatShading: true, roughness: 0.5 });
+  const eyeMat = new THREE.MeshStandardMaterial({ color: KING_EYE_COLOR, emissive: KING_EYE_COLOR, emissiveIntensity: 1.1, flatShading: true });
 
   const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.6, 0.9, 2, 6), furMat);
   body.rotation.z = Math.PI / 2;
@@ -45,8 +70,31 @@ export function createElderBearKing(): ElderBearKing {
   rig.getJoint('spine').add(body);
 
   const head = new THREE.Mesh(new THREE.IcosahedronGeometry(0.4, 0), furMat);
+  head.scale.set(1, 0.9, 1.05);
   head.castShadow = true;
   rig.getJoint('head').add(head);
+
+  const snout = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.21, 0.34, 6), furDarkMat);
+  snout.rotation.x = Math.PI / 2;
+  rig.getJoint('jaw').add(snout);
+
+  const nose = new THREE.Mesh(new THREE.SphereGeometry(0.06, 6, 6), clawMat);
+  nose.position.set(0, 0.02, 0.18);
+  rig.getJoint('jaw').add(nose);
+
+  const eyeGeo = new THREE.SphereGeometry(0.05, 6, 6);
+  const eyeL = new THREE.Mesh(eyeGeo, eyeMat);
+  eyeL.position.set(-0.18, 0.04, 0.29);
+  const eyeR = eyeL.clone();
+  eyeR.position.x = 0.18;
+  rig.getJoint('head').add(eyeL, eyeR);
+
+  const earGeo = new THREE.SphereGeometry(0.12, 6, 6);
+  const earL = new THREE.Mesh(earGeo, furDarkMat);
+  earL.scale.set(1, 1, 0.6);
+  const earR = earL.clone();
+  rig.getJoint('earL').add(earL);
+  rig.getJoint('earR').add(earR);
 
   const clawGeo = new THREE.ConeGeometry(0.08, 0.24, 4);
   const clawL = new THREE.Mesh(clawGeo, clawMat);
@@ -55,6 +103,16 @@ export function createElderBearKing(): ElderBearKing {
   const clawR = new THREE.Mesh(clawGeo, clawMat);
   clawR.rotation.z = -Math.PI / 2;
   rig.getJoint('shoulderR').add(clawR);
+
+  const legGeo = new THREE.CylinderGeometry(0.13, 0.16, 0.6, 6);
+  const forepawL = new THREE.Mesh(legGeo, furDarkMat);
+  rig.getJoint('forepawL').add(forepawL);
+  const forepawR = new THREE.Mesh(legGeo.clone(), furDarkMat);
+  rig.getJoint('forepawR').add(forepawR);
+  const hindpawL = new THREE.Mesh(legGeo.clone(), furDarkMat);
+  rig.getJoint('hindpawL').add(hindpawL);
+  const hindpawR = new THREE.Mesh(legGeo.clone(), furDarkMat);
+  rig.getJoint('hindpawR').add(hindpawR);
 
   const ai = new EnemyAI();
   const groundSlam = new GroundSlam();

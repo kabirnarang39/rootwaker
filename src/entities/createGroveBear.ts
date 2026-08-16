@@ -6,8 +6,10 @@ import { EnemyAI, type AiState } from './EnemyAI';
 import type { Combatant } from '../game/Combat';
 import type { Capsule } from '../game/collision';
 
-const BEAR_FUR_COLOR = 0x4a3826;
+const BEAR_FUR_COLOR = 0x5a4530;
+const BEAR_FUR_DARK = 0x3a2c1c;
 const BEAR_CLAW_COLOR = 0x2a2015;
+const BEAR_EYE_COLOR = 0xffb84d; // amber eye-shine — real nocturnal animal eyes reflect light
 
 export interface GroveBear {
   group: THREE.Group;
@@ -17,22 +19,46 @@ export interface GroveBear {
 }
 
 export function createGroveBear(): GroveBear {
-  const rig = new Rig(['root', 'spine', 'head', 'shoulderL', 'shoulderR']);
+  const rig = new Rig([
+    'root', 'spine', 'head', 'jaw', 'earL', 'earR',
+    'shoulderL', 'shoulderR', 'forepawL', 'forepawR',
+    'hipL', 'hipR', 'hindpawL', 'hindpawR',
+  ]);
   rig.attach('spine', 'root');
   rig.attach('head', 'spine');
-  rig.attach('shoulderL', 'spine');
-  rig.attach('shoulderR', 'spine');
+  rig.attach('jaw', 'head');
+  rig.attach('earL', 'head');
+  rig.attach('earR', 'head');
+  for (const side of ['L', 'R'] as const) {
+    rig.attach(`shoulder${side}`, 'spine');
+    rig.attach(`forepaw${side}`, `shoulder${side}`);
+    rig.attach(`hip${side}`, 'spine');
+    rig.attach(`hindpaw${side}`, `hip${side}`);
+  }
 
   // Low-slung, heavier-bodied proportions than tuskBoar's — a real bear reads bulkier and
-  // lower to the ground than a boar, not just a recolor.
+  // lower to the ground than a boar, not just a recolor. Body capsule sits with its underside
+  // at spine.y - radius (0.32 - 0.32 = 0, i.e. right at ground) — legs bridge shoulder/hip
+  // height (spine.y - 0.02 = 0.30) down to the ground, closing the "floating body" gap.
   rig.setLocalPosition('spine', 0, 0.32, 0);
   rig.setLocalPosition('head', 0, 0.05, 0.32);
-  rig.setLocalPosition('shoulderL', -0.22, -0.02, 0.14);
-  rig.setLocalPosition('shoulderR', 0.22, -0.02, 0.14);
+  rig.setLocalPosition('jaw', 0, -0.08, 0.16);
+  rig.setLocalPosition('earL', -0.13, 0.16, -0.02);
+  rig.setLocalPosition('earR', 0.13, 0.16, -0.02);
+  rig.setLocalPosition('shoulderL', -0.2, -0.02, 0.14);
+  rig.setLocalPosition('shoulderR', 0.2, -0.02, 0.14);
+  rig.setLocalPosition('forepawL', 0, -0.16, 0);
+  rig.setLocalPosition('forepawR', 0, -0.16, 0);
+  rig.setLocalPosition('hipL', -0.2, -0.02, -0.18);
+  rig.setLocalPosition('hipR', 0.2, -0.02, -0.18);
+  rig.setLocalPosition('hindpawL', 0, -0.16, 0);
+  rig.setLocalPosition('hindpawR', 0, -0.16, 0);
   rig.captureBasePose();
 
-  const furMat = new THREE.MeshStandardMaterial({ color: BEAR_FUR_COLOR, flatShading: true, roughness: 0.95 });
-  const clawMat = new THREE.MeshStandardMaterial({ color: BEAR_CLAW_COLOR, flatShading: true, roughness: 0.6 });
+  const furMat = new THREE.MeshStandardMaterial({ color: BEAR_FUR_COLOR, flatShading: true, roughness: 0.85 });
+  const furDarkMat = new THREE.MeshStandardMaterial({ color: BEAR_FUR_DARK, flatShading: true, roughness: 0.9 });
+  const clawMat = new THREE.MeshStandardMaterial({ color: BEAR_CLAW_COLOR, flatShading: true, roughness: 0.5 });
+  const eyeMat = new THREE.MeshStandardMaterial({ color: BEAR_EYE_COLOR, emissive: BEAR_EYE_COLOR, emissiveIntensity: 0.9, flatShading: true });
 
   const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.32, 0.5, 2, 6), furMat);
   body.rotation.z = Math.PI / 2;
@@ -40,7 +66,32 @@ export function createGroveBear(): GroveBear {
   rig.getJoint('spine').add(body);
 
   const head = new THREE.Mesh(new THREE.IcosahedronGeometry(0.22, 0), furMat);
+  head.scale.set(1, 0.9, 1.05);
+  head.castShadow = true;
   rig.getJoint('head').add(head);
+
+  const snout = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.12, 0.2, 6), furDarkMat);
+  snout.rotation.x = Math.PI / 2;
+  rig.getJoint('jaw').add(snout);
+
+  const noseGeo = new THREE.SphereGeometry(0.035, 6, 6);
+  const nose = new THREE.Mesh(noseGeo, clawMat);
+  nose.position.set(0, 0.01, 0.1);
+  rig.getJoint('jaw').add(nose);
+
+  const eyeGeo = new THREE.SphereGeometry(0.028, 6, 6);
+  const eyeL = new THREE.Mesh(eyeGeo, eyeMat);
+  eyeL.position.set(-0.1, 0.02, 0.16);
+  const eyeR = eyeL.clone();
+  eyeR.position.x = 0.1;
+  rig.getJoint('head').add(eyeL, eyeR);
+
+  const earGeo = new THREE.SphereGeometry(0.07, 6, 6);
+  const earL = new THREE.Mesh(earGeo, furDarkMat);
+  earL.scale.set(1, 1, 0.6);
+  const earR = earL.clone();
+  rig.getJoint('earL').add(earL);
+  rig.getJoint('earR').add(earR);
 
   const clawGeo = new THREE.ConeGeometry(0.04, 0.12, 4);
   const clawL = new THREE.Mesh(clawGeo, clawMat);
@@ -49,6 +100,16 @@ export function createGroveBear(): GroveBear {
   const clawR = new THREE.Mesh(clawGeo, clawMat);
   clawR.rotation.z = -Math.PI / 2;
   rig.getJoint('shoulderR').add(clawR);
+
+  const legGeo = new THREE.CylinderGeometry(0.06, 0.075, 0.32, 6);
+  const forepawL = new THREE.Mesh(legGeo, furDarkMat);
+  rig.getJoint('forepawL').add(forepawL);
+  const forepawR = new THREE.Mesh(legGeo.clone(), furDarkMat);
+  rig.getJoint('forepawR').add(forepawR);
+  const hindpawL = new THREE.Mesh(legGeo.clone(), furDarkMat);
+  rig.getJoint('hindpawL').add(hindpawL);
+  const hindpawR = new THREE.Mesh(legGeo.clone(), furDarkMat);
+  rig.getJoint('hindpawR').add(hindpawR);
 
   const ai = new EnemyAI();
   const combatant: Combatant = {
