@@ -78,6 +78,10 @@ export class Game {
   private hud: HUD;
 
   private moveInput = { x: 0, z: 0, jump: false };
+  // Raw (non-camera-relative) axis intent. Climbing reads z as "up/down the wall", not
+  // "toward camera-forward" — the camera-relative transform would silently reverse or
+  // zero out climb input depending on orbit yaw, so climb gates/updateClimb use this.
+  private rawMoveInput = { x: 0, z: 0 };
   private jumpPressed = false;
   private foxFacingAngle = 0;
 
@@ -136,6 +140,7 @@ export class Game {
     this.input.onMove((x, z) => {
       const relative = toCameraRelative(x, z, this.cameraRig.orbitYaw);
       this.moveInput = { x: relative.x, z: relative.z, jump: this.jumpPressed };
+      this.rawMoveInput = { x, z };
       this.jumpPressed = false;
     });
     this.input.onLook((dy, dp) => this.cameraRig.applyLookDelta(dy, dp));
@@ -220,11 +225,11 @@ export class Game {
         this.playerController.body.position.z >= this.level.climbableWall.bounds.min.y &&
         this.playerController.body.position.z <= this.level.climbableWall.bounds.max.y &&
         isNearWallHeight(this.playerController.body.position.y, this.level.climbableWall.topY, 6);
-      if (nearWall && this.moveInput.z > 0) {
+      if (nearWall && this.rawMoveInput.z > 0) {
         this.playerController.beginClimb(this.level.climbableWall.normal, this.level.climbableWall.topY);
       }
 
-      if (this.playerController.mode === 'grounded' && this.moveInput.z > 0) {
+      if (this.playerController.mode === 'grounded' && this.rawMoveInput.z > 0) {
         for (const segment of this.level.mountain.segments) {
           const { wall } = segment;
           const nearSegmentWall =
@@ -246,7 +251,7 @@ export class Game {
     }
 
     if (this.playerController.mode === 'climbing') {
-      this.playerController.updateClimb(this.moveInput, delta);
+      this.playerController.updateClimb({ ...this.rawMoveInput, jump: false }, delta);
     } else if (this.playerController.mode === 'swimming') {
       this.playerController.updateSwim(this.moveInput, delta, this.level.water);
     } else {

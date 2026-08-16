@@ -11,7 +11,7 @@ const COMBAT_FOV = 48;
 const FOLLOW_LERP = 0.08;
 const CAMERA_CLEARANCE = 0.3;
 const CLOSE_UP_SCALE = 0.5;
-const PITCH_MIN = -0.6;
+const PITCH_MIN = -0.25; // steeper pitch-down would sink the camera below/into the ground plane at follow/closeUp distances
 const PITCH_MAX = 0.9;
 
 const raycaster = new THREE.Raycaster();
@@ -36,10 +36,6 @@ export class CameraRig {
 
   get orbitYaw(): number {
     return this._orbitYaw;
-  }
-
-  get orbitPitch(): number {
-    return this._orbitPitch;
   }
 
   get viewMode(): ViewMode {

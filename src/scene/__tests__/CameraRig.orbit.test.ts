@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import * as THREE from 'three';
 import { CameraRig } from '../CameraRig';
+import { toCameraRelative } from '../../game/CameraRelativeMove';
 
 describe('CameraRig orbit', () => {
   it('orbitYaw starts at 0 (reproduces existing fixed-offset behavior)', () => {
@@ -49,5 +50,21 @@ describe('CameraRig orbit', () => {
     const closeDist = closeRig.camera.position.distanceTo(target);
 
     expect(closeDist).toBeLessThan(followDist);
+  });
+
+  it('toCameraRelative agrees with the camera-derived forward direction at an arbitrary yaw (binds the two independently-encoded rotation conventions together)', () => {
+    const target = new THREE.Vector3(0, 0, 0);
+    const rig = new CameraRig();
+    rig.applyLookDelta(0.9, 0); // arbitrary non-axis-aligned yaw
+    for (let i = 0; i < 120; i++) rig.update(target, 'grounded', 1 / 60);
+
+    const forwardFromCamera = target.clone().sub(rig.camera.position);
+    forwardFromCamera.y = 0;
+    forwardFromCamera.normalize();
+
+    const inputForward = toCameraRelative(0, 1, rig.orbitYaw);
+
+    expect(inputForward.x).toBeCloseTo(forwardFromCamera.x, 2);
+    expect(inputForward.z).toBeCloseTo(forwardFromCamera.z, 2);
   });
 });
