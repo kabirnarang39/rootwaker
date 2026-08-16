@@ -19,7 +19,9 @@ export type JointName =
   | 'tail1'
   | 'tail2'
   | 'tail3'
-  | 'tail4';
+  | 'tail4'
+  | 'tuskL'
+  | 'tuskR';
 
 /**
  * A named set of THREE.Group pivots any procedural character is built
