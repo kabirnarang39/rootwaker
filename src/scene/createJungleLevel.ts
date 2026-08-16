@@ -391,6 +391,7 @@ function buildMountain(
 
   const guard2 = createMountainGuard();
   guard2.group.position.copy(ledge2.position);
+  guard2.group.position.x -= 2.5; // Move off-center, clear of segment 3's wall (x: -12.3 to -11.7)
   const guard3 = createMountainGuard();
   guard3.group.position.copy(ledge3.position);
   const guards = [guard2, guard3];
