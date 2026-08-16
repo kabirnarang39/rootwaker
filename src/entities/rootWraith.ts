@@ -62,12 +62,18 @@ export function createRootWraith(): RootWraith {
     combatant.hitbox.end.copy(worldPos).add(new THREE.Vector3(0, 0.6, 0));
   }
 
+  let lungeStartTime = -1;
+
   function update(time: number, delta: number, distanceToPlayer: number) {
+    const wasIdle = ai.state === 'idle' || ai.state === 'aggro';
     ai.update(distanceToPlayer, delta);
-    if (ai.state === 'idle' || ai.state === 'aggro') {
+    const isIdle = ai.state === 'idle' || ai.state === 'aggro';
+    if (isIdle) {
       applyClipToRig(rig, crawlClip, time);
+      lungeStartTime = -1;
     } else {
-      applyClipToRig(rig, lungeClip, Math.min(time, lungeClip.duration));
+      if (wasIdle || lungeStartTime < 0) lungeStartTime = time;
+      applyClipToRig(rig, lungeClip, time - lungeStartTime);
     }
     rig.root.updateMatrixWorld(true);
     syncHitbox();
