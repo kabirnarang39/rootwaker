@@ -63,12 +63,17 @@ function buildFoliage(
         uniform vec2 uWindDir;`,
       )
       .replace(
-        '#include <begin_vertex>',
-        `#include <begin_vertex>
+        '#include <project_vertex>',
+        `vec4 mvPosition = vec4( transformed, 1.0 );
+        #ifdef USE_INSTANCING
+          mvPosition = instanceMatrix * mvPosition;
+        #endif
         float swayAmount = (position.y + 0.3) / 0.6;
         float sway = sin(uTime * 1.6 + (instanceMatrix[3].x + instanceMatrix[3].z) * 0.5) * 0.08 * swayAmount;
-        transformed.x += uWindDir.x * sway;
-        transformed.z += uWindDir.y * sway;`,
+        mvPosition.x += uWindDir.x * sway;
+        mvPosition.z += uWindDir.y * sway;
+        mvPosition = modelViewMatrix * mvPosition;
+        gl_Position = projectionMatrix * mvPosition;`,
       );
   };
 
