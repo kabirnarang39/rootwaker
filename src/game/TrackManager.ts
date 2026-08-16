@@ -50,15 +50,15 @@ export class TrackManager {
   }
 
   private buildSegment(baseZ: number, isFirst: boolean): ManagedSegment {
-    const palette = biomeForDistance(this.distance).palette;
-    const seg = createTrackSegment(this.nextSeed++, palette);
+    const biome = biomeForDistance(this.distance);
+    const seg = createTrackSegment(this.nextSeed++, biome.palette);
     seg.group.position.z = baseZ;
     this.group.add(seg.group);
 
     const obstacles: Obstacle[] = [];
     const collectibles: Collectible[] = [];
     const powerUps: PowerUp[] = [];
-    this.populateHazards(seg.group, obstacles, collectibles, powerUps, isFirst);
+    this.populateHazards(seg.group, obstacles, collectibles, powerUps, isFirst, biome.hazardDensity);
 
     return { seg, obstacles, collectibles, powerUps };
   }
@@ -69,8 +69,10 @@ export class TrackManager {
     collectibles: Collectible[],
     powerUps: PowerUp[],
     isFirst: boolean,
+    hazardDensity: number,
   ) {
-    for (let z = -SEGMENT_LENGTH / 2 + 3; z < SEGMENT_LENGTH / 2 - 3; z += HAZARD_SPACING) {
+    const spacing = HAZARD_SPACING / hazardDensity;
+    for (let z = -SEGMENT_LENGTH / 2 + 3; z < SEGMENT_LENGTH / 2 - 3; z += spacing) {
       const roll = Math.random();
       if (!isFirst && roll < 0.42) {
         const lane = Math.floor(Math.random() * LANE_X.length);
@@ -117,8 +119,8 @@ export class TrackManager {
     this.group.remove(m.seg.group);
     disposeGroup(m.seg.group);
 
-    const palette = biomeForDistance(this.distance).palette;
-    const seg = createTrackSegment(this.nextSeed++, palette);
+    const biome = biomeForDistance(this.distance);
+    const seg = createTrackSegment(this.nextSeed++, biome.palette);
     seg.group.position.z = newBaseZ;
     this.group.add(seg.group);
 
@@ -126,7 +128,7 @@ export class TrackManager {
     m.obstacles = [];
     m.collectibles = [];
     m.powerUps = [];
-    this.populateHazards(seg.group, m.obstacles, m.collectibles, m.powerUps, false);
+    this.populateHazards(seg.group, m.obstacles, m.collectibles, m.powerUps, false, biome.hazardDensity);
   }
 
   update(time: number, delta: number, speed: number, distance: number) {
@@ -200,7 +202,7 @@ export class TrackManager {
       m.obstacles = [];
       m.collectibles = [];
       m.powerUps = [];
-      this.populateHazards(seg.group, m.obstacles, m.collectibles, m.powerUps, i === 0);
+      this.populateHazards(seg.group, m.obstacles, m.collectibles, m.powerUps, i === 0, 1);
     }
   }
 }

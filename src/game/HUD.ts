@@ -18,9 +18,9 @@ export class HUD {
         <div class="rw-stat rw-buff" style="display:none"><span class="rw-buff-label"></span> <span class="rw-buff-time"></span>s</div>
       </div>
       <div class="rw-overlay">
-        <div class="rw-overlay-title">The forest claims you</div>
+        <div class="rw-overlay-title">Rootwaker</div>
         <div class="rw-overlay-stats"></div>
-        <div class="rw-overlay-hint">press space / tap to run again</div>
+        <div class="rw-overlay-hint">press space / tap to run</div>
       </div>
     `;
     container.appendChild(this.root);
@@ -79,6 +79,12 @@ export class HUD {
   showGameOver(distance: number, motes: number) {
     this.overlayTitle.textContent = 'The forest claims you';
     this.overlayStats.textContent = `${Math.floor(distance)}m run — ${motes} light-motes gathered`;
+    this.overlay.classList.add('rw-visible');
+  }
+
+  showStart() {
+    this.overlayTitle.textContent = 'Rootwaker';
+    this.overlayStats.textContent = 'a fox-spirit courier, a forest waking behind every step';
     this.overlay.classList.add('rw-visible');
   }
 

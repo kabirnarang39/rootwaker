@@ -8,10 +8,12 @@ import { TrackManager } from './TrackManager';
 import { Input } from './Input';
 import { HUD } from './HUD';
 import { WakeTrail } from './WakeTrail';
+import { Bursts } from './Bursts';
+import { AudioFX } from './Audio';
 import { biomeForDistance } from './biomes';
 import { BASE_SPEED, MAX_SPEED, PLAYER_Z, SPEED_RAMP_PER_METER } from './constants';
 
-type GameStatus = 'running' | 'dead';
+type GameStatus = 'idle' | 'running' | 'dead';
 
 export class Game {
   private scene = new THREE.Scene();
@@ -23,14 +25,18 @@ export class Game {
   private player = new Player();
   private track = new TrackManager();
   private wake = new WakeTrail();
+  private bursts = new Bursts();
+  private audio = new AudioFX();
   private input: Input;
   private hud: HUD;
 
-  private status: GameStatus = 'running';
+  private status: GameStatus = 'idle';
   private speed = BASE_SPEED;
   private distance = 0;
   private motes = 0;
   private currentBiomeName = '';
+  private shakeTime = 0;
+  private shakeMagnitude = 0;
 
   constructor(container: HTMLElement) {
     this.scene.background = new THREE.Color(0x030509);
@@ -51,6 +57,7 @@ export class Game {
     this.scene.add(this.player.group);
     this.scene.add(this.track.group);
     this.scene.add(this.wake.group);
+    this.scene.add(this.bursts.group);
 
     this.composer = new EffectComposer(this.renderer);
     this.composer.addPass(new RenderPass(this.scene, this.camera));
@@ -65,19 +72,33 @@ export class Game {
 
     this.input = new Input(this.renderer.domElement);
     this.input.onAction((action) => {
+      if (this.status === 'idle') {
+        this.beginRun();
+        return;
+      }
       if (this.status === 'dead') return;
       this.player.handleAction(action);
     });
     window.addEventListener('keydown', (e) => {
-      if (this.status === 'dead' && (e.code === 'Space' || e.code === 'Enter')) this.restart();
+      if (e.code !== 'Space' && e.code !== 'Enter') return;
+      if (this.status === 'idle') this.beginRun();
+      else if (this.status === 'dead') this.restart();
     });
     this.renderer.domElement.addEventListener('touchstart', () => {
-      if (this.status === 'dead') this.restart();
+      if (this.status === 'idle') this.beginRun();
+      else if (this.status === 'dead') this.restart();
     });
 
     this.hud = new HUD(container);
+    this.hud.showStart();
 
     window.addEventListener('resize', this.onResize);
+  }
+
+  private beginRun() {
+    this.audio.unlock();
+    this.status = 'running';
+    this.hud.hideGameOver();
   }
 
   private setupLights() {
@@ -109,11 +130,13 @@ export class Game {
     this.player.reset();
     this.track.reset();
     this.wake.reset();
+    this.bursts.reset();
     this.speed = BASE_SPEED;
     this.distance = 0;
     this.motes = 0;
     this.status = 'running';
     this.currentBiomeName = '';
+    this.shakeTime = 0;
     this.hud.hideGameOver();
   }
 
@@ -132,23 +155,37 @@ export class Game {
       this.player.update(time, delta);
       this.track.update(time, delta, this.speed, this.distance);
       this.wake.update(delta, this.speed, this.player.group.position.x);
+      this.bursts.update(delta, this.speed * delta);
 
       const magnetActive = this.player.isMagnetActive(time);
       const result = this.track.checkCollisions(this.player.getCollisionState(), magnetActive);
-      if (result.motesCollected > 0) this.motes += result.motesCollected;
-      for (const type of result.powerUpsCollected) this.player.applyPowerUp(type, time);
+      if (result.motesCollected > 0) {
+        this.motes += result.motesCollected;
+        this.bursts.spawn(this.player.group.position.x, 0.9, PLAYER_Z, biomeForDistance(this.distance).palette.moteGlow);
+        this.audio.playCollect();
+      }
+      for (const type of result.powerUpsCollected) {
+        this.player.applyPowerUp(type, time);
+        this.bursts.spawn(this.player.group.position.x, 1, PLAYER_Z, 0xc98fff);
+        this.audio.playPowerUp();
+      }
       if (result.hitObstacle && !this.player.isInvulnerable(time)) {
         this.status = 'dead';
         this.player.alive = false;
         this.hud.showGameOver(this.distance, this.motes);
+        this.audio.playHit();
+        this.shakeTime = 0.4;
+        this.shakeMagnitude = 0.35;
       }
       this.hud.update(this.distance, this.motes);
       this.hud.setBuff(this.player.remainingBuffTime(time));
 
       const biome = biomeForDistance(this.distance);
       if (biome.name !== this.currentBiomeName) {
+        const isFirstBiome = this.currentBiomeName === '';
         this.currentBiomeName = biome.name;
         this.wake.setColor(biome.palette.moteGlow);
+        if (!isFirstBiome) this.audio.playBiomeShift();
       }
       const targetFog = new THREE.Color(biome.fogColor);
       const targetBg = new THREE.Color(biome.bgColor);
@@ -159,7 +196,16 @@ export class Game {
     const camTargetX = this.player.group.position.x * 0.6;
     this.camera.position.x = THREE.MathUtils.lerp(this.camera.position.x, camTargetX, 0.08);
     this.camera.position.y = 2.2 + Math.sin(time * 0.9) * 0.03;
-    this.camera.lookAt(camTargetX * 0.4, 0.9, PLAYER_Z - 6);
+
+    let shakeX = 0;
+    let shakeY = 0;
+    if (this.shakeTime > 0) {
+      this.shakeTime = Math.max(0, this.shakeTime - delta);
+      const strength = this.shakeMagnitude * (this.shakeTime / 0.4);
+      shakeX = (Math.random() - 0.5) * strength;
+      shakeY = (Math.random() - 0.5) * strength;
+    }
+    this.camera.lookAt(camTargetX * 0.4 + shakeX, 0.9 + shakeY, PLAYER_Z - 6);
 
     this.composer.render();
     requestAnimationFrame(this.animate);
