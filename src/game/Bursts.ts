@@ -15,7 +15,7 @@ export class Bursts {
   private items: Burst[] = [];
 
   spawn(x: number, y: number, z: number, color: number) {
-    const mat = createGlowMaterial({ color, rimColor: 0xffffff, intensity: 1.8, fresnelPower: 1, pulseSpeed: 0 });
+    const mat = createGlowMaterial({ color, rimColor: 0xffffff, intensity: 0.8, fresnelPower: 2, pulseSpeed: 0 });
     const mesh = new THREE.Mesh(new THREE.IcosahedronGeometry(0.14, 1), mat);
     mesh.position.set(x, y, z);
     this.group.add(mesh);
@@ -35,7 +35,7 @@ export class Bursts {
         this.items.splice(i, 1);
         continue;
       }
-      const scale = 1 + t * 3.2;
+      const scale = 1 + t * 2.2;
       b.mesh.scale.setScalar(scale);
       b.mat.opacity = 1 - t;
     }
