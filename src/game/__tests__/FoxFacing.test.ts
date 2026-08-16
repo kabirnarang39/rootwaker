@@ -24,4 +24,14 @@ describe('computeFacingAngle', () => {
     expect(angle).toBeGreaterThan(-0.5);
     expect(angle).toBeLessThan(0.2);
   });
+
+  it('wraps correctly across the +PI/-PI seam: a near-+PI angle turning toward a near--PI target takes the short ~0.24rad hop, not a ~6rad spin', () => {
+    let angle = 3.0; // near +PI
+    const targetAngle = Math.atan2(-0.1, -1); // ≈ -3.0419, near -PI
+    for (let i = 0; i < 120; i++) angle = computeFacingAngle(-0.1, -1, angle, 1 / 60);
+    // shortest path crosses the seam upward: converges to targetAngle + 2*PI (same physical facing), not targetAngle itself
+    expect(angle).toBeCloseTo(targetAngle + Math.PI * 2, 1);
+    // total movement from the start must be small (short way), not the ~6.04 rad the long way around would require
+    expect(Math.abs(angle - 3.0)).toBeLessThan(1);
+  });
 });
