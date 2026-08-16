@@ -57,11 +57,27 @@ export function sampleClip(clip: Clip, time: number): Map<JointName, Sample> {
         break;
       }
     }
+    // Clamp to boundary keyframes instead of extrapolating
+    if (t < frames[0].time) {
+      prev = frames[0];
+      next = frames[0];
+    } else if (t > frames[frames.length - 1].time) {
+      prev = frames[frames.length - 1];
+      next = frames[frames.length - 1];
+    }
     const span = next.time - prev.time;
     const localT = span === 0 ? 0 : clip.ease((t - prev.time) / span);
     const sample: Sample = {};
-    if (prev.rotation && next.rotation) sample.rotation = lerpTuple(prev.rotation, next.rotation, localT);
-    if (prev.position && next.position) sample.position = lerpTuple(prev.position, next.position, localT);
+    if (prev.rotation && next.rotation) {
+      sample.rotation = lerpTuple(prev.rotation, next.rotation, localT);
+    } else if (prev.rotation || next.rotation) {
+      sample.rotation = prev.rotation ?? next.rotation;
+    }
+    if (prev.position && next.position) {
+      sample.position = lerpTuple(prev.position, next.position, localT);
+    } else if (prev.position || next.position) {
+      sample.position = prev.position ?? next.position;
+    }
     result.set(joint, sample);
   }
   return result;
