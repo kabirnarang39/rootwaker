@@ -18,12 +18,17 @@ const PITCH_MAX = 0.9;
 
 const HAWK_EYE_HEIGHT = 9;
 const HAWK_EYE_HORIZONTAL = 2.5; // slight horizontal offset so it isn't a dead-vertical top-down view
-// Measured directly against createFox.ts's real rig: the head joint sits at local (0, 0.23, 0.45)
-// and the snout tip reaches z~0.88 ahead of the root. FOX_EYE_HEIGHT/FORWARD_NUDGE must clear
-// both, or the first-person view sits inside the fox's own head/snout geometry.
-const FOX_EYE_HEIGHT = 0.3; // meters above the target, at fox eye/head height
-const FOX_EYE_FORWARD_NUDGE = 0.95; // meters forward of the target, clearing the snout tip (~0.88m)
-const FOX_SNOUT_TIP_Z = 0.88; // meters — the real measured clearance boundary the nudge above must exceed
+// Measured directly against createFox.ts's real rig (root-relative world bounding boxes of every
+// mesh, not local joint offsets, which the spine's own +0.55 offset would otherwise silently
+// throw off): the eye spheres sit at y 0.785-0.855, the forwardmost mesh (the snout tip) reaches
+// z=0.880, and the head-shell/ear cones extend up to y=1.197. Height 0.82 sits at true eye level,
+// clear of the ears above it; forward nudge 1.0 clears the snout tip with a real ~0.12m margin
+// (measured via a nearest-mesh-distance probe, not just the single snout-tip figure) — placing
+// the eye just past the fox's own face, matching the common FPS convention of keeping the whole
+// head model out of the first-person frustum entirely rather than trying to sit inside it.
+const FOX_EYE_HEIGHT = 0.82;
+const FOX_EYE_FORWARD_NUDGE = 1.0;
+const FOX_EYE_LOOK_YAW_RANGE = 1.2; // radians either side of straight-ahead — a fox can glance, not spin its head
 
 const raycaster = new THREE.Raycaster();
 
@@ -38,6 +43,11 @@ export class CameraRig {
   private _orbitYaw = 0;
   private _orbitPitch = 0;
   private _viewMode: ViewMode = 'follow';
+  // orbitYaw is a shared, unbounded accumulator with follow/closeUp/hawkEye — entering foxEye
+  // with whatever yaw happened to be dragged up in another mode would otherwise point the
+  // first-person view at the fox's own body. Recording the yaw at entry and only applying the
+  // (clamped) DELTA since then keeps foxEye's look always starting straight ahead.
+  private _foxEyeYawBase = 0;
 
   constructor() {
     // ponytail: default 16:9 aspect ratio in tests; window.innerWidth/Height in production
@@ -61,6 +71,7 @@ export class CameraRig {
   cycleViewMode(): void {
     const currentIndex = VIEW_MODE_ORDER.indexOf(this._viewMode);
     this._viewMode = VIEW_MODE_ORDER[(currentIndex + 1) % VIEW_MODE_ORDER.length];
+    if (this._viewMode === 'foxEye') this._foxEyeYawBase = this._orbitYaw;
   }
 
   private orbitedOffset(mode: LocomotionMode): THREE.Vector3 {
@@ -137,17 +148,27 @@ export class CameraRig {
       // so dragging while in first-person visibly turns the view instead of silently doing
       // nothing (which previously left CameraRelativeMove's movement transform decoupled from
       // what the player could see).
-      const eyePosition = targetPosition
+      const desiredEye = targetPosition
         .clone()
         .add(new THREE.Vector3(0, FOX_EYE_HEIGHT, 0))
         .add(new THREE.Vector3(Math.sin(facing) * FOX_EYE_FORWARD_NUDGE, 0, Math.cos(facing) * FOX_EYE_FORWARD_NUDGE));
-      void FOX_SNOUT_TIP_Z; // documents the real measured clearance boundary FOX_EYE_FORWARD_NUDGE must exceed; enforced by CameraRig.viewmodes.test.ts
+      // The forward nudge (1.0m) exceeds the player's own collision radius (0.35m), so without
+      // this the eye point could end up past a tree trunk or wall the fox's body is still
+      // blocked by. Reuses the same raycast-clamp obstacle avoidance as every other view mode.
+      const eyePosition = this.clampAgainstObstacles(targetPosition, desiredEye, obstacles);
       this.camera.position.copy(eyePosition);
 
-      const lookAngle = facing + this._orbitYaw;
+      // orbitYaw is shared, unbounded state — only the (clamped) delta since foxEye was
+      // entered is applied, so first-person look always starts straight ahead regardless of
+      // whatever yaw was accumulated in another mode.
+      const yawOffset = THREE.MathUtils.clamp(this._orbitYaw - this._foxEyeYawBase, -FOX_EYE_LOOK_YAW_RANGE, FOX_EYE_LOOK_YAW_RANGE);
+      const lookAngle = facing + yawOffset;
+      // Sign matches the orbit path's convention (positive pitch -> camera rises -> lookAt tilts
+      // DOWN): dragging the mouse down must look down in first-person the same way it does in
+      // third-person, not the opposite.
       const lookDir = new THREE.Vector3(
         Math.cos(this._orbitPitch) * Math.sin(lookAngle),
-        Math.sin(this._orbitPitch),
+        -Math.sin(this._orbitPitch),
         Math.cos(this._orbitPitch) * Math.cos(lookAngle),
       );
       this.camera.lookAt(eyePosition.clone().add(lookDir));

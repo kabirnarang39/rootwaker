@@ -28,9 +28,9 @@ export interface JungleLevel {
   boars: TuskBoar[];
   obstacleGrid: TreeObstacleGrid;
   foliageMeshes: THREE.InstancedMesh[];
-  // Wall/ledge/gate/guard meshes the camera should also raycast against (e.g. the hawk-eye
-  // view being blocked by an overhanging mountain ledge) — separate from foliageMeshes since
-  // callers may want to treat solid mountain geometry differently from foliage.
+  // Static wall/ledge/gate meshes (real Meshes, Groups pre-flattened) the camera should also
+  // raycast against — e.g. the hawk-eye view being blocked by an overhanging mountain ledge.
+  // Deliberately excludes guards: see buildMountain's climbMeshes comment for why.
   climbObstacleMeshes: THREE.Object3D[];
   mountain: {
     segments: ClimbSegment[];
@@ -360,11 +360,18 @@ function buildMountain(
   startY: number,
 ): {
   meshes: THREE.Object3D[];
+  // Static-only subset of `meshes` (walls/ledges/gate, no guards) with the gate's Group
+  // flattened into its real child Meshes — for camera-obstacle raycasting, which is
+  // non-recursive and needs real Mesh objects, not Groups. Guards are deliberately excluded:
+  // they're removed from the scene on defeat but this list is a one-time snapshot, so a
+  // defeated guard would otherwise block camera sightlines forever at its last position.
+  climbMeshes: THREE.Object3D[];
   segments: ClimbSegment[];
   guards: MountainGuard[];
   summitGate: THREE.Vector3;
 } {
   const meshes: THREE.Object3D[] = [];
+  const climbMeshes: THREE.Object3D[] = [];
   const segments: ClimbSegment[] = [];
   const segmentHeight = 6;
   const wallZWidth = 6;
@@ -373,24 +380,30 @@ function buildMountain(
   // Segment 1: single path directly above the phase-1 wall's dismount point.
   const seg1 = buildClimbSegment(wallX, baseZ, startY, wallZWidth, segmentHeight);
   meshes.push(seg1.mesh);
+  climbMeshes.push(seg1.mesh);
   const ledge1 = buildLedge(wallX, seg1.wall.topY, baseZ, 8, 4);
   meshes.push(ledge1.mesh);
+  climbMeshes.push(ledge1.mesh);
   segments.push({ wall: seg1.wall, ledgePosition: ledge1.position });
 
   // Segment 2: branches into two parallel paths that both lead to ledge 2.
   const seg2a = buildClimbSegment(wallX - branchOffset, baseZ, ledge1.position.y, wallZWidth, segmentHeight);
   const seg2b = buildClimbSegment(wallX + branchOffset, baseZ, ledge1.position.y, wallZWidth, segmentHeight);
   meshes.push(seg2a.mesh, seg2b.mesh);
+  climbMeshes.push(seg2a.mesh, seg2b.mesh);
   const ledge2 = buildLedge(wallX, seg2a.wall.topY, baseZ, 8, 4);
   meshes.push(ledge2.mesh);
+  climbMeshes.push(ledge2.mesh);
   segments.push({ wall: seg2a.wall, ledgePosition: ledge2.position });
   segments.push({ wall: seg2b.wall, ledgePosition: ledge2.position });
 
   // Segment 3: single path to the summit.
   const seg3 = buildClimbSegment(wallX, baseZ, ledge2.position.y, wallZWidth, segmentHeight);
   meshes.push(seg3.mesh);
+  climbMeshes.push(seg3.mesh);
   const ledge3 = buildLedge(wallX, seg3.wall.topY, baseZ, 6, 4);
   meshes.push(ledge3.mesh);
+  climbMeshes.push(ledge3.mesh);
   segments.push({ wall: seg3.wall, ledgePosition: ledge3.position });
 
   const guard2 = createMountainGuard();
@@ -402,9 +415,11 @@ function buildMountain(
   meshes.push(guard2.group, guard3.group);
 
   const summitGate = ledge3.position.clone();
-  meshes.push(buildSummitGate(summitGate));
+  const summitGateGroup = buildSummitGate(summitGate);
+  meshes.push(summitGateGroup);
+  climbMeshes.push(...summitGateGroup.children);
 
-  return { meshes, segments, guards, summitGate };
+  return { meshes, climbMeshes, segments, guards, summitGate };
 }
 
 function buildWater(): { mesh: THREE.Mesh; water: WaterBody } {
@@ -500,7 +515,7 @@ export function createJungleLevel(): JungleLevel {
     boars,
     obstacleGrid,
     foliageMeshes,
-    climbObstacleMeshes: [wallMesh, ...mountain.meshes],
+    climbObstacleMeshes: [wallMesh, ...mountain.climbMeshes],
     mountain: { segments: mountain.segments, guards: mountain.guards, summitGate: mountain.summitGate },
     update: updateFoliage,
   };
