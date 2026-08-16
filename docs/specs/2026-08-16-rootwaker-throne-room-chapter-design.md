@@ -1,0 +1,49 @@
+# Rootwaker — "The Throne Room" Boss-Fight & Village-Trust Chapter Design
+
+**Date**: 2026-08-16
+**Status**: Draft — building autonomously per standing loop directive, no user review gate this cycle
+**Supersedes**: nothing structural — closes the arc the mountain-ascent chapter deliberately left open (`docs/specs/2026-08-16-rootwaker-mountain-ascent-chapter-design.md`: "The boss fight ('king of the mountain') and the village-trust story payoff — next chapter, not designed here.")
+**Scope**: reaching the throne room, defeating the King of the Mountain, and the immediate village-trust payoff beat. This is arc 1's climax in the larger One-Piece-style saga structure (jungle → mountain → **this chapter** → future arcs) — not the game's final boss, and not a full playable village hub.
+
+## Why this chapter, why this scope
+
+The mountain-ascent chapter proved real climbing risk (stamina, hazards, guard encounters) and ended at a summit gate that exists today only as decoration — no gameplay trigger fires when the player reaches it. This chapter both closes that gap and builds the payoff the whole mountain arc has been pointing toward since the hunting chapter's worldbuilding note: "guards of the kingdom" (shipped as `mountainGuard`) implies a real chain of command with a ruler at the top.
+
+Scoped narrowly, matching every prior chapter's discipline:
+1. **The boss fight is a real, non-trivial system.** Every enemy shipped so far (root-wraith, tusk-boar, mountain-guard) reuses `EnemyAI`'s single-attack telegraph pattern unmodified. A chapter-climax boss needs to feel meaningfully bigger than a reused guard — that means a phase escalation, not just a bigger health number on the same pattern.
+2. **The village-trust payoff is a beat, not a hub.** The saga vision names future arcs beyond this one ("first boss then ultimate... theme like [One Piece] in a jungle"), so this chapter delivers the immediate "you did it, the village welcomes you" moment and stops — a playable village hub, NPC quest systems, or the next arc's content are explicitly future chapters' jobs, exactly as the mountain-ascent doc deferred this chapter's own existence.
+
+## What this chapter adds
+
+- **A summit-gate arrival trigger.** The `summitGate` position already exists in `JungleLevel.mountain` (built by `buildSummitGate`) but nothing in `Game.ts` currently checks proximity to it. This chapter wires a real trigger: crossing the gate transitions the HUD objective, plays a brief camera-held "arrival" beat (reusing the existing `follow`-mode camera, no new camera mode needed), and spawns the boss encounter.
+- **The throne room.** A new, small arena space beyond the summit gate — bounded (not the open 40m jungle chapter bounds), stone-floored, matching the mountain's established cold palette (`docs/specs/2026-08-16-rootwaker-mountain-ascent-chapter-design.md`'s "thinner, colder-toned lighting/fog"), with the King positioned at its far end so the player has genuine approach distance before the fight starts (an intentional beat, not an instant ambush).
+- **The King of the Mountain — a real boss, not a reskinned guard.** Visually distinct from `mountainGuard` (larger scale, crowned/regal silhouette detail — same stone/armored material family so it reads as the guards' ruler, not an unrelated creature) via a new `createMountainKing.ts`, same procedural `Rig`+`Clip` system every creature uses, no skeleton/GLTF. Mechanically: reuses `EnemyAI`'s proven telegraph/combat state machine as the base (do not modify `EnemyAI.ts` — every prior enemy has relied on it unmodified, and a boss-specific patch there would risk regressing 3 existing enemies), wrapped in a new, boss-only `BossPhaseController` that swaps attack parameters on an HP threshold:
+  - **Phase 1 (100%→50% HP):** a single heavy melee attack, telegraph/timing on par with `mountainGuard`'s existing pattern (players who beat the guards already know how to read this).
+  - **Phase 2 (≤50% HP):** enraged — the existing melee attack's telegraph window shortens (harder to react, real difficulty escalation, not just more HP), and a second, ranged hazard becomes available: a telegraphed ground-slam shockwave (visually/audibly telegraphed the same "fair warning" way `WindGust` already is, reusing that hazard's telegraph-then-effect shape rather than inventing a new one) that punishes standing still, pushing the player to stay mobile.
+  - Higher stakes than any prior enemy: `hp: 220` (roughly 3.4x `mountainGuard`'s 65 — a real boss-length fight, not a slightly-bigger skirmish), phase-1 damage matching `GUARD_HIT_DAMAGE` (12, familiar), phase-2 damage using the already-defined but currently-unused `SPIRIT_BITE.damage` (18) — a deliberate reuse of an existing data value over inventing a new one.
+  - **No stealth bypass.** The mountain-ascent chapter's guards could be avoided via the stealth/detection system — the King cannot; this is the chapter's climax fight, not an optional encounter. Stated explicitly so it reads as a design choice, not a missing feature.
+- **A boss health bar in the HUD.** Every enemy so far has been invisible in the HUD (only the player's own vitality/stamina show). The King gets a real, dedicated bar — matching the established glow-panel visual language but in a new accent (molten/ember tone, distinct from the player's `--myth-cyan`/`--spirit-amber` identity tokens, since this bar represents the antagonist, not the player) — visible only while the encounter is active, styled with the same carved-bark plaque geometry as every other HUD panel.
+- **Victory beat.** On the King's defeat: a real death sequence (not an instant despawn — matching the fairness/weight every other defeat in this project has had), then the throne room's far wall/gate opens to reveal the village beyond — a small, non-playable tableau (a handful of simple low-poly villager figures, warm lighting distinct from the mountain's cold palette, a real ambient-sound layer shift extending `AudioFX`'s established layered-ambience pattern) with a clear HUD beat marking arc 1 as complete. This is the payoff; it is deliberately not a new playable area.
+- **Fair defeat handling.** If the player is defeated by the King, reuse the existing silent-checkpoint-respawn pattern every other enemy defeat already uses (`Game.ts`'s `this.checkpoint`, no game-over screen — `HUD.showGameOver`/`showStart` are pre-pivot leftovers from the old endless-runner, never called in the current game, and this chapter does not resurrect them) — update `this.checkpoint` to just before the summit gate once the player crosses it, so a defeat during the fight respawns at the throne room's threshold, not back at the base of the mountain.
+
+## What stays exactly as built
+
+- `EnemyAI`'s telegraph/combat state machine — reused unmodified as the King's phase-1 AND phase-2 base loop; only the parameters (telegraph duration, attack set) swap between phases, via a new wrapper, never a fork of `EnemyAI.ts` itself.
+- `Combat.ts`'s `Combatant`/`Move`/`resolveMeleeHit`/`applyDamage`/`isDefeated` shapes — reused directly, including the already-defined `SPIRIT_BITE` move (finally put to use).
+- The procedural `Rig`+`Clip` animation system — `createMountainKing.ts` follows the exact same pattern as every prior creature file.
+- `WindGust`'s telegraph-then-effect hazard shape — reused as the template for the phase-2 ground-slam, not a new hazard pattern invented from scratch.
+- `AudioFX`'s synthesized, no-external-files sound identity — extended with a throne-room/village ambience layer, not replaced.
+- `HUD`'s carved-bark-plaque glow-panel visual language — extended with a boss health bar and an arc-complete beat, matching every prior HUD addition's design discipline (no ad-hoc styling).
+- The silent checkpoint-respawn pattern (`Game.ts`'s `this.checkpoint`) — reused directly for the King's defeat-of-player case, updated to the summit gate once crossed, exactly like every other enemy encounter's defeat handling.
+
+## Explicitly out of scope for this chapter
+
+- **A playable village hub.** The village-trust payoff is a tableau beat, not a new area with its own systems, NPCs to interact with, or quests — that is real future-arc content, not this chapter's job.
+- **A new fox ability.** The mountain-ascent doc left this open as a "build-time decision." Deciding now: no new ability from this chapter — every ability shipped so far has been tied to a *hunted animal*, a different unlock philosophy than "defeated a boss." Introducing a new unlock rule alongside a boss fight is more scope than this chapter needs; revisit only if a future chapter's design calls for it.
+- **Any further story arc beyond the immediate payoff beat.** The saga vision explicitly names "first boss then ultimate" as separate future beats — this chapter delivers arc 1's climax and stops.
+- **The full weather/mood system** (rain, storm clouds, dynamic time-of-day) — still deferred, same as every prior chapter.
+- **A third boss phase.** Two phases (calm → enraged) is enough to prove the phase-escalation pattern works and reads as a real difficulty curve; a third phase is tuning depth this chapter doesn't need to prove the concept.
+
+## Success criteria
+
+A player who has climbed the mountain and reaches the summit gate should feel a real, deliberate shift — "the actual fight is about to start," not just another guard. The King should be recognizably tougher and smarter-feeling than a `mountainGuard` even before phase 2 kicks in (via the approach distance and boss-bar alone), and phase 2's enraged shift should be a legible, felt escalation (faster telegraph, a new hazard type) rather than a stat bump the player can't perceive. Defeating him and seeing the village revealed should read as a genuine "you finished something," distinct from any prior chapter's ending, even though it's explicitly not the end of the game.

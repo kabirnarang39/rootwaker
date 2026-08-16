@@ -48,4 +48,30 @@ describe('createJungleLevel', () => {
     expect(level.throneRoom.gateOpen).toBe(true);
     expect(firstVillager.visible).toBe(true);
   });
+
+  it('the throne room floor does not overlap the summit ledge it sits beyond (regression: a circular floor previously bulged sideways and overlapped the ledge\'s footprint)', () => {
+    const level = createJungleLevel();
+    // ledge3 (== the summit gate's own platform, from buildMountain's buildLedge call) is a
+    // 4m-deep slab CENTERED on summitGate.z, so its far edge sits at summitGate.z + 2 — the
+    // throne-room floor's near edge must start at or beyond that, with no overlap.
+    const ledgeFarZ = level.mountain.summitGate.z + 2;
+    // Box2's second axis holds world z (same convention as ClimbableWall.bounds elsewhere in
+    // this file — Box2 only has x/y, so world z is stored in .y).
+    expect(level.throneRoom.bounds.min.y).toBeGreaterThan(ledgeFarZ);
+  });
+
+  it('every village figure and the king spawn fall within the throne-room floor\'s bounds (regression: a circular floor previously left the farthest villager outside its own radius)', () => {
+    const level = createJungleLevel();
+    const { bounds, kingSpawn, villageMeshes } = level.throneRoom;
+    expect(kingSpawn.x).toBeGreaterThanOrEqual(bounds.min.x);
+    expect(kingSpawn.x).toBeLessThanOrEqual(bounds.max.x);
+    expect(kingSpawn.z).toBeGreaterThanOrEqual(bounds.min.y);
+    expect(kingSpawn.z).toBeLessThanOrEqual(bounds.max.y);
+    for (const villager of villageMeshes) {
+      expect(villager.position.x).toBeGreaterThanOrEqual(bounds.min.x);
+      expect(villager.position.x).toBeLessThanOrEqual(bounds.max.x);
+      expect(villager.position.z).toBeGreaterThanOrEqual(bounds.min.y);
+      expect(villager.position.z).toBeLessThanOrEqual(bounds.max.y);
+    }
+  });
 });

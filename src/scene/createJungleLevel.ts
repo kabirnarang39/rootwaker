@@ -463,19 +463,29 @@ function buildVillager(position: THREE.Vector3): THREE.Group {
 // opens) the village tableau — the payoff for climbing the mountain. Follows buildMountain's
 // {meshes, ...state} return shape so the call site adds meshes the same way.
 function buildThroneRoom(summitGate: THREE.Vector3): { meshes: THREE.Object3D[]; throneRoom: ThroneRoom } {
-  const arenaRadius = 6; // ~12m across
-  const arenaCenterZ = summitGate.z + 6;
+  // Rectangular floor (matching every other flat surface in this file — buildLedge etc. — rather
+  // than a circle, whose curvature would bulge sideways past its own bounding box and overlap
+  // neighboring geometry unpredictably). ledge3 (== summitGate's own platform, built by
+  // buildMountain) is a 6-wide x 4-deep slab CENTERED on summitGate, so its far edge sits at
+  // summitGate.z + 2 — the floor's near edge starts a full meter past that, never overlapping it.
+  const FLOOR_NEAR_Z_OFFSET = 3; // clears ledge3's far edge (summitGate.z + 2) with a 1m margin
+  const FLOOR_FAR_Z_OFFSET = 24; // covers past the farthest villager (summitGate.z + 20) with a 4m margin
+  const FLOOR_HALF_WIDTH = 8; // comfortably covers the king (x=0) and every villager (max |x offset| 1.6)
 
-  const floorGeo = new THREE.CircleGeometry(arenaRadius, 24);
-  floorGeo.rotateX(-Math.PI / 2);
+  const floorNearZ = summitGate.z + FLOOR_NEAR_Z_OFFSET;
+  const floorFarZ = summitGate.z + FLOOR_FAR_Z_OFFSET;
+  const floorDepth = floorFarZ - floorNearZ;
+  const floorCenterZ = (floorNearZ + floorFarZ) / 2;
+
+  const floorGeo = new THREE.BoxGeometry(FLOOR_HALF_WIDTH * 2, 0.3, floorDepth);
   const floorMat = new THREE.MeshStandardMaterial({ color: THRONE_FLOOR_COLOR, roughness: 1, flatShading: true });
   const floorMesh = new THREE.Mesh(floorGeo, floorMat);
-  floorMesh.position.set(summitGate.x, summitGate.y, arenaCenterZ);
+  floorMesh.position.set(summitGate.x, summitGate.y - 0.15, floorCenterZ);
   floorMesh.receiveShadow = true;
 
   const bounds = new THREE.Box2(
-    new THREE.Vector2(summitGate.x - arenaRadius, arenaCenterZ - arenaRadius),
-    new THREE.Vector2(summitGate.x + arenaRadius, arenaCenterZ + arenaRadius),
+    new THREE.Vector2(summitGate.x - FLOOR_HALF_WIDTH, floorNearZ),
+    new THREE.Vector2(summitGate.x + FLOOR_HALF_WIDTH, floorFarZ),
   );
 
   // Genuine approach distance from the gate before the fight starts.
