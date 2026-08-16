@@ -10,6 +10,7 @@ describe('CameraRig obstacle avoidance', () => {
     // a large box directly between the target and the default grounded camera offset
     const blocker = new THREE.Mesh(new THREE.BoxGeometry(10, 10, 0.5), new THREE.MeshBasicMaterial());
     blocker.position.set(0, 1, 2); // sits between target (z=0) and camera offset (z≈4.2)
+    blocker.updateMatrixWorld(true); // ensure transformation is up-to-date for raycasting
 
     for (let i = 0; i < 30; i++) rig.update(target, 'grounded', 1 / 60, [blocker]);
     const distanceToTarget = rig.camera.position.distanceTo(target);
