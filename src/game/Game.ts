@@ -205,8 +205,15 @@ export class Game {
       );
       hare.update(time, delta, hareDistance, approachSpeed);
       if (hare.ai.state === 'fleeing') {
-        const awayFromDir = hare.position.clone().sub(this.playerController.body.position).normalize();
+        const dx = hare.position.x - this.playerController.body.position.x;
+        const dz = hare.position.z - this.playerController.body.position.z;
+        const horizontalDist = Math.hypot(dx, dz);
+        const awayFromDir =
+          horizontalDist > 1e-6
+            ? new THREE.Vector3(dx / horizontalDist, 0, dz / horizontalDist)
+            : new THREE.Vector3(0, 0, 1);
         hare.fleeStep(delta, awayFromDir);
+        hare.position.y = this.level.groundHeightAt(hare.position.x, hare.position.z);
       }
     }
 
