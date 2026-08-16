@@ -24,4 +24,21 @@ describe('CameraRig obstacle avoidance', () => {
     for (let i = 0; i < 30; i++) rig.update(target, 'grounded', 1 / 60);
     expect(rig.camera.position.y).toBeGreaterThan(target.y);
   });
+
+  it('pulls the camera measurably closer than the unobstructed baseline', () => {
+    const withoutObstacle = new CameraRig();
+    const withObstacle = new CameraRig();
+    const target = new THREE.Vector3(0, 0, 0);
+    const blocker = new THREE.Mesh(new THREE.BoxGeometry(10, 10, 0.5), new THREE.MeshBasicMaterial());
+    blocker.position.set(0, 1, 2);
+    blocker.updateMatrixWorld(true); // ensure transformation is up-to-date for raycasting
+
+    for (let i = 0; i < 30; i++) {
+      withoutObstacle.update(target, 'grounded', 1 / 60);
+      withObstacle.update(target, 'grounded', 1 / 60, [blocker]);
+    }
+    const dNo = withoutObstacle.camera.position.distanceTo(target);
+    const dWith = withObstacle.camera.position.distanceTo(target);
+    expect(dWith).toBeLessThan(dNo - 1.0); // real numeric gap, not an absolute threshold lerp alone can satisfy
+  });
 });
