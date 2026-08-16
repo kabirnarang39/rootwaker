@@ -112,6 +112,15 @@ export function createFox(skin: FoxSkin = SKINS[0]): Fox {
   earR.rotation.z = -0.25;
   rig.getJoint('head').add(earL, earR);
 
+  const earInnerGeo = new THREE.ConeGeometry(0.07, 0.2, 4);
+  const earInnerL = new THREE.Mesh(earInnerGeo, furDark);
+  earInnerL.position.set(-0.16, 0.22, 0.01);
+  earInnerL.rotation.z = 0.25;
+  const earInnerR = earInnerL.clone();
+  earInnerR.position.x = 0.16;
+  earInnerR.rotation.z = -0.25;
+  rig.getJoint('head').add(earInnerL, earInnerR);
+
   for (const side of ['L', 'R'] as const) {
     const forepaw = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.055, 0.48, 5), furDark);
     forepaw.position.y = -0.24;
