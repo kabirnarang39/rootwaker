@@ -4,8 +4,8 @@ import type { WaterBody } from '../game/WaterBody';
 import { createSky } from './createSky';
 import { createGroveHare, type GroveHare } from '../entities/groveHare';
 import { createTuskBoar, type TuskBoar } from '../entities/tuskBoar';
-import { createMountainGuard, type MountainGuard } from '../entities/mountainGuard';
-import { createMountainKing, type MountainKing } from '../entities/createMountainKing';
+import { createGroveBear, type GroveBear } from '../entities/createGroveBear';
+import { createElderBearKing, type ElderBearKing } from '../entities/createElderBearKing';
 import { TreeObstacleGrid, type TreeObstacle } from './TreeObstacleGrid';
 
 export interface ClimbableWall {
@@ -22,7 +22,7 @@ export interface ClimbSegment {
 export interface ThroneRoom {
   bounds: THREE.Box2; // arena floor's x/z extent
   kingSpawn: THREE.Vector3;
-  king: MountainKing;
+  king: ElderBearKing;
   villageMeshes: THREE.Object3D[];
   gateOpen: boolean;
   openGate(): void;
@@ -36,15 +36,14 @@ export interface JungleLevel {
   chapterBounds: THREE.Box3;
   hares: GroveHare[];
   boars: TuskBoar[];
+  bears: GroveBear[];
   obstacleGrid: TreeObstacleGrid;
   foliageMeshes: THREE.InstancedMesh[];
   // Static wall/ledge/gate meshes (real Meshes, Groups pre-flattened) the camera should also
   // raycast against — e.g. the hawk-eye view being blocked by an overhanging mountain ledge.
-  // Deliberately excludes guards: see buildMountain's climbMeshes comment for why.
   climbObstacleMeshes: THREE.Object3D[];
   mountain: {
     segments: ClimbSegment[];
-    guards: MountainGuard[];
     summitGate: THREE.Vector3;
   };
   throneRoom: ThroneRoom;
@@ -363,22 +362,20 @@ function buildSummitGate(position: THREE.Vector3): THREE.Group {
 
 // Three linked climb segments stacked above the phase-1 wall's dismount point. Segment 2
 // branches into two parallel paths (different x offsets) that both feed into ledge 2 —
-// the design's required real branch. Guards stand on ledge 2 and ledge 3; ledge 1 stays
-// hazard-free so the player learns the stamina mechanic first.
+// the design's required real branch. Every ledge is hazard-free beyond stamina — the real
+// combat challenge lives in the jungle (Grove Bears) and the throne room (Elder Bear King),
+// so the player can rest at any ledge while learning the stamina mechanic.
 function buildMountain(
   wallX: number,
   baseZ: number,
   startY: number,
 ): {
   meshes: THREE.Object3D[];
-  // Static-only subset of `meshes` (walls/ledges/gate, no guards) with the gate's Group
-  // flattened into its real child Meshes — for camera-obstacle raycasting, which is
-  // non-recursive and needs real Mesh objects, not Groups. Guards are deliberately excluded:
-  // they're removed from the scene on defeat but this list is a one-time snapshot, so a
-  // defeated guard would otherwise block camera sightlines forever at its last position.
+  // Static-only subset of `meshes` (walls/ledges/gate) with the gate's Group flattened into
+  // its real child Meshes — for camera-obstacle raycasting, which is non-recursive and needs
+  // real Mesh objects, not Groups.
   climbMeshes: THREE.Object3D[];
   segments: ClimbSegment[];
-  guards: MountainGuard[];
   summitGate: THREE.Vector3;
 } {
   const meshes: THREE.Object3D[] = [];
@@ -417,20 +414,12 @@ function buildMountain(
   climbMeshes.push(ledge3.mesh);
   segments.push({ wall: seg3.wall, ledgePosition: ledge3.position });
 
-  const guard2 = createMountainGuard();
-  guard2.group.position.copy(ledge2.position);
-  guard2.group.position.x -= 2.5; // Move off-center, clear of segment 3's wall (x: -12.3 to -11.7)
-  const guard3 = createMountainGuard();
-  guard3.group.position.copy(ledge3.position);
-  const guards = [guard2, guard3];
-  meshes.push(guard2.group, guard3.group);
-
   const summitGate = ledge3.position.clone();
   const summitGateGroup = buildSummitGate(summitGate);
   meshes.push(summitGateGroup);
   climbMeshes.push(...summitGateGroup.children);
 
-  return { meshes, climbMeshes, segments, guards, summitGate };
+  return { meshes, climbMeshes, segments, summitGate };
 }
 
 const THRONE_FLOOR_COLOR = 0x2e2c29; // colder, darker variant of MOUNTAIN_LEDGE_COLOR for the arena floor
@@ -490,7 +479,7 @@ function buildThroneRoom(summitGate: THREE.Vector3): { meshes: THREE.Object3D[];
 
   // Genuine approach distance from the gate before the fight starts.
   const kingSpawn = new THREE.Vector3(summitGate.x, summitGate.y, summitGate.z + 10);
-  const king = createMountainKing();
+  const king = createElderBearKing();
   king.group.position.copy(kingSpawn);
 
   // Beyond the king, only revealed once the gate opens.
@@ -560,14 +549,19 @@ function buildWildlife(
   heightAt: (x: number, z: number) => number,
   water: WaterBody,
   wallBounds: THREE.Box2,
-): { hares: GroveHare[]; boars: TuskBoar[] } {
+): { hares: GroveHare[]; boars: TuskBoar[]; bears: GroveBear[] } {
   const hares = Array.from({ length: 4 }, () => createGroveHare(randomPlaceablePosition(heightAt, water, wallBounds)));
   const boars = Array.from({ length: 2 }, () => {
     const boar = createTuskBoar();
     boar.group.position.copy(randomPlaceablePosition(heightAt, water, wallBounds));
     return boar;
   });
-  return { hares, boars };
+  const bears = Array.from({ length: 2 }, () => {
+    const bear = createGroveBear();
+    bear.group.position.copy(randomPlaceablePosition(heightAt, water, wallBounds));
+    return bear;
+  });
+  return { hares, boars, bears };
 }
 
 export function createJungleLevel(): JungleLevel {
@@ -589,9 +583,10 @@ export function createJungleLevel(): JungleLevel {
   group.add(...foliageMeshes);
   const obstacleGrid = new TreeObstacleGrid(obstacles);
 
-  const { hares, boars } = buildWildlife(heightAt, water, wall.bounds);
+  const { hares, boars, bears } = buildWildlife(heightAt, water, wall.bounds);
   group.add(...hares.map((hare) => hare.group));
   group.add(...boars.map((boar) => boar.group));
+  group.add(...bears.map((bear) => bear.group));
 
   const mountain = buildMountain(-12, 8, wall.topY);
   group.add(...mountain.meshes);
@@ -610,10 +605,11 @@ export function createJungleLevel(): JungleLevel {
     chapterBounds,
     hares,
     boars,
+    bears,
     obstacleGrid,
     foliageMeshes,
     climbObstacleMeshes: [wallMesh, ...mountain.climbMeshes],
-    mountain: { segments: mountain.segments, guards: mountain.guards, summitGate: mountain.summitGate },
+    mountain: { segments: mountain.segments, summitGate: mountain.summitGate },
     throneRoom,
     update: updateFoliage,
   };

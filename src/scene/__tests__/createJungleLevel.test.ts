@@ -26,15 +26,15 @@ describe('createJungleLevel', () => {
     }
   });
 
-  it('climbObstacleMeshes excludes the mountain guards (regression: a defeated guard removed from the scene would otherwise block camera sightlines forever, since this list is a one-time snapshot never kept in sync with guard removal)', () => {
+  it('the mountain no longer has guards (guards relocated into the jungle as Grove Bears; ledges are hazard-free rest points again)', () => {
     const level = createJungleLevel();
-    const guardObjects = new Set<unknown>();
-    for (const guard of level.mountain.guards) {
-      guard.group.traverse((obj) => guardObjects.add(obj));
-    }
-    for (const obj of level.climbObstacleMeshes) {
-      expect(guardObjects.has(obj)).toBe(false);
-    }
+    expect(level.mountain).not.toHaveProperty('guards');
+  });
+
+  it('bears are placed in the jungle (not on the mountain) and the throne-room king is a real animal', () => {
+    const level = createJungleLevel();
+    expect(level.bears.length).toBeGreaterThan(0);
+    expect(level.throneRoom.king.combatant.hp).toBe(220);
   });
 
   it('the throne room sits beyond the summit gate, with the king positioned further still, and the village hidden until openGate() is called', () => {
