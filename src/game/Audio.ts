@@ -203,4 +203,73 @@ export class AudioFX {
     gain.connect(ctx.destination);
     noise.start();
   }
+
+  playGroundSlamTelegraph(): void {
+    // Low rumble build — same filtered-noise shape as playGustHit, but pitched lower with a
+    // slower, ramping attack: a heavier, ground-borne warning rather than an airy gust.
+    if (!this.ctx) return;
+    const ctx = this.ctx;
+    const bufferSize = ctx.sampleRate * 0.7;
+    const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < bufferSize; i++) data[i] = Math.random() * 2 - 1;
+    const noise = ctx.createBufferSource();
+    noise.buffer = buffer;
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.setValueAtTime(120, ctx.currentTime);
+    filter.frequency.linearRampToValueAtTime(400, ctx.currentTime + 0.7);
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0, ctx.currentTime);
+    gain.gain.linearRampToValueAtTime(0.12, ctx.currentTime + 0.7);
+    noise.connect(filter);
+    filter.connect(gain);
+    gain.connect(ctx.destination);
+    noise.start();
+  }
+
+  playGroundSlamImpact(): void {
+    // A short, heavy low-frequency thump — oscillator-driven with a falling pitch and a sharp
+    // attack, reading as "impact" landing right after the telegraph's rumble build.
+    if (!this.ctx) return;
+    const ctx = this.ctx;
+    const osc = ctx.createOscillator();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(60, ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(30, ctx.currentTime + 0.3);
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0.18, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.35);
+  }
+
+  playArcComplete(): void {
+    // A warm, ascending 3-note chime built on the same tone() helper as playAbilityUnlock, but
+    // sine-toned (vs. triangle) and more widely spaced — a distinct "real milestone" cue rather
+    // than a copy of the routine-pickup chime.
+    this.tone(392, 0.6, 'sine', 0.08); // G4
+    this.tone(494, 0.6, 'sine', 0.08, 0.15); // B4
+    this.tone(587, 0.7, 'sine', 0.08, 0.3); // D5
+  }
+
+  startVillageAmbience(): void {
+    // A single warm, sustained drone — deliberately sparser than startJungleAmbience's
+    // multi-layer canopy/floor/bird/water soundscape or startMountainWind's noise gusts: this is
+    // a resolution beat, not an explorable environment, so one gentle harmonic layer is enough to
+    // signal safety/warmth without competing with the arc-complete chime.
+    if (!this.ctx) return;
+    const ctx = this.ctx;
+    const osc = ctx.createOscillator();
+    osc.type = 'triangle';
+    osc.frequency.value = 130;
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0, ctx.currentTime);
+    gain.gain.linearRampToValueAtTime(0.035, ctx.currentTime + 2);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start();
+  }
 }
