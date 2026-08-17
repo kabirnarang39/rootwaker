@@ -404,6 +404,76 @@ export class AudioFX {
     this.tone(3600, 0.09, 'sine', 0.035, 0.25);
   }
 
+  /** The Canopy Owl's dive-strike: a rushing bandpass-filtered air-swoop — noise swept downward
+   * from a high whistle toward a lower rush as the dive closes, the same noise-buffer technique
+   * as playGustHit but swept rather than static — cutting straight into a short, hard talon-impact
+   * tone with almost no decay, contrasted with playGroundSlamImpact's slow, low thump landing. */
+  playOwlDive(): void {
+    if (!this.ctx) return;
+    const ctx = this.ctx;
+    const noise = ctx.createBufferSource();
+    noise.buffer = makeNoiseBuffer(ctx, 0.35);
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'bandpass';
+    filter.Q.value = 0.7;
+    filter.frequency.setValueAtTime(2400, ctx.currentTime);
+    filter.frequency.exponentialRampToValueAtTime(500, ctx.currentTime + 0.35);
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0.09, ctx.currentTime);
+    gain.gain.linearRampToValueAtTime(0.02, ctx.currentTime + 0.35);
+    noise.connect(filter);
+    filter.connect(gain);
+    gain.connect(ctx.destination);
+    noise.start();
+
+    const impact = ctx.createOscillator();
+    impact.type = 'square';
+    impact.frequency.value = 950;
+    const impactGain = ctx.createGain();
+    impactGain.gain.setValueAtTime(0, ctx.currentTime);
+    impactGain.gain.setValueAtTime(0.14, ctx.currentTime + 0.35);
+    impactGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.42);
+    impact.connect(impactGain);
+    impactGain.connect(ctx.destination);
+    impact.start(ctx.currentTime + 0.35);
+    impact.stop(ctx.currentTime + 0.45);
+  }
+
+  /** Viper Venom landing: reuses playViperHiss's bandpass-noise hiss technique but shorter and
+   * pitched lower — a wetter, throatier register than the hiss's airy 5200Hz — with a low tonal
+   * sting (a short falling sine thud) underneath so the strike reads as landing and poisoning,
+   * not just hissing past. */
+  playVenomBurst(): void {
+    if (!this.ctx) return;
+    const ctx = this.ctx;
+    const noise = ctx.createBufferSource();
+    noise.buffer = makeNoiseBuffer(ctx, 0.3);
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'bandpass';
+    filter.frequency.value = 3200;
+    filter.Q.value = 0.8;
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0, ctx.currentTime);
+    gain.gain.linearRampToValueAtTime(0.05, ctx.currentTime + 0.06);
+    gain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.3);
+    noise.connect(filter);
+    filter.connect(gain);
+    gain.connect(ctx.destination);
+    noise.start();
+
+    const sting = ctx.createOscillator();
+    sting.type = 'sine';
+    sting.frequency.setValueAtTime(75, ctx.currentTime);
+    sting.frequency.exponentialRampToValueAtTime(45, ctx.currentTime + 0.25);
+    const stingGain = ctx.createGain();
+    stingGain.gain.setValueAtTime(0.1, ctx.currentTime + 0.05);
+    stingGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
+    sting.connect(stingGain);
+    stingGain.connect(ctx.destination);
+    sting.start(ctx.currentTime);
+    sting.stop(ctx.currentTime + 0.3);
+  }
+
   startVillageAmbience(): void {
     // A single warm, sustained drone — deliberately sparser than startJungleAmbience's
     // multi-layer canopy/floor/bird/water soundscape or startMountainWind's noise gusts: this is

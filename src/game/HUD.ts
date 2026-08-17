@@ -98,6 +98,7 @@ export class HUD {
         <div class="rw-legend-row"><span class="rw-legend-key">L</span><span class="rw-legend-label">Pounce</span></div>
         <div class="rw-legend-row"><span class="rw-legend-key">Drag</span><span class="rw-legend-label">Look</span></div>
         <div class="rw-legend-row"><span class="rw-legend-key">C</span><span class="rw-legend-label">View</span></div>
+        <div class="rw-legend-row"><span class="rw-legend-key">1 – 6</span><span class="rw-legend-label">Powers</span></div>
       </div>
       <div class="rw-overlay">
         <div class="rw-panel">
@@ -488,14 +489,19 @@ export class HUD {
         .rw-damage-flash.rw-flash-active { animation: none; }
       }
 
-      /* Power bar: the four learned-ability slots, bottom-left — same carved-plaque key-badge
+      /* Power bar: the six learned-ability slots, bottom-left — same carved-plaque key-badge
          language as the controls legend (rw-legend-key), so activatable powers read as part of
          the same instrument family rather than a new UI language. Locked slots sit dim/inert;
          unlocked-but-cooling-down slots dim briefly (rw-power-cooldown); unlocked+ready slots
-         get the myth-cyan "charged" treatment vitality/hunt-prompt already use for "ready". */
+         get the myth-cyan "charged" treatment vitality/hunt-prompt already use for "ready".
+         flex-wrap + the viewport-relative max-width: at 6 slots (~74px each incl. padding) the
+         bar runs to ~480px, wider than most phone viewports — wrapping to a second row (growing
+         upward, since only bottom is anchored) reads fine here and avoids slots running off
+         the right edge of the screen on narrow viewports. */
       .rw-power-bar {
         position: fixed; bottom: 26px; left: 20px; z-index: 10;
-        pointer-events: none; display: flex; gap: 8px;
+        pointer-events: none; display: flex; flex-wrap: wrap; gap: 8px;
+        max-width: calc(100vw - 40px);
         font-family: var(--body-face); color: var(--parchment);
       }
       .rw-power-slot {

@@ -112,4 +112,26 @@ describe('Input mouse-drag look', () => {
     window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyC' }));
     expect(firedAction).toBe('cycleView');
   });
+
+  it('Digit5 emits an ability5 action', () => {
+    const el = fakeElement();
+    const input = new Input(el as unknown as HTMLElement);
+    let firedAction: string | null = null;
+    input.onAction((action) => {
+      firedAction = action;
+    });
+    window.dispatchEvent(new KeyboardEvent('keydown', { code: 'Digit5' }));
+    expect(firedAction).toBe('ability5');
+  });
+
+  it('Digit6 emits an ability6 action', () => {
+    const el = fakeElement();
+    const input = new Input(el as unknown as HTMLElement);
+    let firedAction: string | null = null;
+    input.onAction((action) => {
+      firedAction = action;
+    });
+    window.dispatchEvent(new KeyboardEvent('keydown', { code: 'Digit6' }));
+    expect(firedAction).toBe('ability6');
+  });
 });

@@ -83,4 +83,14 @@ describe('AudioFX species sounds', () => {
     const fx = new AudioFX();
     expect(() => fx.playBirdFlush()).not.toThrow();
   });
+
+  it('playOwlDive does not throw before unlock()', () => {
+    const fx = new AudioFX();
+    expect(() => fx.playOwlDive()).not.toThrow();
+  });
+
+  it('playVenomBurst does not throw before unlock()', () => {
+    const fx = new AudioFX();
+    expect(() => fx.playVenomBurst()).not.toThrow();
+  });
 });

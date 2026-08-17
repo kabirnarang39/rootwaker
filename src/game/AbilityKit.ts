@@ -1,4 +1,4 @@
-export type AbilityId = 'keen-ear' | 'boar-charge' | 'bear-swipe' | 'kings-roar';
+export type AbilityId = 'keen-ear' | 'boar-charge' | 'bear-swipe' | 'kings-roar' | 'owl-dive' | 'viper-venom';
 
 export interface Ability {
   id: AbilityId;
@@ -37,10 +37,31 @@ export const ABILITIES: Record<AbilityId, Ability> = {
     cooldownSeconds: 10,
     key: '4',
   },
+  'owl-dive': {
+    id: 'owl-dive',
+    name: "Owl's Descent",
+    description: 'A silent dive-strike, learned from the Canopy Owl folding its wings into a killing plunge.',
+    cooldownSeconds: 6,
+    key: '5',
+  },
+  'viper-venom': {
+    id: 'viper-venom',
+    name: 'Viper Venom',
+    description: 'A venomous bite drawn from the Vine Viper — poison that keeps biting long after the strike lands.',
+    cooldownSeconds: 9,
+    key: '6',
+  },
 };
 
-// Fixed HUD/keybind order — Digit1..Digit4 map to this array by index.
-export const ABILITY_SLOTS: AbilityId[] = ['keen-ear', 'boar-charge', 'bear-swipe', 'kings-roar'];
+// Fixed HUD/keybind order — Digit1..Digit6 map to this array by index.
+export const ABILITY_SLOTS: AbilityId[] = [
+  'keen-ear',
+  'boar-charge',
+  'bear-swipe',
+  'kings-roar',
+  'owl-dive',
+  'viper-venom',
+];
 
 export class AbilityKit {
   private unlocked = new Set<AbilityId>();
