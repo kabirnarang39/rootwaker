@@ -1,3 +1,13 @@
+// Shared by every pure-broadband-noise SFX (no per-sample envelope baked in — those that fade
+// the noise itself while generating it, e.g. playFootstepRustle/playGustHit, stay inline since
+// their formula isn't just random samples).
+function makeNoiseBuffer(ctx: AudioContext, seconds: number): AudioBuffer {
+  const buffer = ctx.createBuffer(1, Math.floor(ctx.sampleRate * seconds), ctx.sampleRate);
+  const data = buffer.getChannelData(0);
+  for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
+  return buffer;
+}
+
 /** Small synthesized SFX/ambience — no external audio assets. */
 export class AudioFX {
   private ctx: AudioContext | null = null;
@@ -70,12 +80,8 @@ export class AudioFX {
     const ctx = this.ctx;
 
     // Canopy layer: high, constant filtered-noise drone (insect chorus).
-    const canopyBufferSize = ctx.sampleRate * 2;
-    const canopyBuffer = ctx.createBuffer(1, canopyBufferSize, ctx.sampleRate);
-    const canopyData = canopyBuffer.getChannelData(0);
-    for (let i = 0; i < canopyBufferSize; i++) canopyData[i] = Math.random() * 2 - 1;
     const canopyNoise = ctx.createBufferSource();
-    canopyNoise.buffer = canopyBuffer;
+    canopyNoise.buffer = makeNoiseBuffer(ctx, 2);
     canopyNoise.loop = true;
     const canopyFilter = ctx.createBiquadFilter();
     canopyFilter.type = 'bandpass';
@@ -185,12 +191,8 @@ export class AudioFX {
   startMountainWind(): void {
     if (!this.ctx) return;
     const ctx = this.ctx;
-    const bufferSize = ctx.sampleRate * 2;
-    const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
-    const data = buffer.getChannelData(0);
-    for (let i = 0; i < bufferSize; i++) data[i] = Math.random() * 2 - 1;
     const noise = ctx.createBufferSource();
-    noise.buffer = buffer;
+    noise.buffer = makeNoiseBuffer(ctx, 2);
     noise.loop = true;
     const filter = ctx.createBiquadFilter();
     filter.type = 'lowpass';
@@ -209,12 +211,8 @@ export class AudioFX {
     // slower, ramping attack: a heavier, ground-borne warning rather than an airy gust.
     if (!this.ctx) return;
     const ctx = this.ctx;
-    const bufferSize = ctx.sampleRate * 0.7;
-    const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
-    const data = buffer.getChannelData(0);
-    for (let i = 0; i < bufferSize; i++) data[i] = Math.random() * 2 - 1;
     const noise = ctx.createBufferSource();
-    noise.buffer = buffer;
+    noise.buffer = makeNoiseBuffer(ctx, 0.7);
     const filter = ctx.createBiquadFilter();
     filter.type = 'lowpass';
     filter.frequency.setValueAtTime(120, ctx.currentTime);
@@ -274,12 +272,8 @@ export class AudioFX {
   playRoar(): void {
     if (!this.ctx) return;
     const ctx = this.ctx;
-    const bufferSize = ctx.sampleRate * 0.6;
-    const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
-    const data = buffer.getChannelData(0);
-    for (let i = 0; i < bufferSize; i++) data[i] = Math.random() * 2 - 1;
     const noise = ctx.createBufferSource();
-    noise.buffer = buffer;
+    noise.buffer = makeNoiseBuffer(ctx, 0.6);
     const filter = ctx.createBiquadFilter();
     filter.type = 'lowpass';
     filter.frequency.setValueAtTime(1400, ctx.currentTime);
@@ -351,12 +345,8 @@ export class AudioFX {
   playViperHiss(): void {
     if (!this.ctx) return;
     const ctx = this.ctx;
-    const bufferSize = Math.floor(ctx.sampleRate * 0.5);
-    const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
-    const data = buffer.getChannelData(0);
-    for (let i = 0; i < bufferSize; i++) data[i] = Math.random() * 2 - 1;
     const noise = ctx.createBufferSource();
-    noise.buffer = buffer;
+    noise.buffer = makeNoiseBuffer(ctx, 0.5);
     const filter = ctx.createBiquadFilter();
     filter.type = 'bandpass';
     filter.frequency.value = 5200;

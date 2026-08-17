@@ -111,4 +111,49 @@ describe('createVineViper', () => {
       }
     }
   });
+
+  it('tail joints return to identity after a full slither -> strike -> recover -> idle cycle (regression: slitherClip loops and gets cut off mid-wave at an arbitrary phase; neither coilClip nor strikeClip used to touch tail0..tail4 at all, so the lower body stayed kinked forever after the viper\'s first fight)', () => {
+    const viper = createVineViper();
+    const tailJoints = ['tail0', 'tail1', 'tail2', 'tail3', 'tail4'] as const;
+    let t = 0;
+    const dt = 0.016;
+
+    // Phase 1: aggroed but well outside strike range -> telegraph, slithering. Run long enough for
+    // the S-wave to move visibly off zero, then cut it off mid-cycle (not at a loop boundary).
+    for (let i = 0; i < 15; i++) {
+      viper.update(t, dt, 2.0);
+      t += dt;
+    }
+    expect(viper.ai.state).toBe('telegraph');
+    // Sanity: prove the slither actually moved a tail joint before the cutover — otherwise this
+    // test would pass even without the fix.
+    expect(tailJoints.some((j) => Math.abs(viper.group.getObjectByName(j)!.rotation.y) > 0.01)).toBe(true);
+
+    // Phase 2: close the distance until a real strike actually lands and recovers (state-driven,
+    // not a fixed frame count, so this doesn't depend on exact timing assumptions).
+    let guard = 0;
+    while (viper.ai.state !== 'attacking' && guard++ < 300) {
+      viper.update(t, dt, 0.3);
+      t += dt;
+    }
+    expect(viper.ai.state).toBe('attacking');
+    guard = 0;
+    while (viper.ai.state !== 'recovering' && guard++ < 300) {
+      viper.update(t, dt, 0.3);
+      t += dt;
+    }
+    expect(viper.ai.state).toBe('recovering');
+
+    // Phase 3: player is far away for the rest of recovery -> lands cleanly back on 'idle'.
+    guard = 0;
+    while (viper.ai.state !== 'idle' && guard++ < 300) {
+      viper.update(t, dt, 100);
+      t += dt;
+    }
+    expect(viper.ai.state).toBe('idle');
+
+    for (const joint of tailJoints) {
+      expect(Math.abs(viper.group.getObjectByName(joint)!.rotation.y)).toBeLessThan(1e-6);
+    }
+  });
 });
