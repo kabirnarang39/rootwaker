@@ -343,6 +343,34 @@ export class AudioFX {
     this.tone(990, 0.6, 'sine', 0.03, 0.08);
   }
 
+  /** The vine viper's voice. A hiss is forced air — pure broadband noise, no oscillator layer at
+   * all (contrast with playOwlScreech, which deliberately pairs noise with a falling sawtooth; a
+   * snake's hiss has no pitch to it whatsoever). A bandpass filter centred high gives it that
+   * airy "sss" character, with a gentle amplitude swell up and fall back down rather than the
+   * screech's hard-open attack. */
+  playViperHiss(): void {
+    if (!this.ctx) return;
+    const ctx = this.ctx;
+    const bufferSize = Math.floor(ctx.sampleRate * 0.5);
+    const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < bufferSize; i++) data[i] = Math.random() * 2 - 1;
+    const noise = ctx.createBufferSource();
+    noise.buffer = buffer;
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'bandpass';
+    filter.frequency.value = 5200;
+    filter.Q.value = 0.9;
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0, ctx.currentTime);
+    gain.gain.linearRampToValueAtTime(0.06, ctx.currentTime + 0.12); // swell
+    gain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.5); // fall
+    noise.connect(filter);
+    filter.connect(gain);
+    gain.connect(ctx.destination);
+    noise.start();
+  }
+
   startVillageAmbience(): void {
     // A single warm, sustained drone — deliberately sparser than startJungleAmbience's
     // multi-layer canopy/floor/bird/water soundscape or startMountainWind's noise gusts: this is
