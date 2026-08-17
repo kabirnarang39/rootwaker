@@ -28,6 +28,10 @@ export class PlayerController {
   private grounded = true;
   private climbTopY = 0;
   private lastLedgePosition: THREE.Vector3 | null = null;
+  // Open-terrain climb: the reference frame the winding path measures from.
+  private climbBaseY = 0;
+  private climbBaseZ = 0;
+  private climbPathAt: (heightAboveBase: number) => { dx: number; dz: number } = () => ({ dx: 0, dz: 0 });
 
   constructor(startPosition: THREE.Vector3) {
     this.body = { position: startPosition.clone(), velocity: new THREE.Vector3() };
@@ -62,10 +66,18 @@ export class PlayerController {
     }
   }
 
-  beginClimb(surfaceNormal: THREE.Vector3, topY: number, ledgePosition?: THREE.Vector3): void {
+  beginClimb(
+    surfaceNormal: THREE.Vector3,
+    topY: number,
+    ledgePosition?: THREE.Vector3,
+    pathAt?: (heightAboveBase: number) => { dx: number; dz: number },
+  ): void {
     if (this.mode !== 'grounded') return; // canTransition('grounded', 'climbing') is the only legal entry
     this.mode = 'climbing';
     this.climbTopY = topY;
+    this.climbBaseY = this.body.position.y;
+    this.climbBaseZ = this.body.position.z;
+    this.climbPathAt = pathAt ?? (() => ({ dx: 0, dz: 0 }));
     this.body.velocity.set(0, 0, 0);
     this.lastLedgePosition = ledgePosition ? ledgePosition.clone() : this.body.position.clone();
     void surfaceNormal; // reserved for a future wall-facing camera treatment; not needed for movement math here
@@ -86,6 +98,13 @@ export class PlayerController {
     }
     this.body.position.y += input.z * CLIMB_SPEED * delta;
     this.body.position.x += input.x * CLIMB_SPEED * delta * 0.5; // lateral shuffle along the wall, slower than vertical
+    // Real winding path: Z is a deterministic function of height climbed so far, always
+    // re-derived from the wall's own base (never accumulated frame-to-frame), so it can never
+    // drift or double-count. climbPathAt defaults to a zero-offset function, so this is a pure
+    // no-op for any caller that never passes a real path.
+    const heightAboveBase = this.body.position.y - this.climbBaseY;
+    const { dz } = this.climbPathAt(heightAboveBase);
+    this.body.position.z = this.climbBaseZ + dz;
     if (this.body.position.y >= this.climbTopY) {
       this.body.position.y = this.climbTopY;
       this.mode = 'grounded';
