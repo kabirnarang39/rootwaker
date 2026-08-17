@@ -1,6 +1,31 @@
 import * as THREE from 'three';
 import { describe, it, expect } from 'vitest';
-import { createJungleLevel } from '../createJungleLevel';
+import { createJungleLevel, makeWindingPath } from '../createJungleLevel';
+
+describe('makeWindingPath', () => {
+  it('returns zero drift at height 0 (the wall\'s own base — required so grounded-mode entry-detection against wall.bounds stays correct without modification)', () => {
+    const path = makeWindingPath(1.2, 4);
+    const { dx, dz } = path(0);
+    expect(dx).toBe(0);
+    expect(dz).toBeCloseTo(0, 10);
+  });
+
+  it('drifts within the given amplitude, never beyond it', () => {
+    const path = makeWindingPath(1.2, 4);
+    for (let h = 0; h <= 12; h += 0.25) {
+      const { dz } = path(h);
+      expect(Math.abs(dz)).toBeLessThanOrEqual(1.2 + 1e-9);
+    }
+  });
+
+  it('completes one full winding cycle every `wavelengthMeters` of height climbed', () => {
+    const path = makeWindingPath(1.2, 4);
+    expect(path(1).dz).toBeCloseTo(1.2, 5); // h = wavelength/4
+    expect(path(2).dz).toBeCloseTo(0, 5); // h = wavelength/2
+    expect(path(3).dz).toBeCloseTo(-1.2, 5); // h = 3*wavelength/4
+    expect(path(4).dz).toBeCloseTo(0, 5); // h = wavelength (one full cycle)
+  });
+});
 
 describe('createJungleLevel', () => {
   it('exposes a queryable ground height function', () => {

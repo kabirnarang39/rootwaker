@@ -16,6 +16,12 @@ export interface ClimbableWall {
   normal: THREE.Vector3;
   topY: number;
   bounds: THREE.Box2; // x/z footprint at the wall's base
+  // Real horizontal drift (dx, dz) from the wall's own base position at a given height climbed
+  // above that base — a real winding route up the rock, not a fixed straight line. MUST return
+  // (0,0) at heightAboveBase === 0: grounded-mode entry-detection (Game.ts's nearWall/
+  // nearSegmentWall) checks the player's position against `bounds`, always at height ≈ 0, and
+  // relies on this guarantee to stay correct without ever reading pathAt itself.
+  pathAt(heightAboveBase: number): { dx: number; dz: number };
 }
 
 export interface ClimbSegment {
@@ -315,6 +321,19 @@ function buildRockFaceMesh(thickness: number, height: number, faceWidth: number,
   return mesh;
 }
 
+/** A real, deterministic winding path: a single sine wave in the wall's own width axis (Z),
+ * amplitude bounded by `amplitude` meters either side of the wall's base Z, completing one full
+ * left-right-left cycle every `wavelengthMeters` of height climbed. Always (0,0) at height 0. */
+export function makeWindingPath(
+  amplitude: number,
+  wavelengthMeters: number,
+): (heightAboveBase: number) => { dx: number; dz: number } {
+  return (heightAboveBase: number) => ({
+    dx: 0,
+    dz: Math.sin((heightAboveBase / wavelengthMeters) * Math.PI * 2) * amplitude,
+  });
+}
+
 function buildClimbableWall(heightAt: (x: number, z: number) => number): { mesh: THREE.Mesh; wall: ClimbableWall } {
   const wallX = -12;
   const wallZWidth = 6;
@@ -332,6 +351,7 @@ function buildClimbableWall(heightAt: (x: number, z: number) => number): { mesh:
       new THREE.Vector2(wallX - 0.3, baseZ - wallZWidth / 2),
       new THREE.Vector2(wallX + 0.3, baseZ + wallZWidth / 2),
     ),
+    pathAt: () => ({ dx: 0, dz: 0 }), // real winding wired in a later task
   };
   return { mesh, wall };
 }
@@ -359,6 +379,7 @@ function buildClimbSegment(
       new THREE.Vector2(wallX - 0.3, baseZ - wallZWidth / 2),
       new THREE.Vector2(wallX + 0.3, baseZ + wallZWidth / 2),
     ),
+    pathAt: () => ({ dx: 0, dz: 0 }), // real winding wired in a later task
   };
   return { mesh, wall };
 }
