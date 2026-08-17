@@ -69,7 +69,10 @@ export interface JungleLevel {
     summitGate: THREE.Vector3;
   };
   throneRoom: ThroneRoom;
-  update(time: number): void;
+  // tideAmplitudeMultiplier defaults to 1 (the original fixed-amplitude tide) so every existing
+  // caller that only ever passed `time` — including this file's own test suite — stays
+  // byte-identical; WeatherSystem is the only real caller of the widened form.
+  update(time: number, tideAmplitudeMultiplier?: number): void;
 }
 
 const CHAPTER_SIZE = 40; // meters, one bounded region
@@ -772,7 +775,7 @@ function buildSeaSlab(width: number, depth: number, x: number, z: number, unifor
   return mesh;
 }
 
-function buildLivingSea(): { meshes: THREE.Mesh[]; update: (time: number) => void } {
+function buildLivingSea(): { meshes: THREE.Mesh[]; update: (time: number, tideAmplitudeMultiplier: number) => void } {
   const uniforms = { uTime: { value: 0 }, uTide: { value: 0 } };
 
   const outerHalfWidth = ISLAND_HALF + SEA_SIZE; // north/south slabs' half-width, reaching past the corners
@@ -785,9 +788,9 @@ function buildLivingSea(): { meshes: THREE.Mesh[]; update: (time: number) => voi
 
   return {
     meshes,
-    update: (time: number) => {
+    update: (time: number, tideAmplitudeMultiplier: number) => {
       uniforms.uTime.value = time;
-      uniforms.uTide.value = Math.sin((time / SEA_TIDE_PERIOD_SECONDS) * Math.PI * 2) * SEA_TIDE_AMPLITUDE;
+      uniforms.uTide.value = Math.sin((time / SEA_TIDE_PERIOD_SECONDS) * Math.PI * 2) * SEA_TIDE_AMPLITUDE * tideAmplitudeMultiplier;
     },
   };
 }
@@ -934,9 +937,9 @@ export function createJungleLevel(): JungleLevel {
     climbObstacleMeshes: [wallMesh, ...mountain.climbMeshes],
     mountain: { segments: mountain.segments, summitGate: mountain.summitGate },
     throneRoom,
-    update: (time: number) => {
+    update: (time: number, tideAmplitudeMultiplier = 1) => {
       updateFoliage(time);
-      updateSea(time);
+      updateSea(time, tideAmplitudeMultiplier);
       for (const school of fishSchools) school.update(time);
     },
   };

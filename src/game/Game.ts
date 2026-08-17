@@ -36,6 +36,8 @@ import { computeFacingAngle } from './FoxFacing';
 import { chaseTowardPlayer, horizontalDistance } from './EnemyChase';
 import { applyClipToRig } from '../scene/rig/Clip';
 import { eatClip } from '../scene/foxClips';
+import { WeatherSystem } from './WeatherSystem';
+import { createRainSystem, type RainSystem } from '../scene/createRainSystem';
 
 // Mirrors PlayerController's own (unexported) pounce range so the hunt-prompt lights up
 // exactly when a pounce would actually succeed. Keep these two in sync by hand.
@@ -56,6 +58,12 @@ const MAX_STAMINA = 100; // mirrors PlayerController's own (unexported) MAX_STAM
 // is a circular approximation of each ledge's rectangular footprint (real half-extents are up to
 // 4x2m) rather than an exact box check. Upgrade to real bounds if a ledge ever proves too small
 // for this radius or two ledges' radii start overlapping.
+// Kept in sync by hand with setupLights()'s own hemi/moon constructor intensities — WeatherSystem
+// scales relative to these base values every frame rather than the lights' own mutated .intensity
+// (which would drift/compound if read back after a previous frame's scaling).
+const BASE_HEMI_INTENSITY = 1.9;
+const BASE_MOON_INTENSITY = 2.0;
+
 const MOUNTAIN_LEDGE_RADIUS = 4.5;
 const LEDGE_SNAP_TOLERANCE = 1; // meters of downward drift still counted as "on the ledge" this frame
 const WALL_CLIMB_HEIGHT_TOLERANCE = 2.0; // meters — disambiguates stacked wall/segments sharing x/z footprint
@@ -193,6 +201,13 @@ export class Game {
   // PlayableCharacter contract, so it reads identically no matter which species is live.
   private fox: PlayableCharacter;
   private cameraRig = new CameraRig();
+  private weather = new WeatherSystem();
+  private rain: RainSystem = createRainSystem();
+  // Set in setupLights() once the real lights exist — kept so weather can scale their intensity
+  // live every frame without re-deriving "what was this light's original brightness."
+  private moonLight!: THREE.DirectionalLight;
+  private hemiLight!: THREE.HemisphereLight;
+  private baseFogDensity = 0.014; // matches the FogExp2 density set in the constructor below
   private wraith = createRootWraith();
   private playerCombatant: Combatant = {
     hp: 100,
@@ -322,6 +337,7 @@ export class Game {
 
     this.scene.add(this.level.group);
     this.scene.add(this.fox.group);
+    this.scene.add(this.rain.group);
     this.wraith.group.position.set(4, 0, 4);
     this.scene.add(this.wraith.group);
 
@@ -424,6 +440,7 @@ export class Game {
   private setupLights(isTouchPrimary: boolean) {
     const hemi = new THREE.HemisphereLight(0x4a7a8a, 0x1c3226, 1.9);
     this.scene.add(hemi);
+    this.hemiLight = hemi;
 
     const moon = new THREE.DirectionalLight(0xafc8ff, 2.0);
     moon.position.set(-4, 8, 3);
@@ -444,6 +461,7 @@ export class Game {
     // never reads at all — setting it here would be a no-op). No self-shadow in first-person
     // is the standard convention for this genre; not worth a shadow-only proxy mesh for it.
     this.scene.add(moon);
+    this.moonLight = moon;
 
     const fill = new THREE.AmbientLight(0x203045, 0.85);
     this.scene.add(fill);
@@ -470,7 +488,15 @@ export class Game {
 
     this.input.pollMove();
     this.input.pollLook();
-    this.level.update(time);
+
+    const weatherSnap = this.weather.update(time);
+    (this.scene.fog as THREE.FogExp2).density = this.baseFogDensity * weatherSnap.params.fogMultiplier;
+    this.hemiLight.intensity = BASE_HEMI_INTENSITY * weatherSnap.params.lightMultiplier;
+    this.moonLight.intensity = BASE_MOON_INTENSITY * weatherSnap.params.lightMultiplier;
+    this.audio.setRainIntensity(weatherSnap.params.rainIntensity);
+    this.rain.update(this.playerController.body.position, weatherSnap.params.rainIntensity, delta);
+
+    this.level.update(time, weatherSnap.params.tideAmplitudeMultiplier);
 
     if (this.playerController.mode === 'grounded') {
       // Box2.y here holds world Z, per createJungleLevel's construction

@@ -12,6 +12,7 @@ function makeNoiseBuffer(ctx: AudioContext, seconds: number): AudioBuffer {
 export class AudioFX {
   private ctx: AudioContext | null = null;
   private ambientGain: GainNode | null = null;
+  private rainGain: GainNode | null = null;
 
   unlock() {
     if (this.ctx) return;
@@ -729,6 +730,34 @@ export class AudioFX {
     gain.connect(ctx.destination);
     noise.start();
     lfo.start();
+  }
+
+  /** Real rain, continuously variable — unlike every other `start*` layer here, this one's
+   * loudness needs to track WeatherSystem's live `rainIntensity` every frame (a drizzle building
+   * into a storm should audibly build, not jump from silent to full volume the instant rain
+   * starts). Lazily creates the noise-loop/gain graph on its first call (idempotent — later calls
+   * just adjust the existing gain), so callers can pass a live intensity every frame without
+   * worrying about "did I start this yet." A higher-frequency, harsher-filtered noise bed than
+   * startSeaAmbience's surf — real rain reads as a bright hiss, not a low rolling wash. */
+  setRainIntensity(intensity: number): void {
+    if (!this.ctx) return;
+    const ctx = this.ctx;
+    if (!this.rainGain) {
+      const noise = ctx.createBufferSource();
+      noise.buffer = makeNoiseBuffer(ctx, 2);
+      noise.loop = true;
+      const filter = ctx.createBiquadFilter();
+      filter.type = 'highpass';
+      filter.frequency.value = 1200;
+      this.rainGain = ctx.createGain();
+      this.rainGain.gain.value = 0;
+      noise.connect(filter);
+      filter.connect(this.rainGain);
+      this.rainGain.connect(ctx.destination);
+      noise.start();
+    }
+    const clamped = Math.max(0, Math.min(1, intensity));
+    this.rainGain.gain.setTargetAtTime(clamped * 0.09, ctx.currentTime, 0.4);
   }
 
   startVillageAmbience(): void {

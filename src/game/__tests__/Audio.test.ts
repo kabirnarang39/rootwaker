@@ -128,4 +128,13 @@ describe('AudioFX species sounds', () => {
     const fx = new AudioFX();
     expect(() => fx.startSeaAmbience()).not.toThrow();
   });
+
+  it('setRainIntensity does not throw before unlock(), or across repeated calls with varying intensity', () => {
+    const fx = new AudioFX();
+    expect(() => {
+      fx.setRainIntensity(0);
+      fx.setRainIntensity(0.5);
+      fx.setRainIntensity(1);
+    }).not.toThrow();
+  });
 });
