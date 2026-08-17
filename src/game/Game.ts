@@ -444,7 +444,12 @@ export class Game {
         this.playerController.body.position.z <= this.level.climbableWall.bounds.max.y &&
         isNearWallHeight(this.playerController.body.position.y, this.level.climbableWall.topY, 6);
       if (nearWall && this.rawMoveInput.z > 0) {
-        this.playerController.beginClimb(this.level.climbableWall.normal, this.level.climbableWall.topY);
+        this.playerController.beginClimb(
+          this.level.climbableWall.normal,
+          this.level.climbableWall.topY,
+          undefined,
+          this.level.climbableWall.pathAt,
+        );
       }
 
       if (this.playerController.mode === 'grounded' && this.rawMoveInput.z > 0) {
@@ -457,7 +462,7 @@ export class Game {
             this.playerController.body.position.z <= wall.bounds.max.y &&
             isNearWallHeight(this.playerController.body.position.y, wall.topY, 6);
           if (nearSegmentWall) {
-            this.playerController.beginClimb(wall.normal, wall.topY, segment.ledgePosition);
+            this.playerController.beginClimb(wall.normal, wall.topY, segment.ledgePosition, wall.pathAt);
             if (!this.mountainWindStarted) {
               this.mountainWindStarted = true;
               this.audio.startMountainWind(); // additive layer on top of jungle ambience — no zone-swap system exists in this project
