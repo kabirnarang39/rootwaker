@@ -15,6 +15,12 @@ describe('Rig', () => {
     expect(() => rig.getJoint('nope')).toThrow();
   });
 
+  it('hasJoint reports true for a registered joint and false for one the rig never built', () => {
+    const rig = new Rig(['root', 'spine']);
+    expect(rig.hasJoint('spine')).toBe(true);
+    expect(rig.hasJoint('tail0')).toBe(false);
+  });
+
   it('attach() reparents a joint and world position reflects the chain', () => {
     const rig = new Rig(['root', 'spine', 'head']);
     rig.attach('spine', 'root');

@@ -6,7 +6,9 @@ import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { createJungleLevel } from '../scene/createJungleLevel';
 import { PlayerController } from './PlayerController';
 import { CameraRig, type ViewMode } from '../scene/CameraRig';
-import { createFox } from '../scene/createFox';
+import { createPlayableCharacter } from '../scene/createPlayableCharacter';
+import { SKINS as FOX_SKINS } from '../scene/skins';
+import type { PlayableCharacter, SpeciesId } from '../scene/PlayableCharacter';
 import { createRootWraith, getAttackHitbox } from '../entities/rootWraith';
 import { getBoarHitbox } from '../entities/tuskBoar';
 import { getGroveBearHitbox } from '../entities/createGroveBear';
@@ -28,7 +30,6 @@ import { AudioFX } from './Audio';
 import { AbilityKit, ABILITY_SLOTS, type AbilityId } from './AbilityKit';
 import type { EnemyAI } from '../entities/EnemyAI';
 import { WindGust, type GustState } from './WindGust';
-import { SKINS } from '../scene/skins';
 import { resolvePlayerObstacleCollision } from './ObstacleCollision';
 import { toCameraRelative } from './CameraRelativeMove';
 import { computeFacingAngle } from './FoxFacing';
@@ -187,7 +188,10 @@ export class Game {
   // against overhanging rock the same way follow/closeUp already check against tree trunks.
   private cameraObstacles = [...this.level.foliageMeshes, ...this.level.climbObstacleMeshes];
   private playerController = new PlayerController(new THREE.Vector3(0, 0, 12));
-  private fox = createFox(SKINS[0]);
+  // Assigned in the constructor (needs the character-choice param), not here — every other
+  // usage below (`this.fox.group`/`.rig`/`.update()`/`.revealCrown()`) is the shared
+  // PlayableCharacter contract, so it reads identically no matter which species is live.
+  private fox: PlayableCharacter;
   private cameraRig = new CameraRig();
   private wraith = createRootWraith();
   private playerCombatant: Combatant = {
@@ -296,7 +300,8 @@ export class Game {
     return best;
   };
 
-  constructor(container: HTMLElement) {
+  constructor(container: HTMLElement, character: { species: SpeciesId; skinId: string } = { species: 'fox', skinId: FOX_SKINS[0].id }) {
+    this.fox = createPlayableCharacter(character.species, character.skinId);
     this.scene.background = new THREE.Color(0x0a1420);
     this.scene.fog = new THREE.FogExp2(0x0a1420, 0.014);
 

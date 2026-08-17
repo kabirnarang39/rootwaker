@@ -4,14 +4,9 @@ import { SKINS, type FoxSkin } from './skins';
 import { Rig } from './rig/Rig';
 import { blendClips } from './rig/Clip';
 import { walkClip, idleClip } from './foxClips';
+import type { PlayableCharacter } from './PlayableCharacter';
 
-export interface Fox {
-  group: THREE.Group;
-  rig: Rig;
-  crownGroup: THREE.Group;
-  update(time: number, delta: number, moveSpeed: number): void;
-  revealCrown(): void;
-}
+export type Fox = PlayableCharacter;
 
 function furMaterial(color: THREE.ColorRepresentation) {
   return new THREE.MeshStandardMaterial({ color, flatShading: true, roughness: 0.75, metalness: 0.05 });

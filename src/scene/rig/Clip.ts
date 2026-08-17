@@ -85,6 +85,7 @@ export function sampleClip(clip: Clip, time: number): Map<JointName, Sample> {
 
 export function applyClipToRig(rig: Rig, clip: Clip, time: number): void {
   for (const [joint, sample] of sampleClip(clip, time)) {
+    if (!rig.hasJoint(joint)) continue;
     if (sample.rotation) rig.setLocalRotation(joint, ...sample.rotation);
     if (sample.position) rig.applyPositionOffset(joint, ...sample.position);
   }
@@ -96,6 +97,7 @@ export function blendClips(rig: Rig, clipA: Clip, timeA: number, clipB: Clip, ti
   const b = sampleClip(clipB, timeB);
   const joints = new Set<JointName>([...a.keys(), ...b.keys()]);
   for (const joint of joints) {
+    if (!rig.hasJoint(joint)) continue;
     const sa = a.get(joint);
     const sb = b.get(joint);
     if (sa?.rotation && sb?.rotation) rig.setLocalRotation(joint, ...lerpTuple(sa.rotation, sb.rotation, weight));

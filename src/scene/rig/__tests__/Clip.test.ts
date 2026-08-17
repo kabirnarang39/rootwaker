@@ -128,4 +128,27 @@ describe('Clip', () => {
     blendClips(rigB, aOnly, 0, b, 0, 0.5); // sb-only branch: base 0.5 + b's 0.1 -> 0.6
     expect(rigB.getJoint('spine').position.y).toBeCloseTo(0.6, 5);
   });
+
+  it('applyClipToRig silently skips a joint the rig does not have, instead of throwing (regression: a shared clip authored against the fox\'s full joint set, e.g. the eat ritual, would crash on a leaner rig like the tailless bear)', () => {
+    const rig = new Rig(['root', 'head']); // deliberately no 'tail0'
+    const clipWithTail: Clip = {
+      name: 'has-tail-joint',
+      duration: 1,
+      loop: true,
+      ease: linear,
+      keyframes: [
+        { time: 0, joint: 'head', rotation: [0, 0.4, 0] },
+        { time: 0, joint: 'tail0', rotation: [0, 0.9, 0] },
+      ],
+    };
+    expect(() => applyClipToRig(rig, clipWithTail, 0)).not.toThrow();
+    expect(rig.getJoint('head').rotation.y).toBeCloseTo(0.4, 5); // the joint it DOES have still applies
+  });
+
+  it('blendClips silently skips a joint the rig does not have, instead of throwing', () => {
+    const rig = new Rig(['root', 'head']); // deliberately no 'tail0'
+    const a: Clip = { name: 'a', duration: 1, loop: true, ease: linear, keyframes: [{ time: 0, joint: 'tail0', rotation: [0, 0.2, 0] }] };
+    const b: Clip = { name: 'b', duration: 1, loop: true, ease: linear, keyframes: [{ time: 0, joint: 'tail0', rotation: [0, 0.8, 0] }] };
+    expect(() => blendClips(rig, a, 0, b, 0, 0.5)).not.toThrow();
+  });
 });

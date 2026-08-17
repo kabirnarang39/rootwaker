@@ -55,6 +55,13 @@ export class Rig {
     return joint;
   }
 
+  /** True if this rig was built with the given joint. Lets a shared clip (e.g. the eat ritual,
+   * authored against the fox's full joint set) skip joints a leaner rig doesn't have — a bear has
+   * no real tail to animate, so its rig simply omits tail0 rather than faking one. */
+  hasJoint(name: JointName): boolean {
+    return this.joints.has(name);
+  }
+
   /** Reparents `child` under `parent` — builds chains like the tail. */
   attach(child: JointName, parent: JointName): void {
     this.getJoint(parent).add(this.getJoint(child));
