@@ -361,6 +361,25 @@ export class Game {
     });
 
     this.hud = new HUD(container);
+    this.hud.initMinimap({
+      bounds: {
+        minX: this.level.chapterBounds.min.x,
+        maxX: this.level.chapterBounds.max.x,
+        minZ: this.level.chapterBounds.min.z,
+        maxZ: this.level.chapterBounds.max.z,
+      },
+      mountainBase: {
+        x: (this.level.climbableWall.bounds.min.x + this.level.climbableWall.bounds.max.x) / 2,
+        z: (this.level.climbableWall.bounds.min.y + this.level.climbableWall.bounds.max.y) / 2,
+      },
+      mountainSummit: { x: this.level.mountain.summitGate.x, z: this.level.mountain.summitGate.z },
+      water: {
+        minX: this.level.water.bounds.min.x,
+        maxX: this.level.water.bounds.max.x,
+        minZ: this.level.water.bounds.min.z,
+        maxZ: this.level.water.bounds.max.z,
+      },
+    });
 
     // AudioContext requires a user gesture to start — first keypress unlocks it and
     // kicks off the layered jungle ambience.
@@ -901,6 +920,7 @@ export class Game {
 
     this.hud.updateHealth(this.playerCombatant.hp, this.playerCombatant.maxHp);
     this.hud.updateStamina(this.playerController.stamina, MAX_STAMINA);
+    this.hud.updateMinimap(this.playerController.body.position.x, this.playerController.body.position.z, this.foxFacingAngle);
 
     // must run after every this-frame use of the old position (stalking's approach-speed calc above)
     this.prevPlayerPosition.copy(this.playerController.body.position);

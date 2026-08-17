@@ -10,6 +10,20 @@ import hudSource from '../HUD.ts?raw';
 // instantiate the REAL HUD class and call its REAL dismissLegend(), rather than parsing markup
 // through a hand-rolled HTML tree (a much larger, more fragile stand-in for the same purpose).
 
+// The minimap's real 2D drawing calls (clearRect/fillRect/beginPath/arc/etc.) need a real-shaped
+// context object to call methods on, not just a fake canvas element — this stand-in accepts and
+// no-ops every draw call HUD.ts's updateMinimap/updateMinimap use, matching this file's existing
+// "minimal fake surface, not a full DOM" philosophy.
+function fakeContext2D(): any {
+  const noop = () => {};
+  return {
+    clearRect: noop, fillRect: noop, beginPath: noop, moveTo: noop, lineTo: noop,
+    stroke: noop, fill: noop, arc: noop, closePath: noop, save: noop, restore: noop,
+    translate: noop, rotate: noop,
+    fillStyle: '', strokeStyle: '', lineWidth: 0, shadowColor: '', shadowBlur: 0,
+  };
+}
+
 function fakeElement(): any {
   const classSet = new Set<string>();
   const setPropertyCalls: [string, string][] = [];
@@ -25,9 +39,12 @@ function fakeElement(): any {
     },
     textContent: '',
     value: '',
+    width: 150,
+    height: 150,
     appendChild: () => {},
     addEventListener: () => {},
     querySelector: () => fakeElement(),
+    getContext: () => fakeContext2D(),
   };
   return el;
 }
@@ -151,5 +168,47 @@ describe('HUD boss bar + arc-complete toast — behavior (real HUD instance, fak
     hud.showArcComplete();
     const arcCompleteEl = (hud as unknown as { arcCompleteEl: ReturnType<typeof fakeElement> }).arcCompleteEl;
     expect(arcCompleteEl.classList.contains('rw-visible')).toBe(true);
+  });
+});
+
+describe('HUD minimap — behavior (real HUD instance, fake DOM + fake 2D context)', () => {
+  const world = {
+    bounds: { minX: -20, maxX: 20, minZ: -20, maxZ: 20 },
+    mountainBase: { x: -12, z: 8 },
+    mountainSummit: { x: -12, z: 8.4 },
+    water: { minX: 2, maxX: 10, minZ: -7, maxZ: -1 },
+  };
+
+  it('updateMinimap is a real no-op before initMinimap() has ever been called (must not throw)', async () => {
+    const { HUD } = await import('../HUD');
+    const hud = new HUD(fakeElement() as unknown as HTMLElement);
+    expect(() => hud.updateMinimap(0, 0, 0)).not.toThrow();
+  });
+
+  it('initMinimap + updateMinimap draws without throwing for a real set of world coordinates', async () => {
+    const { HUD } = await import('../HUD');
+    const hud = new HUD(fakeElement() as unknown as HTMLElement);
+    hud.initMinimap(world);
+    expect(() => hud.updateMinimap(0, 12, Math.PI / 3)).not.toThrow();
+  });
+
+  it('the world-to-canvas projection places a point at the bounds center at the canvas center', async () => {
+    const { HUD } = await import('../HUD');
+    const hud = new HUD(fakeElement() as unknown as HTMLElement);
+    hud.initMinimap(world);
+    const project = (hud as unknown as { minimapProject: (x: number, z: number) => { x: number; y: number } }).minimapProject.bind(hud);
+    const center = project(0, 0); // exact center of bounds { minX:-20,maxX:20,minZ:-20,maxZ:20 }
+    expect(center.x).toBeCloseTo(75, 5); // canvas width 150 / 2
+    expect(center.y).toBeCloseTo(75, 5); // canvas height 150 / 2
+  });
+
+  it('the world-to-canvas projection places a point at the bounds min corner at the canvas origin', async () => {
+    const { HUD } = await import('../HUD');
+    const hud = new HUD(fakeElement() as unknown as HTMLElement);
+    hud.initMinimap(world);
+    const project = (hud as unknown as { minimapProject: (x: number, z: number) => { x: number; y: number } }).minimapProject.bind(hud);
+    const origin = project(world.bounds.minX, world.bounds.minZ);
+    expect(origin.x).toBeCloseTo(0, 5);
+    expect(origin.y).toBeCloseTo(0, 5);
   });
 });

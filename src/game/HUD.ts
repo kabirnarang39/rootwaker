@@ -8,6 +8,19 @@ export interface PowerSlotState {
   ready: boolean;
 }
 
+/** The static, world-space content the minimap draws once and reuses every frame — everything
+ * here is real level geometry (Game.ts passes it straight from createJungleLevel()'s own
+ * chapterBounds/mountain/water), never fabricated map art. Kept as a flat data shape (not a
+ * dependency on JungleLevel's own type) so HUD.ts stays a pure presentation layer with no import
+ * of the scene module, matching every other HUD method's existing contract (Game.ts always
+ * passes primitives/small shapes in, never a live level/scene reference). */
+export interface MinimapWorldData {
+  bounds: { minX: number; maxX: number; minZ: number; maxZ: number };
+  mountainBase: { x: number; z: number };
+  mountainSummit: { x: number; z: number };
+  water: { minX: number; maxX: number; minZ: number; maxZ: number };
+}
+
 export class HUD {
   private root: HTMLDivElement;
   private healthBarEl: HTMLDivElement;
@@ -41,6 +54,9 @@ export class HUD {
   private damageFlashEl: HTMLDivElement;
   private damageFlashTimer: number | null = null;
   private powerSlotEls: Map<AbilityId, HTMLDivElement> = new Map();
+  private minimapCanvas: HTMLCanvasElement;
+  private minimapCtx: CanvasRenderingContext2D;
+  private minimapWorld: MinimapWorldData | null = null;
 
   constructor(container: HTMLElement) {
     this.root = document.createElement('div');
@@ -56,6 +72,10 @@ export class HUD {
         <div class="rw-stamina-track">
           <div class="rw-stamina-fill"></div>
         </div>
+      </div>
+      <div class="rw-minimap">
+        <span class="rw-label">the hollow</span>
+        <canvas class="rw-minimap-canvas" width="150" height="150"></canvas>
       </div>
       <div class="rw-damage-flash"></div>
       <div class="rw-power-bar">
@@ -210,6 +230,33 @@ export class HUD {
         background: linear-gradient(90deg, rgba(255,177,94,0.28), var(--spirit-amber));
         box-shadow: 0 0 10px 1px rgba(255,177,94,0.55), 0 0 2px rgba(255,177,94,0.9);
         transition: width 220ms ease-out;
+      }
+
+      /* Minimap: sits directly under the vitality/stamina cluster, same top-left instrument
+         column, framed in the identical carved-bark plaque language as the objective/legend
+         panels (not a bare canvas floating on the world) so it reads as part of the HUD's one
+         material system rather than a bolted-on debug overlay. The canvas itself draws in
+         Game.ts-driven world-space content (see HUD.initMinimap/updateMinimap) — this block only
+         owns the frame. Clip-path'd to the same angled-trapezoid silhouette as the other bark
+         plaques for visual consistency, with the canvas's own border-radius matching the frame's
+         rounded corner so the drawn content doesn't visibly square-off against a curved edge. */
+      .rw-minimap {
+        position: fixed; top: 96px; left: 20px; z-index: 10;
+        pointer-events: none;
+        font-family: var(--body-face); color: var(--parchment);
+        width: 150px;
+        padding: 8px 8px 7px;
+        background: linear-gradient(180deg, rgba(20,13,9,0.6), rgba(7,10,8,0.8));
+        border-top: 1px solid rgba(111,242,255,0.28);
+        box-shadow: 0 0 18px rgba(0,0,0,0.4);
+        clip-path: polygon(4% 0, 96% 0, 100% 6%, 100% 100%, 0 100%, 0 6%);
+      }
+      .rw-minimap .rw-label { margin-bottom: 5px; }
+      .rw-minimap-canvas {
+        display: block; width: 100%; height: 150px;
+        border-radius: 2px;
+        background: rgba(7,16,10,0.55);
+        box-shadow: inset 0 0 0 1px rgba(238,242,230,0.1);
       }
 
       /* Objective: bottom-center chapter prompt, styled as a carved bark plaque consistent
@@ -687,6 +734,8 @@ export class HUD {
     for (const id of ABILITY_SLOTS) {
       this.powerSlotEls.set(id, this.root.querySelector(`[data-ability="${id}"]`)!);
     }
+    this.minimapCanvas = this.root.querySelector('.rw-minimap-canvas')!;
+    this.minimapCtx = this.minimapCanvas.getContext('2d')!;
 
     // typing a name shouldn't trigger the global space/enter restart listener
     this.submitForm.addEventListener('keydown', (e) => e.stopPropagation());
@@ -703,6 +752,99 @@ export class HUD {
   updateStamina(stamina: number, maxStamina: number) {
     const pct = Math.max(0, Math.min(100, Math.round((stamina / maxStamina) * 100)));
     this.staminaBarEl.style.setProperty('--rw-sp-pct', `${pct}%`);
+  }
+
+  /** Called once, after the level exists — stores the static world-space content
+   * (bounds/mountain/water) the minimap redraws every frame from updateMinimap(). Kept separate
+   * from the constructor since HUD is constructed before Game.ts's own level/scene setup
+   * finishes, matching showBossBar's own "set once, mid-game" pattern. */
+  initMinimap(world: MinimapWorldData): void {
+    this.minimapWorld = world;
+  }
+
+  /** Real world-to-canvas projection, shared by every marker updateMinimap draws — a single
+   * conversion function so the player arrow and the static mountain/water markers can never
+   * silently drift out of alignment with each other from two different scaling formulas. */
+  private minimapProject(worldX: number, worldZ: number): { x: number; y: number } {
+    const world = this.minimapWorld!;
+    const w = this.minimapCanvas.width;
+    const h = this.minimapCanvas.height;
+    const nx = (worldX - world.bounds.minX) / (world.bounds.maxX - world.bounds.minX);
+    const nz = (worldZ - world.bounds.minZ) / (world.bounds.maxZ - world.bounds.minZ);
+    return { x: nx * w, y: nz * h };
+  }
+
+  /** Driven every frame from Game.ts's animate() loop — redraws the real jungle floor, water,
+   * mountain base/summit markers, and the player's own position+facing. A 150x150 canvas with a
+   * handful of shapes is negligible next to the WebGL scene this HUD sits on top of, so a full
+   * redraw every frame (rather than caching a static backdrop layer) keeps this method simple
+   * with no real performance cost. No-ops until initMinimap() has been called once. */
+  updateMinimap(playerX: number, playerZ: number, facingAngle: number): void {
+    if (!this.minimapWorld) return;
+    const ctx = this.minimapCtx;
+    const world = this.minimapWorld;
+    const w = this.minimapCanvas.width;
+    const h = this.minimapCanvas.height;
+
+    ctx.clearRect(0, 0, w, h);
+
+    // Jungle floor — a soft moss-toned wash so the play area itself reads as ground, distinct
+    // from the canvas's own darker background (which shows through as "unexplored"/off-map).
+    ctx.fillStyle = 'rgba(74,122,94,0.18)';
+    ctx.fillRect(0, 0, w, h);
+
+    // The water crossing — real bounds from the level's own WaterBody, not a placeholder shape.
+    const waterMin = this.minimapProject(world.water.minX, world.water.minZ);
+    const waterMax = this.minimapProject(world.water.maxX, world.water.maxZ);
+    ctx.fillStyle = 'rgba(111,242,255,0.28)';
+    ctx.fillRect(
+      Math.min(waterMin.x, waterMax.x),
+      Math.min(waterMin.y, waterMax.y),
+      Math.abs(waterMax.x - waterMin.x),
+      Math.abs(waterMax.y - waterMin.y),
+    );
+
+    // The mountain: a line from its real base to its real summit (the winding climb path means
+    // these are rarely at the exact same X/Z, which reads as a real route rather than one dot),
+    // base marked in stone-grey, summit marked in the same amber the ability/legend key-badges
+    // use for "the goal" — so the eye is drawn to where the climb actually ends.
+    const base = this.minimapProject(world.mountainBase.x, world.mountainBase.z);
+    const summit = this.minimapProject(world.mountainSummit.x, world.mountainSummit.z);
+    ctx.strokeStyle = 'rgba(238,242,230,0.35)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(base.x, base.y);
+    ctx.lineTo(summit.x, summit.y);
+    ctx.stroke();
+    ctx.fillStyle = 'rgba(160,160,160,0.9)';
+    ctx.beginPath();
+    ctx.arc(base.x, base.y, 3, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#ffb15e';
+    ctx.beginPath();
+    ctx.arc(summit.x, summit.y, 4, 0, Math.PI * 2);
+    ctx.fill();
+
+    // The player: a real directional arrow (not a plain dot), rotated to the fox's own facing
+    // angle — FoxFacing.ts's convention is angle-0-means-+Z, atan2(x,z), which is exactly the
+    // rotation a canvas arrow drawn pointing toward +Y (down, i.e. +Z on this projection) needs
+    // zero correction for; a positive facingAngle rotates canvas-clockwise the same direction it
+    // rotates the fox's own mesh in world space.
+    const player = this.minimapProject(playerX, playerZ);
+    ctx.save();
+    ctx.translate(player.x, player.y);
+    ctx.rotate(facingAngle);
+    ctx.fillStyle = '#6ff2ff';
+    ctx.shadowColor = 'rgba(111,242,255,0.8)';
+    ctx.shadowBlur = 6;
+    ctx.beginPath();
+    ctx.moveTo(0, -6);
+    ctx.lineTo(4, 5);
+    ctx.lineTo(0, 2);
+    ctx.lineTo(-4, 5);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
   }
 
   /** Driven every frame by Game.ts's hunt logic — shows/updates the compact pounce prompt. */
