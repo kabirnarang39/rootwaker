@@ -795,8 +795,9 @@ export class Game {
       if (isDefeated(king.combatant)) {
         this.kingDefeated = true;
         this.hud.hideBossBar();
-        this.level.throneRoom.openGate();
+        this.level.throneRoom.openGate(); // reveals both the village AND the real animal audience
         this.audio.playArcComplete();
+        this.audio.playCoronationCheer();
         this.audio.startVillageAmbience();
         this.hud.showArcComplete();
         this.abilityKit.unlock('kings-roar');

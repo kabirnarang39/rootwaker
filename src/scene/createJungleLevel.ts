@@ -28,6 +28,9 @@ export interface ThroneRoom {
   kingSpawn: THREE.Vector3;
   king: ElderBearKing;
   villageMeshes: THREE.Object3D[];
+  // Real animal spectators (bear/owl/viper/squirrel) flanking the aisle to the King — revealed
+  // by openGate() alongside villageMeshes, not in place of them.
+  animalAudience: THREE.Object3D[];
   gateOpen: boolean;
   openGate(): void;
 }
@@ -276,6 +279,42 @@ function buildFoliage(
   };
 }
 
+// A real jagged rock face, not a smooth box: N angular chunks (icosahedra scaled into rough
+// slabs, not round boulders) scattered across the wall's height/width and merged into ONE
+// BufferGeometry/Mesh — same clustering technique buildTreeSpeciesMeshes already uses for canopy
+// lobes, and critically the SAME single-Mesh return shape buildClimbableWall/buildClimbSegment
+// always had, so every caller (climbObstacleMeshes' "real Meshes only, no Groups" raycast
+// requirement, group.add()) needs zero changes. Chunks bias toward protruding along +thicknessAxis
+// (the wall's climbing-facing side) so the silhouette actually reads as jutting rock, not a flat
+// panel with a bumpy texture. Purely visual: the returned mesh's actual triangles are never
+// consulted by the climb mechanic, which reads ClimbableWall's numeric bounds/topY/normal only
+// (confirmed against Game.ts's nearWall/nearSegmentWall checks) — so this can never regress
+// climbing itself, only how it looks.
+function buildRockFaceMesh(thickness: number, height: number, faceWidth: number, color: number): THREE.Mesh {
+  const CHUNK_COUNT = 12;
+  const geoms: THREE.BufferGeometry[] = [];
+  for (let i = 0; i < CHUNK_COUNT; i++) {
+    const radius = thickness * (1.1 + Math.random() * 0.9);
+    const geo = new THREE.IcosahedronGeometry(radius, 0);
+    // Flatten toward a slab (thin along X, the wall's thickness axis) rather than a round boulder.
+    geo.scale(0.55 + Math.random() * 0.35, 1 + Math.random() * 0.7, 0.7 + Math.random() * 0.6);
+    const x = thickness * (0.15 + Math.random() * 0.55); // biased outward — chunks jut toward the climber
+    const y = (Math.random() - 0.5) * height * 0.96;
+    const z = (Math.random() - 0.5) * faceWidth * 0.92;
+    geo.translate(x, y, z);
+    geo.rotateY(Math.random() * Math.PI);
+    geo.rotateX((Math.random() - 0.5) * 0.4);
+    geoms.push(geo);
+  }
+  const merged = mergeGeometries(geoms, false);
+  if (!merged) throw new Error('buildRockFaceMesh: failed to merge rock-chunk geometry');
+  const mat = new THREE.MeshStandardMaterial({ color, roughness: 1, flatShading: true });
+  const mesh = new THREE.Mesh(merged, mat);
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  return mesh;
+}
+
 function buildClimbableWall(heightAt: (x: number, z: number) => number): { mesh: THREE.Mesh; wall: ClimbableWall } {
   const wallX = -12;
   const wallZWidth = 6;
@@ -283,11 +322,8 @@ function buildClimbableWall(heightAt: (x: number, z: number) => number): { mesh:
   const baseY = heightAt(wallX, baseZ);
   const height = 6;
 
-  const geo = new THREE.BoxGeometry(0.6, height, wallZWidth);
-  const mat = new THREE.MeshStandardMaterial({ color: 0x2c2216, roughness: 1, flatShading: true });
-  const mesh = new THREE.Mesh(geo, mat);
+  const mesh = buildRockFaceMesh(0.6, height, wallZWidth, 0x2c2216);
   mesh.position.set(wallX, baseY + height / 2, baseZ);
-  mesh.castShadow = true;
 
   const wall: ClimbableWall = {
     normal: new THREE.Vector3(1, 0, 0),
@@ -313,11 +349,8 @@ function buildClimbSegment(
   wallZWidth: number,
   height: number,
 ): { mesh: THREE.Mesh; wall: ClimbableWall } {
-  const geo = new THREE.BoxGeometry(0.6, height, wallZWidth);
-  const mat = new THREE.MeshStandardMaterial({ color: MOUNTAIN_WALL_COLOR, roughness: 1, flatShading: true });
-  const mesh = new THREE.Mesh(geo, mat);
+  const mesh = buildRockFaceMesh(0.6, height, wallZWidth, MOUNTAIN_WALL_COLOR);
   mesh.position.set(wallX, baseY + height / 2, baseZ);
-  mesh.castShadow = true;
 
   const wall: ClimbableWall = {
     normal: new THREE.Vector3(1, 0, 0),
@@ -502,19 +535,78 @@ function buildThroneRoom(summitGate: THREE.Vector3): { meshes: THREE.Object3D[];
     buildVillager(new THREE.Vector3(summitGate.x + 1.6, summitGate.y, summitGate.z + 20)),
   ];
 
+  // Real audience of animals — the ones the fox actually fought and grew stronger from —
+  // flanking the aisle toward the King, in addition to the village reveal (the mountain's
+  // people AND its animals both turn out for the coronation, not one replacing the other).
+  // Purely decorative: real rigged models (same anatomy the user already asked to be "very real
+  // looking"), no Combatant/EnemyAI, hidden until openGate() exactly like the villagers.
+  const AUDIENCE_HALF_WIDTH = 6.5; // inside the floor's own 8m half-width, leaving a real margin
+  const boulderMat = new THREE.MeshStandardMaterial({ color: MOUNTAIN_LEDGE_COLOR, roughness: 1, flatShading: true });
+  const perchedOwlAt = (x: number, z: number): THREE.Group => {
+    const group = new THREE.Group();
+    const boulder = new THREE.Mesh(new THREE.IcosahedronGeometry(0.5, 0), boulderMat);
+    boulder.position.y = 0.3;
+    boulder.castShadow = true;
+    boulder.receiveShadow = true;
+    const owl = createCanopyOwl();
+    owl.group.position.y = 0.85; // clears the 0.5-radius boulder's top (center 0.3 + radius 0.5)
+    group.add(boulder, owl.group);
+    group.position.set(x, summitGate.y, z);
+    group.visible = false;
+    return group;
+  };
+  const groundAnimalAt = (build: () => { group: THREE.Group }, x: number, z: number, rotationY = 0): THREE.Group => {
+    const entity = build();
+    entity.group.position.set(x, summitGate.y, z);
+    entity.group.rotation.y = rotationY;
+    entity.group.visible = false;
+    return entity.group;
+  };
+  const animalAudience: THREE.Object3D[] = [
+    perchedOwlAt(summitGate.x - AUDIENCE_HALF_WIDTH, summitGate.z + 8),
+    perchedOwlAt(summitGate.x + AUDIENCE_HALF_WIDTH, summitGate.z + 13),
+    groundAnimalAt(createGroveBear, summitGate.x - AUDIENCE_HALF_WIDTH + 1, summitGate.z + 15, Math.PI / 2),
+    groundAnimalAt(createGroveBear, summitGate.x + AUDIENCE_HALF_WIDTH - 1, summitGate.z + 6, -Math.PI / 2),
+    groundAnimalAt(createVineViper, summitGate.x - AUDIENCE_HALF_WIDTH + 1.5, summitGate.z + 21, Math.PI / 2),
+    groundAnimalAt(() => createGroveSquirrel(new THREE.Vector3()), summitGate.x + AUDIENCE_HALF_WIDTH - 1.5, summitGate.z + 20, -Math.PI / 2),
+  ];
+
   const throneRoom: ThroneRoom = {
     bounds,
     kingSpawn,
     king,
     villageMeshes,
+    animalAudience,
     gateOpen: false,
     openGate: () => {
       throneRoom.gateOpen = true;
       for (const mesh of throneRoom.villageMeshes) mesh.visible = true;
+      for (const mesh of throneRoom.animalAudience) mesh.visible = true;
     },
   };
 
-  return { meshes: [floorMesh, king.group, ...villageMeshes], throneRoom };
+  // Rock-strewn perimeter along both long edges of the floor, outside the walkable bounds —
+  // reads as an open rocky summit clearing rather than an indoor floor. Purely visual scatter,
+  // built from the same rock-chunk clustering technique as buildRockFaceMesh but laid low and
+  // wide (ground boulders) instead of tall and thin (a cliff face) — never touches `bounds`,
+  // the altitude-guarded walkable footprint Game.ts's groundHeightWithLedges reads.
+  const perimeterMeshes: THREE.Mesh[] = [];
+  for (let i = 0; i < 14; i++) {
+    const side = i % 2 === 0 ? -1 : 1;
+    // Strictly beyond FLOOR_HALF_WIDTH (never inside it) — these are perimeter dressing outside
+    // the walkable floor, not props sitting on it.
+    const x = summitGate.x + side * (FLOOR_HALF_WIDTH + 0.2 + Math.random() * 1.4);
+    const z = floorNearZ + Math.random() * floorDepth;
+    const radius = 0.35 + Math.random() * 0.55;
+    const boulder = new THREE.Mesh(new THREE.IcosahedronGeometry(radius, 0), boulderMat);
+    boulder.position.set(x, summitGate.y - 0.1 + radius * 0.3, z);
+    boulder.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
+    boulder.castShadow = true;
+    boulder.receiveShadow = true;
+    perimeterMeshes.push(boulder);
+  }
+
+  return { meshes: [floorMesh, king.group, ...villageMeshes, ...animalAudience, ...perimeterMeshes], throneRoom };
 }
 
 function buildWater(): { mesh: THREE.Mesh; water: WaterBody } {

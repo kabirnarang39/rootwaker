@@ -75,6 +75,23 @@ describe('createJungleLevel', () => {
     }
   });
 
+  it('the real animal audience is hidden until openGate(), sits within the throne-room floor bounds, and is revealed alongside the village (not instead of it)', () => {
+    const level = createJungleLevel();
+    const { bounds, animalAudience, villageMeshes } = level.throneRoom;
+    expect(animalAudience.length).toBeGreaterThan(0);
+    for (const spectator of animalAudience) {
+      expect(spectator.visible).toBe(false);
+      expect(spectator.position.x).toBeGreaterThanOrEqual(bounds.min.x);
+      expect(spectator.position.x).toBeLessThanOrEqual(bounds.max.x);
+      expect(spectator.position.z).toBeGreaterThanOrEqual(bounds.min.y);
+      expect(spectator.position.z).toBeLessThanOrEqual(bounds.max.y);
+    }
+
+    level.throneRoom.openGate();
+    for (const spectator of animalAudience) expect(spectator.visible).toBe(true);
+    expect(villageMeshes[0].visible).toBe(true); // both reveal together, neither replaces the other
+  });
+
   it('diverse-species wildlife arrays exist and are non-empty (owls, vipers, squirrels, one finch flock)', () => {
     const level = createJungleLevel();
     expect(level.owls.length).toBeGreaterThan(0);

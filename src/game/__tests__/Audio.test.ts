@@ -98,4 +98,9 @@ describe('AudioFX species sounds', () => {
     const fx = new AudioFX();
     expect(() => fx.playEatBite()).not.toThrow();
   });
+
+  it('playCoronationCheer does not throw before unlock()', () => {
+    const fx = new AudioFX();
+    expect(() => fx.playCoronationCheer()).not.toThrow();
+  });
 });

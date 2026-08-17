@@ -511,6 +511,61 @@ export class AudioFX {
     snap.stop(ctx.currentTime + 0.12);
   }
 
+  /** The coronation's real animal audience — layered, staggered voice bursts standing in for a
+   * crowd of different species calling out at once (not one instrument, and deliberately NOT a
+   * copy of playArcComplete's clean ascending chime, which plays alongside this at the same
+   * moment as the "resolution" cue — this is the "the mountain itself is celebrating" texture).
+   * Three real, distinct voices: a low rising roar-sweep (bear-register), 4 quick high dry
+   * clicks (squirrel-register, reusing the same square-wave chatter idea as
+   * playSquirrelChatter but staggered wider/slower to read as calls, not one alarm burst), and a
+   * short rasping screech (owl-register, a lighter version of playOwlScreech's noise-modulation
+   * technique). Staggered start times so they overlap like a real crowd, not three sounds in a
+   * neat row. */
+  playCoronationCheer(): void {
+    if (!this.ctx) return;
+    const ctx = this.ctx;
+
+    const roar = ctx.createOscillator();
+    roar.type = 'sawtooth';
+    roar.frequency.setValueAtTime(80, ctx.currentTime);
+    roar.frequency.linearRampToValueAtTime(140, ctx.currentTime + 0.5);
+    roar.frequency.exponentialRampToValueAtTime(70, ctx.currentTime + 1.1);
+    const roarFilter = ctx.createBiquadFilter();
+    roarFilter.type = 'lowpass';
+    roarFilter.frequency.value = 500;
+    const roarGain = ctx.createGain();
+    roarGain.gain.setValueAtTime(0, ctx.currentTime);
+    roarGain.gain.linearRampToValueAtTime(0.09, ctx.currentTime + 0.2);
+    roarGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 1.1);
+    roar.connect(roarFilter);
+    roarFilter.connect(roarGain);
+    roarGain.connect(ctx.destination);
+    roar.start(ctx.currentTime);
+    roar.stop(ctx.currentTime + 1.15);
+
+    for (let i = 0; i < 4; i++) {
+      const delay = 0.3 + i * 0.16 + Math.random() * 0.05;
+      this.tone(1500 + Math.random() * 400, 0.07, 'square', 0.05, delay);
+    }
+
+    const screechDelay = 0.5;
+    const noise = ctx.createBufferSource();
+    noise.buffer = makeNoiseBuffer(ctx, 0.35);
+    const screechFilter = ctx.createBiquadFilter();
+    screechFilter.type = 'bandpass';
+    screechFilter.frequency.value = 2200;
+    screechFilter.Q.value = 1.2;
+    const screechGain = ctx.createGain();
+    const t0 = ctx.currentTime + screechDelay;
+    screechGain.gain.setValueAtTime(0.001, t0);
+    screechGain.gain.linearRampToValueAtTime(0.08, t0 + 0.05);
+    screechGain.gain.exponentialRampToValueAtTime(0.001, t0 + 0.35);
+    noise.connect(screechFilter);
+    screechFilter.connect(screechGain);
+    screechGain.connect(ctx.destination);
+    noise.start(t0);
+  }
+
   startVillageAmbience(): void {
     // A single warm, sustained drone — deliberately sparser than startJungleAmbience's
     // multi-layer canopy/floor/bird/water soundscape or startMountainWind's noise gusts: this is
