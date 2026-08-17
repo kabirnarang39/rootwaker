@@ -96,7 +96,13 @@ export class PlayerController {
       this.body.velocity.set(0, 0, 0);
       return;
     }
-    this.body.position.y += input.z * CLIMB_SPEED * delta;
+    // Clamp Y to climbTopY in the same step it's advanced — not advance-then-clamp-after — so a
+    // frame whose step would overshoot the top never lets Z (derived from Y just below) be
+    // computed from a transient overshot height. Without this, the very last frame of a climb
+    // could land Z a few centimeters short of the ledge's own real path endpoint (still well
+    // within MOUNTAIN_LEDGE_RADIUS, but not the exact ideal landing spot) — caught by this
+    // project's own real end-to-end climb integration test, not assumed safe by inspection.
+    this.body.position.y = Math.min(this.body.position.y + input.z * CLIMB_SPEED * delta, this.climbTopY);
     this.body.position.x += input.x * CLIMB_SPEED * delta * 0.5; // lateral shuffle along the wall, slower than vertical
     // Real winding path: Z is a deterministic function of height climbed so far, always
     // re-derived from the wall's own base (never accumulated frame-to-frame), so it can never
@@ -106,7 +112,6 @@ export class PlayerController {
     const { dz } = this.climbPathAt(heightAboveBase);
     this.body.position.z = this.climbBaseZ + dz;
     if (this.body.position.y >= this.climbTopY) {
-      this.body.position.y = this.climbTopY;
       this.mode = 'grounded';
       this.grounded = true;
     }
