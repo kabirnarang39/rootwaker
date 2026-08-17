@@ -19,8 +19,9 @@ function fakeContext2D(): any {
   return {
     clearRect: noop, fillRect: noop, beginPath: noop, moveTo: noop, lineTo: noop,
     stroke: noop, fill: noop, arc: noop, closePath: noop, save: noop, restore: noop,
-    translate: noop, rotate: noop,
+    translate: noop, rotate: noop, drawImage: noop, strokeRect: noop, fillText: noop,
     fillStyle: '', strokeStyle: '', lineWidth: 0, shadowColor: '', shadowBlur: 0,
+    font: '', textAlign: '',
   };
 }
 
@@ -193,6 +194,7 @@ describe('HUD minimap — behavior (real HUD instance, fake DOM + fake 2D contex
     mountainBase: { x: -12, z: 8 },
     mountainSummit: { x: -12, z: 8.4 },
     water: { minX: 2, maxX: 10, minZ: -7, maxZ: -1 },
+    groundHeightAt: (x: number, z: number) => Math.sin(x * 0.15) + Math.cos(z * 0.12),
   };
 
   it('updateMinimap is a real no-op before initMinimap() has ever been called (must not throw)', async () => {
@@ -226,5 +228,21 @@ describe('HUD minimap — behavior (real HUD instance, fake DOM + fake 2D contex
     const origin = project(world.bounds.minX, world.bounds.minZ);
     expect(origin.x).toBeCloseTo(0, 5);
     expect(origin.y).toBeCloseTo(0, 5);
+  });
+
+  it('initMinimap bakes a real terrain backdrop by actually sampling groundHeightAt across a grid (regression: a flat color wash needs zero real terrain samples — this proves the contour is real, not decorative)', async () => {
+    const { HUD } = await import('../HUD');
+    const hud = new HUD(fakeElement() as unknown as HTMLElement);
+    const heightSpy = vi.fn((x: number, z: number) => Math.sin(x) + Math.cos(z));
+    hud.initMinimap({ ...world, groundHeightAt: heightSpy });
+    expect(heightSpy).toHaveBeenCalled();
+    expect(heightSpy.mock.calls.length).toBeGreaterThanOrEqual(32 * 32); // GRID x GRID in buildMinimapTerrainBackdrop
+  });
+
+  it('updateMinimap draws the coastline ring and compass ticks without throwing (real full-island sea + compass, not just the old flat wash)', async () => {
+    const { HUD } = await import('../HUD');
+    const hud = new HUD(fakeElement() as unknown as HTMLElement);
+    hud.initMinimap(world);
+    expect(() => hud.updateMinimap(5, -3, 1.2)).not.toThrow();
   });
 });

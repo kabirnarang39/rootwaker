@@ -421,6 +421,7 @@ export class Game {
         minZ: this.level.water.bounds.min.z,
         maxZ: this.level.water.bounds.max.z,
       },
+      groundHeightAt: this.level.groundHeightAt,
     });
 
     // AudioContext requires a user gesture to start — first keypress unlocks it and

@@ -19,6 +19,9 @@ export interface MinimapWorldData {
   mountainBase: { x: number; z: number };
   mountainSummit: { x: number; z: number };
   water: { minX: number; maxX: number; minZ: number; maxZ: number };
+  // Real terrain contour, not a flat wash — sampled once in initMinimap() (terrain never changes
+  // at runtime) to bake a real heightmap backdrop.
+  groundHeightAt: (x: number, z: number) => number;
 }
 
 export class HUD {
@@ -61,6 +64,9 @@ export class HUD {
   private minimapCanvas: HTMLCanvasElement;
   private minimapCtx: CanvasRenderingContext2D;
   private minimapWorld: MinimapWorldData | null = null;
+  // Baked once in initMinimap() from a real sampled heightmap — terrain never changes at runtime,
+  // so redrawing it from scratch every frame (like the rest of the minimap) would be pure waste.
+  private minimapTerrainBackdrop: HTMLCanvasElement | null = null;
 
   constructor(container: HTMLElement) {
     this.root = document.createElement('div');
@@ -79,7 +85,7 @@ export class HUD {
       </div>
       <div class="rw-minimap">
         <span class="rw-label">the hollow</span>
-        <canvas class="rw-minimap-canvas" width="150" height="150"></canvas>
+        <canvas class="rw-minimap-canvas" width="190" height="190"></canvas>
       </div>
       <div class="rw-damage-flash"></div>
       <div class="rw-power-bar">
@@ -252,7 +258,7 @@ export class HUD {
         position: fixed; top: 96px; left: 20px; z-index: 10;
         pointer-events: none;
         font-family: var(--body-face); color: var(--parchment);
-        width: 150px;
+        width: 190px;
         padding: 8px 8px 7px;
         background: linear-gradient(180deg, rgba(20,13,9,0.6), rgba(7,10,8,0.8));
         border-top: 1px solid rgba(111,242,255,0.28);
@@ -261,7 +267,7 @@ export class HUD {
       }
       .rw-minimap .rw-label { margin-bottom: 5px; }
       .rw-minimap-canvas {
-        display: block; width: 100%; height: 150px;
+        display: block; width: 100%; height: 190px;
         border-radius: 2px;
         background: rgba(7,16,10,0.55);
         box-shadow: inset 0 0 0 1px rgba(238,242,230,0.1);
@@ -809,9 +815,54 @@ export class HUD {
   /** Called once, after the level exists — stores the static world-space content
    * (bounds/mountain/water) the minimap redraws every frame from updateMinimap(). Kept separate
    * from the constructor since HUD is constructed before Game.ts's own level/scene setup
-   * finishes, matching showBossBar's own "set once, mid-game" pattern. */
+   * finishes, matching showBossBar's own "set once, mid-game" pattern. Also bakes a real terrain
+   * heightmap backdrop — see buildMinimapTerrainBackdrop below. */
   initMinimap(world: MinimapWorldData): void {
     this.minimapWorld = world;
+    this.minimapTerrainBackdrop = this.buildMinimapTerrainBackdrop(world);
+  }
+
+  /** Real terrain contour, not a flat color wash: samples the level's own groundHeightAt() across
+   * a real grid (matching the low-poly/flat-shaded aesthetic the rest of the game already uses —
+   * blocky cells, not a smoothed gradient) and shades each cell by its own height, normalized
+   * against the real min/max actually sampled (robust to the terrain formula ever changing) — high
+   * ground reads lighter, the river's real dip reads darker. Baked once since terrain is static. */
+  private buildMinimapTerrainBackdrop(world: MinimapWorldData): HTMLCanvasElement {
+    const GRID = 32;
+    const canvas = document.createElement('canvas');
+    canvas.width = this.minimapCanvas.width;
+    canvas.height = this.minimapCanvas.height;
+    const ctx = canvas.getContext('2d')!;
+    const w = canvas.width;
+    const h = canvas.height;
+    const cellW = w / GRID;
+    const cellH = h / GRID;
+
+    const heights: number[] = [];
+    for (let gz = 0; gz < GRID; gz++) {
+      for (let gx = 0; gx < GRID; gx++) {
+        const worldX = world.bounds.minX + ((gx + 0.5) / GRID) * (world.bounds.maxX - world.bounds.minX);
+        const worldZ = world.bounds.minZ + ((gz + 0.5) / GRID) * (world.bounds.maxZ - world.bounds.minZ);
+        heights.push(world.groundHeightAt(worldX, worldZ));
+      }
+    }
+    const min = Math.min(...heights);
+    const max = Math.max(...heights);
+    const range = max - min || 1;
+
+    for (let gz = 0; gz < GRID; gz++) {
+      for (let gx = 0; gx < GRID; gx++) {
+        const t = (heights[gz * GRID + gx] - min) / range; // 0 (lowest) .. 1 (highest)
+        // Real jungle-floor palette: darker mossy green at low ground (the river dip), lighter
+        // toward higher terrain — same hue family as the existing water-crossing/floor colors.
+        const r = Math.round(20 + t * 50);
+        const g = Math.round(45 + t * 85);
+        const b = Math.round(30 + t * 55);
+        ctx.fillStyle = `rgb(${r},${g},${b})`;
+        ctx.fillRect(gx * cellW, gz * cellH, cellW + 1, cellH + 1); // +1 avoids hairline seams between cells
+      }
+    }
+    return canvas;
   }
 
   /** Real world-to-canvas projection, shared by every marker updateMinimap draws — a single
@@ -840,10 +891,29 @@ export class HUD {
 
     ctx.clearRect(0, 0, w, h);
 
-    // Jungle floor — a soft moss-toned wash so the play area itself reads as ground, distinct
-    // from the canvas's own darker background (which shows through as "unexplored"/off-map).
-    ctx.fillStyle = 'rgba(74,122,94,0.18)';
-    ctx.fillRect(0, 0, w, h);
+    // Real terrain contour (baked once in initMinimap), not a flat wash.
+    if (this.minimapTerrainBackdrop) ctx.drawImage(this.minimapTerrainBackdrop, 0, 0, w, h);
+
+    // The living sea rings the whole island now (see createJungleLevel.ts's buildLivingSea) — a
+    // real coastline band just outside the map's own bounds reads as "the world continues past
+    // the edge", instead of the map silently ending at a hard black border.
+    ctx.strokeStyle = 'rgba(28,74,99,0.9)';
+    ctx.lineWidth = 6;
+    ctx.strokeRect(3, 3, w - 6, h - 6);
+
+    // Compass ticks — N/E/S/W. World +Z is called "north" here purely as a fixed, consistent
+    // labeling convention (matches nothing in-world, there's no real compass lore) — the point is
+    // a stable reference frame the player can orient by, not a literal direction.
+    ctx.fillStyle = 'rgba(238,242,230,0.55)';
+    ctx.font = '9px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('N', w / 2, 11);
+    ctx.fillText('S', w / 2, h - 4);
+    ctx.textAlign = 'left';
+    ctx.fillText('W', 4, h / 2 + 3);
+    ctx.textAlign = 'right';
+    ctx.fillText('E', w - 4, h / 2 + 3);
+    ctx.textAlign = 'left';
 
     // The water crossing — real bounds from the level's own WaterBody, not a placeholder shape.
     const waterMin = this.minimapProject(world.water.minX, world.water.minZ);
