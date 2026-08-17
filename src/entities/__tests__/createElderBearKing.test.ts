@@ -40,6 +40,19 @@ describe('createElderBearKing', () => {
     expect(king.ai.strikeRange).toBeCloseTo(king.combatant.hitbox.radius + 0.4 - 0.05, 5);
   });
 
+  it('a stunned King does not let an already-armed ground slam keep advancing (regression: King\'s Roar used to stagger the AI state machine but the ground-slam hazard kept ticking toward its damaging window regardless)', () => {
+    const king = createElderBearKing();
+    king.combatant.hp = 50; // enraged phase, ground-slam-armable
+    king.ai.state = 'idle';
+    king.update(1, 1 / 60, 1); // enters telegraph, arms the ground slam
+    expect(king.groundSlam.state).toBe('telegraph');
+
+    king.ai.stun(2.5); // King's Roar
+    const stateAtStunStart = king.groundSlam.state;
+    for (let i = 0; i < 60; i++) king.update(2 + i * 0.05, 0.05, 1); // 3s of real time, well past the slam's own telegraph window
+    expect(king.groundSlam.state).toBe(stateAtStunStart); // frozen, not advanced to 'active' or 'idle'
+  });
+
   it('getElderBearKingHitbox tracks the spine joint\'s world position after update()', () => {
     const king = createElderBearKing();
     king.group.position.set(5, 0, 5);

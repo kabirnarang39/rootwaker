@@ -156,7 +156,12 @@ export function createElderBearKing(): ElderBearKing {
       applyClipToRig(rig, swipeClip, time - swipeStartTime);
     }
 
-    groundSlam.update(delta);
+    // Gated on the King not being stunned: EnemyAI.stun() (King's Roar) freezes ai.update()'s own
+    // state progression, but before this fix nothing stopped an ALREADY-armed ground slam from
+    // continuing to telegraph->active on its own timer regardless — the boss's most dangerous move
+    // kept landing through a stagger meant to interrupt it. Now the slam's own clock pauses too,
+    // and resumes exactly where it left off once the stun wears off.
+    if (!ai.isStunned()) groundSlam.update(delta);
     rig.root.updateMatrixWorld(true);
     syncHitbox();
   }

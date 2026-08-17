@@ -11,7 +11,11 @@ import { createRootWraith, getAttackHitbox } from '../entities/rootWraith';
 import { getBoarHitbox } from '../entities/tuskBoar';
 import { getGroveBearHitbox } from '../entities/createGroveBear';
 import { getElderBearKingHitbox } from '../entities/createElderBearKing';
+import { getCanopyOwlHitbox } from '../entities/createCanopyOwl';
+import { getVineViperHitbox } from '../entities/createVineViper';
+import type { FlockState } from '../entities/createDuskFinchFlock';
 import { computeBossPhase, BOSS_PHASE_PARAMS } from '../entities/BossPhaseController';
+import { VenomTracker, VENOM_DAMAGE_PER_TICK } from './Venom';
 import type { GroundSlamState } from './GroundSlam';
 import type { GroveHare } from '../entities/groveHare';
 import { resolveMeleeHit, applyDamage, isDefeated, CLAW_SWIPE, type Combatant } from './Combat';
@@ -27,7 +31,7 @@ import { SKINS } from '../scene/skins';
 import { resolvePlayerObstacleCollision } from './ObstacleCollision';
 import { toCameraRelative } from './CameraRelativeMove';
 import { computeFacingAngle } from './FoxFacing';
-import { chaseTowardPlayer } from './EnemyChase';
+import { chaseTowardPlayer, horizontalDistance } from './EnemyChase';
 
 // Mirrors PlayerController's own (unexported) pounce range so the hunt-prompt lights up
 // exactly when a pounce would actually succeed. Keep these two in sync by hand.
@@ -84,6 +88,34 @@ const WRAITH_CHASE_SPEED = 3.2;
 const BOAR_CHASE_SPEED = 4.5; // a boar's real charge is a real sprint, not a walk
 const BEAR_CHASE_SPEED = 3.4;
 const KING_CHASE_SPEED = 2.6;
+
+// Owl: a real aerial predator, not a ground chaser with a Y offset bolted on. OWL_STRIKE_HOVER_Y
+// is how far above the player it hovers once in strike position (a dive-bomb reads as an attack
+// FROM ABOVE, not a beak poking in at chest height). Hand-verified (see the owl loop in animate()
+// for the full arithmetic): with this hover height, the owl's AI gate must use HORIZONTAL
+// distance, not chaseTowardPlayer/EnemyChase's usual 3D .distanceTo() convention — a 3D distance
+// at this hover height would sit permanently outside computeStrikeRange(0.32) even fully
+// converged, since sqrt(strikeRange^2 + hoverY^2) > strikeRange for any nonzero hover height.
+const OWL_CHASE_SPEED = 5.0; // horizontal closing speed while diving
+const OWL_DIVE_SPEED = 4.0; // vertical descent, m/s, toward strike-hover height
+const OWL_CLIMB_SPEED = 2.0; // vertical climb, m/s, back to its own perch once idle
+const OWL_STRIKE_HOVER_Y = 0.5;
+const OWL_HIT_DAMAGE = 10;
+const VIPER_CHASE_SPEED = 5.5;
+const VIPER_HIT_DAMAGE = 9;
+
+// Owl's Descent: a real forward-and-down leap (mirrors the boar-charge dash idiom — a direct
+// position override for the leap window, falling through to the same obstacle/water checks).
+const OWL_DIVE_LEAP_SECONDS = 0.45;
+const OWL_DIVE_FORWARD_SPEED = 9; // m/s
+const OWL_DIVE_PEAK_HEIGHT = 2.0; // meters, parabola apex above the takeoff ground height
+const OWL_DIVE_AOE_RADIUS = 2.2;
+const OWL_DIVE_AOE_DAMAGE = 18;
+const OWL_DIVE_AOE_KNOCKBACK = 1.0;
+
+// Viper Venom: envenoms every real enemy within range on activation; VenomTracker (Venom.ts)
+// owns the tick timing/damage-per-tick, this is only the application radius.
+const VENOM_APPLY_RADIUS = 3.5;
 
 // All mountain wall/segments share a fixed 6-unit segment height, so each one's base is
 // wall.topY - 6. Gate proximity checks on this so stacked segments (same x/z, different
@@ -143,9 +175,27 @@ export class Game {
   private mountainWindStarted = false;
   private summitGateCrossed = false;
   private kingDefeated = false;
+  // The root-wraith is unkillable and nothing notices (Task 6 Step 7a): nothing ever checked
+  // isDefeated(wraith.combatant), so it absorbed hits and kept dealing damage forever past 0 HP.
+  // A root-spirit grants no ability on kill, so its enemyEntries() onDefeat only removes it.
+  private wraithDefeated = false;
   private prevGroundSlamState: GroundSlamState = 'idle';
   private groundSlamDamageApplied = false;
   private prevPlayerPosition = this.playerController.body.position.clone();
+
+  // Per-instance "was this creature in <state> last frame" tracking for sound triggers, keyed by
+  // each creature's own EnemyAI/WildlifeAI object — the same "fires once per state transition"
+  // idiom prevGustState/prevGroundSlamState already use for the single-instance hazards, extended
+  // to arrays of many creatures via WeakMap instead of one shared field.
+  private prevOwlAiState = new WeakMap<object, string>();
+  private prevViperAiState = new WeakMap<object, string>();
+  private prevSquirrelState = new WeakMap<object, string>();
+  private prevFinchFlockState: FlockState = 'perched';
+
+  private venom = new VenomTracker();
+  private owlDiveEndTime = -Infinity;
+  private owlDiveDirection = new THREE.Vector3(0, 0, 1);
+  private owlDiveAoeApplied = true; // starts "already applied" — no leap has happened yet
 
   private input: Input;
   private hud: HUD;
@@ -261,6 +311,8 @@ export class Game {
       if (action === 'ability2') this.tryActivateAbility(ABILITY_SLOTS[1]);
       if (action === 'ability3') this.tryActivateAbility(ABILITY_SLOTS[2]);
       if (action === 'ability4') this.tryActivateAbility(ABILITY_SLOTS[3]);
+      if (action === 'ability5') this.tryActivateAbility(ABILITY_SLOTS[4]);
+      if (action === 'ability6') this.tryActivateAbility(ABILITY_SLOTS[5]);
     });
 
     this.hud = new HUD(container);
@@ -397,6 +449,24 @@ export class Game {
           this.playerController.body.position.z,
         );
         this.playerController.body.velocity.set(this.dashDirection.x * DASH_SPEED, 0, this.dashDirection.z * DASH_SPEED);
+      } else if (time < this.owlDiveEndTime) {
+        // Owl's Descent — the same "bypass the normal input->velocity mapping" idiom as the dash
+        // above, but with a real parabolic arc: forward at OWL_DIVE_FORWARD_SPEED, vertical
+        // offset peaking at OWL_DIVE_PEAK_HEIGHT mid-leap via 4*t*(1-t) (0 at t=0 and t=1, 1 at
+        // t=0.5, scaled by the peak height — the standard normalized-parabola shape).
+        const diveStart = this.owlDiveEndTime - OWL_DIVE_LEAP_SECONDS;
+        const t = THREE.MathUtils.clamp((time - diveStart) / OWL_DIVE_LEAP_SECONDS, 0, 1);
+        this.playerController.body.position.addScaledVector(this.owlDiveDirection, OWL_DIVE_FORWARD_SPEED * delta);
+        const ground = this.groundHeightWithLedges(
+          this.playerController.body.position.x,
+          this.playerController.body.position.z,
+        );
+        this.playerController.body.position.y = ground + OWL_DIVE_PEAK_HEIGHT * 4 * t * (1 - t);
+        this.playerController.body.velocity.set(
+          this.owlDiveDirection.x * OWL_DIVE_FORWARD_SPEED,
+          0,
+          this.owlDiveDirection.z * OWL_DIVE_FORWARD_SPEED,
+        );
       } else {
         this.playerController.update(this.moveInput, delta, this.groundHeightWithLedges);
       }
@@ -416,6 +486,24 @@ export class Game {
       );
       if (isInsideWaterBody(this.playerController.body.position, this.level.water)) {
         this.playerController.beginSwim();
+      }
+    }
+
+    // Owl's Descent AOE: applies exactly once, on the frame the leap window closes (landing),
+    // using the player's fully-resolved position for the frame (after obstacle-collision/water
+    // checks above) as the landing point.
+    if (!this.owlDiveAoeApplied && time >= this.owlDiveEndTime) {
+      this.owlDiveAoeApplied = true;
+      const landingPos = this.playerController.body.position;
+      for (const entry of this.enemyEntries()) {
+        if (entry.position.distanceTo(landingPos) > OWL_DIVE_AOE_RADIUS) continue;
+        applyDamage(entry.combatant, OWL_DIVE_AOE_DAMAGE);
+        const dx = entry.position.x - landingPos.x;
+        const dz = entry.position.z - landingPos.z;
+        const dist = Math.hypot(dx, dz) || 1;
+        entry.position.x += (dx / dist) * OWL_DIVE_AOE_KNOCKBACK;
+        entry.position.z += (dz / dist) * OWL_DIVE_AOE_KNOCKBACK;
+        if (isDefeated(entry.combatant)) entry.onDefeat?.();
       }
     }
 
@@ -469,15 +557,20 @@ export class Game {
     this.playerCombatant.hitbox.start.copy(this.playerController.body.position);
     this.playerCombatant.hitbox.end.copy(this.playerController.body.position).add(new THREE.Vector3(0, 0.9, 0));
 
-    const distanceToPlayer = this.wraith.group.position.distanceTo(this.playerController.body.position);
-    this.wraith.update(time, delta, distanceToPlayer);
-    if (this.wraith.ai.state !== 'idle') {
-      chaseTowardPlayer(this.wraith.group.position, this.playerController.body.position, WRAITH_CHASE_SPEED, delta, this.wraith.ai.strikeRange);
+    if (!this.wraithDefeated) {
+      const distanceToPlayer = horizontalDistance(this.wraith.group.position, this.playerController.body.position);
+      this.wraith.update(time, delta, distanceToPlayer);
+      if (this.wraith.ai.state !== 'idle') {
+        chaseTowardPlayer(this.wraith.group.position, this.playerController.body.position, WRAITH_CHASE_SPEED, delta, this.wraith.ai.strikeRange);
+      }
+      // Always re-snap, not just while chasing: a knockback (melee or an AOE power) moves x/z
+      // but never y, so an idle enemy knocked back mid-stand used to keep a stale Y until it next
+      // aggroed (Task 6 Step 7c). Applied uniformly to every ground melee enemy below too.
       this.wraith.group.position.y = this.level.groundHeightAt(this.wraith.group.position.x, this.wraith.group.position.z);
-    }
-    if (this.wraith.ai.shouldDealDamageThisFrame()) {
-      const hit = resolveMeleeHit(getAttackHitbox(this.wraith), this.playerCombatant);
-      if (hit) this.hurtPlayer(12);
+      if (this.wraith.ai.shouldDealDamageThisFrame()) {
+        const hit = resolveMeleeHit(getAttackHitbox(this.wraith), this.playerCombatant);
+        if (hit) this.hurtPlayer(12);
+      }
     }
 
     for (const hare of this.level.hares) {
@@ -503,12 +596,12 @@ export class Game {
     }
 
     for (const boar of this.level.boars) {
-      const boarDistance = boar.group.position.distanceTo(this.playerController.body.position);
+      const boarDistance = horizontalDistance(boar.group.position, this.playerController.body.position);
       boar.update(time, delta, boarDistance);
       if (boar.ai.state !== 'idle') {
         chaseTowardPlayer(boar.group.position, this.playerController.body.position, BOAR_CHASE_SPEED, delta, boar.ai.strikeRange);
-        boar.group.position.y = this.level.groundHeightAt(boar.group.position.x, boar.group.position.z);
       }
+      boar.group.position.y = this.level.groundHeightAt(boar.group.position.x, boar.group.position.z);
       if (boar.ai.shouldDealDamageThisFrame()) {
         const hit = resolveMeleeHit(getBoarHitbox(boar), this.playerCombatant);
         if (hit) this.hurtPlayer(BOAR_HIT_DAMAGE);
@@ -516,26 +609,109 @@ export class Game {
     }
 
     for (const bear of this.level.bears) {
-      const bearDistance = bear.group.position.distanceTo(this.playerController.body.position);
+      const bearDistance = horizontalDistance(bear.group.position, this.playerController.body.position);
       bear.update(time, delta, bearDistance);
       if (bear.ai.state !== 'idle') {
         chaseTowardPlayer(bear.group.position, this.playerController.body.position, BEAR_CHASE_SPEED, delta, bear.ai.strikeRange);
-        bear.group.position.y = this.level.groundHeightAt(bear.group.position.x, bear.group.position.z);
       }
+      bear.group.position.y = this.level.groundHeightAt(bear.group.position.x, bear.group.position.z);
       if (bear.ai.shouldDealDamageThisFrame()) {
         const hit = resolveMeleeHit(getGroveBearHitbox(bear), this.playerCombatant);
         if (hit) this.hurtPlayer(BEAR_HIT_DAMAGE);
       }
     }
 
+    for (const owl of this.level.owls) {
+      // horizontalDistance, not the 3D .distanceTo() this loop used before Task 6's own live
+      // verification found the general reason every ground species needs it too (see that
+      // function's doc comment) — for the owl specifically it's not just "usually smaller," it's
+      // required: OWL_STRIKE_HOVER_Y is a deliberate, large, constant vertical offset, so a 3D
+      // distance would sit permanently outside strikeRange by roughly that hover height even once
+      // fully converged.
+      const owlHorizontalDistance = horizontalDistance(owl.group.position, this.playerController.body.position);
+      const prevOwlAiState = this.prevOwlAiState.get(owl.ai);
+      owl.update(time, delta, owlHorizontalDistance);
+      if (owl.ai.state === 'telegraph' && prevOwlAiState !== 'telegraph') this.audio.playOwlScreech();
+      this.prevOwlAiState.set(owl.ai, owl.ai.state);
+
+      // The owl's own Y is actively driven every frame in BOTH branches below (dive toward the
+      // player's hover height, or climb back to its perch) — unlike a ground animal, it is never
+      // just "re-snapped while chasing," so a knockback (which only ever touches x/z) can never
+      // leave it stranded at a stale height the way Step 7c found for ground enemies.
+      if (owl.ai.state !== 'idle') {
+        chaseTowardPlayer(owl.group.position, this.playerController.body.position, OWL_CHASE_SPEED, delta, owl.ai.strikeRange);
+        const targetY = this.playerController.body.position.y + OWL_STRIKE_HOVER_Y;
+        const dy = targetY - owl.group.position.y;
+        owl.group.position.y += Math.sign(dy) * Math.min(Math.abs(dy), OWL_DIVE_SPEED * delta);
+      } else {
+        const dy = owl.perchY - owl.group.position.y;
+        owl.group.position.y += Math.sign(dy) * Math.min(Math.abs(dy), OWL_CLIMB_SPEED * delta);
+      }
+      if (owl.ai.shouldDealDamageThisFrame()) {
+        const hit = resolveMeleeHit(getCanopyOwlHitbox(owl), this.playerCombatant);
+        if (hit) this.hurtPlayer(OWL_HIT_DAMAGE);
+      }
+    }
+
+    for (const viper of this.level.vipers) {
+      const viperDistance = horizontalDistance(viper.group.position, this.playerController.body.position);
+      const prevViperAiState = this.prevViperAiState.get(viper.ai);
+      viper.update(time, delta, viperDistance);
+      if (viper.ai.state === 'telegraph' && prevViperAiState !== 'telegraph') this.audio.playViperHiss();
+      this.prevViperAiState.set(viper.ai, viper.ai.state);
+
+      if (viper.ai.state !== 'idle') {
+        chaseTowardPlayer(viper.group.position, this.playerController.body.position, VIPER_CHASE_SPEED, delta, viper.ai.strikeRange);
+      }
+      viper.group.position.y = this.level.groundHeightAt(viper.group.position.x, viper.group.position.z);
+      if (viper.ai.shouldDealDamageThisFrame()) {
+        const hit = resolveMeleeHit(getVineViperHitbox(viper), this.playerCombatant);
+        if (hit) this.hurtPlayer(VIPER_HIT_DAMAGE);
+      }
+    }
+
+    // Ambient wildlife below: no Combatant/EnemyAI, never damages or is damaged by the player.
+    for (const squirrel of this.level.squirrels) {
+      const squirrelDistance = squirrel.position.distanceTo(this.playerController.body.position);
+      const squirrelApproachSpeed = computeApproachSpeed(
+        this.playerController.body.position,
+        this.prevPlayerPosition,
+        squirrel.position,
+        delta,
+      );
+      const prevSquirrelState = this.prevSquirrelState.get(squirrel.ai);
+      squirrel.update(time, delta, squirrelDistance, squirrelApproachSpeed);
+      if (squirrel.ai.state === 'alert' && prevSquirrelState !== 'alert') this.audio.playSquirrelChatter();
+      this.prevSquirrelState.set(squirrel.ai, squirrel.ai.state);
+      if (squirrel.ai.state === 'fleeing') {
+        const dx = squirrel.position.x - this.playerController.body.position.x;
+        const dz = squirrel.position.z - this.playerController.body.position.z;
+        const horizontalDist = Math.hypot(dx, dz);
+        const awayFromDir =
+          horizontalDist > 1e-6
+            ? new THREE.Vector3(dx / horizontalDist, 0, dz / horizontalDist)
+            : new THREE.Vector3(0, 0, 1);
+        squirrel.fleeStep(delta, awayFromDir);
+        squirrel.position.y = this.level.groundHeightAt(squirrel.position.x, squirrel.position.z);
+      }
+    }
+
+    {
+      const flock = this.level.finchFlock;
+      const flockDistance = this.level.finchFlockCenter.distanceTo(this.playerController.body.position);
+      flock.update(time, delta, flockDistance);
+      if (flock.state === 'flushed' && this.prevFinchFlockState !== 'flushed') this.audio.playBirdFlush();
+      this.prevFinchFlockState = flock.state;
+    }
+
     if (this.summitGateCrossed && !this.kingDefeated) {
       const king = this.level.throneRoom.king;
-      const distanceToKing = king.group.position.distanceTo(this.playerController.body.position);
+      const distanceToKing = horizontalDistance(king.group.position, this.playerController.body.position);
       king.update(time, delta, distanceToKing);
       if (king.ai.state !== 'idle') {
         chaseTowardPlayer(king.group.position, this.playerController.body.position, KING_CHASE_SPEED, delta, king.ai.strikeRange);
-        king.group.position.y = this.level.groundHeightAt(king.group.position.x, king.group.position.z);
       }
+      king.group.position.y = this.level.groundHeightAt(king.group.position.x, king.group.position.z);
 
       if (king.ai.shouldDealDamageThisFrame()) {
         const hit = resolveMeleeHit(getElderBearKingHitbox(king), this.playerCombatant);
@@ -579,6 +755,22 @@ export class Game {
         this.hud.setObjective('You are the new King of the Mountain.');
       }
     }
+
+    // Viper Venom's damage-over-time ticks. onDefeat (set on every enemyEntries() entry that has
+    // one) already calls venom.clear() as part of its own cleanup, so a killed target's remaining
+    // ticks are dropped there, not duplicated here. The King and the wraith are both real,
+    // reachable targets of `target` here (envenoming either is legitimate — see the King-victory
+    // check above and this.wraithDefeated's own onDefeat, both of which independently notice a
+    // combatant reaching 0 HP regardless of what reduced it there); the King has no onDefeat by
+    // design (its victory sequence above owns its defeat), so a venom kill on the King just lets
+    // that same isDefeated(king.combatant) check fire on a later frame, identical to a melee kill.
+    this.venom.update(time, (target) => {
+      const combatant = target as Combatant;
+      applyDamage(combatant, VENOM_DAMAGE_PER_TICK);
+      if (isDefeated(combatant)) {
+        this.enemyEntries().find((entry) => entry.combatant === combatant)?.onDefeat?.();
+      }
+    });
 
     if (isDefeated(this.playerCombatant)) {
       // silent checkpoint respawn — no game-over screen, matches the chapter-restart design spec
@@ -673,14 +865,25 @@ export class Game {
    * old per-species blocks ran in, so anything order-sensitive (the ability unlocked first when
    * one sweep kills two different species) is unchanged. */
   private enemyEntries(): EnemyEntry[] {
-    const entries: EnemyEntry[] = [
-      {
+    const entries: EnemyEntry[] = [];
+
+    // Task 6 Step 7a: the wraith used to have no onDefeat at all, so nothing ever noticed it
+    // reaching 0 HP — it kept absorbing hits and dealing damage forever. It grants no ability (a
+    // root-spirit, not an animal), so its onDefeat only removes it and stops it being iterated
+    // (the animate() wraith block itself is separately gated on !this.wraithDefeated).
+    if (!this.wraithDefeated) {
+      entries.push({
         combatant: this.wraith.combatant,
         position: this.wraith.group.position,
         ai: this.wraith.ai,
         stunnable: false,
-      },
-    ];
+        onDefeat: () => {
+          this.wraithDefeated = true;
+          this.scene.remove(this.wraith.group);
+          this.venom.clear(this.wraith.combatant);
+        },
+      });
+    }
 
     if (this.summitGateCrossed && !this.kingDefeated) {
       const king = this.level.throneRoom.king;
@@ -701,6 +904,7 @@ export class Game {
           const idx = this.level.boars.indexOf(boar);
           if (idx !== -1) this.level.boars.splice(idx, 1);
           this.abilityKit.unlock('boar-charge');
+          this.venom.clear(boar.combatant);
         },
       });
     }
@@ -716,6 +920,39 @@ export class Game {
           const idx = this.level.bears.indexOf(bear);
           if (idx !== -1) this.level.bears.splice(idx, 1);
           this.abilityKit.unlock('bear-swipe');
+          this.venom.clear(bear.combatant);
+        },
+      });
+    }
+
+    for (const owl of this.level.owls) {
+      entries.push({
+        combatant: owl.combatant,
+        position: owl.group.position,
+        ai: owl.ai,
+        stunnable: true,
+        onDefeat: () => {
+          this.level.group.remove(owl.group);
+          const idx = this.level.owls.indexOf(owl);
+          if (idx !== -1) this.level.owls.splice(idx, 1);
+          this.abilityKit.unlock('owl-dive');
+          this.venom.clear(owl.combatant);
+        },
+      });
+    }
+
+    for (const viper of this.level.vipers) {
+      entries.push({
+        combatant: viper.combatant,
+        position: viper.group.position,
+        ai: viper.ai,
+        stunnable: true,
+        onDefeat: () => {
+          this.level.group.remove(viper.group);
+          const idx = this.level.vipers.indexOf(viper);
+          if (idx !== -1) this.level.vipers.splice(idx, 1);
+          this.abilityKit.unlock('viper-venom');
+          this.venom.clear(viper.combatant);
         },
       });
     }
@@ -788,6 +1025,20 @@ export class Game {
       case 'kings-roar':
         this.roarStagger();
         this.audio.playRoar();
+        break;
+      case 'owl-dive':
+        this.owlDiveEndTime = time + OWL_DIVE_LEAP_SECONDS;
+        this.owlDiveDirection.copy(this.facingForward());
+        this.owlDiveAoeApplied = false;
+        this.audio.playOwlDive();
+        break;
+      case 'viper-venom':
+        for (const entry of this.enemyEntries()) {
+          if (entry.position.distanceTo(this.playerController.body.position) <= VENOM_APPLY_RADIUS) {
+            this.venom.apply(entry.combatant, time);
+          }
+        }
+        this.audio.playVenomBurst();
         break;
     }
   }

@@ -74,4 +74,47 @@ describe('createJungleLevel', () => {
       expect(villager.position.z).toBeLessThanOrEqual(bounds.max.y);
     }
   });
+
+  it('diverse-species wildlife arrays exist and are non-empty (owls, vipers, squirrels, one finch flock)', () => {
+    const level = createJungleLevel();
+    expect(level.owls.length).toBeGreaterThan(0);
+    expect(level.vipers.length).toBeGreaterThan(0);
+    expect(level.squirrels.length).toBeGreaterThan(0);
+    expect(level.finchFlock).toBeDefined();
+  });
+
+  it('every owl/viper/squirrel spawn sits inside chapterBounds and outside the water/wall exclusion', () => {
+    const level = createJungleLevel();
+    const outsideWater = (x: number, z: number) =>
+      x < level.water.bounds.min.x || x > level.water.bounds.max.x ||
+      z < level.water.bounds.min.z || z > level.water.bounds.max.z;
+    const outsideWall = (x: number, z: number) =>
+      x < level.climbableWall.bounds.min.x || x > level.climbableWall.bounds.max.x ||
+      z < level.climbableWall.bounds.min.y || z > level.climbableWall.bounds.max.y;
+
+    for (const owl of level.owls) {
+      const { x, z } = owl.group.position;
+      expect(level.chapterBounds.containsPoint(owl.group.position)).toBe(true);
+      expect(outsideWater(x, z) && outsideWall(x, z)).toBe(true);
+    }
+    for (const viper of level.vipers) {
+      const { x, z } = viper.group.position;
+      expect(level.chapterBounds.containsPoint(viper.group.position)).toBe(true);
+      expect(outsideWater(x, z) && outsideWall(x, z)).toBe(true);
+    }
+    for (const squirrel of level.squirrels) {
+      const { x, z } = squirrel.position;
+      expect(level.chapterBounds.containsPoint(squirrel.position)).toBe(true);
+      expect(outsideWater(x, z) && outsideWall(x, z)).toBe(true);
+    }
+  });
+
+  it('owls spawn above ground height, at their own perchY (a flying animal, not glued to the floor)', () => {
+    const level = createJungleLevel();
+    for (const owl of level.owls) {
+      const ground = level.groundHeightAt(owl.group.position.x, owl.group.position.z);
+      expect(owl.group.position.y).toBeGreaterThan(ground);
+      expect(owl.perchY).toBeCloseTo(owl.group.position.y, 5);
+    }
+  });
 });

@@ -6,6 +6,10 @@ import { createGroveHare, type GroveHare } from '../entities/groveHare';
 import { createTuskBoar, type TuskBoar } from '../entities/tuskBoar';
 import { createGroveBear, type GroveBear } from '../entities/createGroveBear';
 import { createElderBearKing, type ElderBearKing } from '../entities/createElderBearKing';
+import { createCanopyOwl, type CanopyOwl } from '../entities/createCanopyOwl';
+import { createVineViper, type VineViper } from '../entities/createVineViper';
+import { createGroveSquirrel, type GroveSquirrel } from '../entities/createGroveSquirrel';
+import { createDuskFinchFlock, type DuskFinchFlock } from '../entities/createDuskFinchFlock';
 import { TreeObstacleGrid, type TreeObstacle } from './TreeObstacleGrid';
 
 export interface ClimbableWall {
@@ -37,6 +41,14 @@ export interface JungleLevel {
   hares: GroveHare[];
   boars: TuskBoar[];
   bears: GroveBear[];
+  owls: CanopyOwl[];
+  vipers: VineViper[];
+  squirrels: GroveSquirrel[];
+  finchFlock: DuskFinchFlock;
+  // Not exposed by DuskFinchFlock itself (its `group` stays at local origin — each finch's own
+  // rig.root carries its real world position) — Game.ts needs this to compute distanceToPlayer
+  // for the flock's own update() call.
+  finchFlockCenter: THREE.Vector3;
   obstacleGrid: TreeObstacleGrid;
   foliageMeshes: THREE.InstancedMesh[];
   // Static wall/ledge/gate meshes (real Meshes, Groups pre-flattened) the camera should also
@@ -545,11 +557,25 @@ function randomPlaceablePosition(
   return new THREE.Vector3(x, heightAt(x, z), z);
 }
 
+// How high above ground an owl perches — well clear of a standing player's reach, but low
+// enough that its dive (OWL_DIVE_SPEED in Game.ts) closes the gap in well under a second.
+const OWL_PERCH_HEIGHT = 3.2;
+const FINCH_FLOCK_COUNT = 5; // set dressing, not a particle system — see the plan's own note
+
 function buildWildlife(
   heightAt: (x: number, z: number) => number,
   water: WaterBody,
   wallBounds: THREE.Box2,
-): { hares: GroveHare[]; boars: TuskBoar[]; bears: GroveBear[] } {
+): {
+  hares: GroveHare[];
+  boars: TuskBoar[];
+  bears: GroveBear[];
+  owls: CanopyOwl[];
+  vipers: VineViper[];
+  squirrels: GroveSquirrel[];
+  finchFlock: DuskFinchFlock;
+  finchFlockCenter: THREE.Vector3;
+} {
   const hares = Array.from({ length: 4 }, () => createGroveHare(randomPlaceablePosition(heightAt, water, wallBounds)));
   const boars = Array.from({ length: 2 }, () => {
     const boar = createTuskBoar();
@@ -561,7 +587,25 @@ function buildWildlife(
     bear.group.position.copy(randomPlaceablePosition(heightAt, water, wallBounds));
     return bear;
   });
-  return { hares, boars, bears };
+  const owls = Array.from({ length: 2 }, () => {
+    const owl = createCanopyOwl();
+    const ground = randomPlaceablePosition(heightAt, water, wallBounds);
+    const perchY = ground.y + OWL_PERCH_HEIGHT;
+    owl.perchY = perchY;
+    owl.group.position.set(ground.x, perchY, ground.z);
+    return owl;
+  });
+  const vipers = Array.from({ length: 3 }, () => {
+    const viper = createVineViper();
+    viper.group.position.copy(randomPlaceablePosition(heightAt, water, wallBounds));
+    return viper;
+  });
+  const squirrels = Array.from({ length: 4 }, () =>
+    createGroveSquirrel(randomPlaceablePosition(heightAt, water, wallBounds)),
+  );
+  const finchFlockCenter = randomPlaceablePosition(heightAt, water, wallBounds);
+  const finchFlock = createDuskFinchFlock(finchFlockCenter, FINCH_FLOCK_COUNT);
+  return { hares, boars, bears, owls, vipers, squirrels, finchFlock, finchFlockCenter };
 }
 
 export function createJungleLevel(): JungleLevel {
@@ -583,10 +627,18 @@ export function createJungleLevel(): JungleLevel {
   group.add(...foliageMeshes);
   const obstacleGrid = new TreeObstacleGrid(obstacles);
 
-  const { hares, boars, bears } = buildWildlife(heightAt, water, wall.bounds);
+  const { hares, boars, bears, owls, vipers, squirrels, finchFlock, finchFlockCenter } = buildWildlife(
+    heightAt,
+    water,
+    wall.bounds,
+  );
   group.add(...hares.map((hare) => hare.group));
   group.add(...boars.map((boar) => boar.group));
   group.add(...bears.map((bear) => bear.group));
+  group.add(...owls.map((owl) => owl.group));
+  group.add(...vipers.map((viper) => viper.group));
+  group.add(...squirrels.map((squirrel) => squirrel.group));
+  group.add(finchFlock.group);
 
   const mountain = buildMountain(-12, 8, wall.topY);
   group.add(...mountain.meshes);
@@ -606,6 +658,11 @@ export function createJungleLevel(): JungleLevel {
     hares,
     boars,
     bears,
+    owls,
+    vipers,
+    squirrels,
+    finchFlock,
+    finchFlockCenter,
     obstacleGrid,
     foliageMeshes,
     climbObstacleMeshes: [wallMesh, ...mountain.climbMeshes],
