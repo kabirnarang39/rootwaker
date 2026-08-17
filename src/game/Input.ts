@@ -10,7 +10,8 @@ export type PlayerAction =
   | 'ability3'
   | 'ability4'
   | 'ability5'
-  | 'ability6';
+  | 'ability6'
+  | 'ability7';
 
 const FORWARD_KEYS = ['KeyW', 'ArrowUp'];
 const BACK_KEYS = ['KeyS', 'ArrowDown'];
@@ -118,6 +119,7 @@ export class Input {
     else if (e.code === 'Digit4') this.emitAction('ability4');
     else if (e.code === 'Digit5') this.emitAction('ability5');
     else if (e.code === 'Digit6') this.emitAction('ability6');
+    else if (e.code === 'Digit7') this.emitAction('ability7');
   };
 
   private onKeyUp = (e: KeyboardEvent) => {

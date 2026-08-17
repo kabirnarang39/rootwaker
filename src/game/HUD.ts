@@ -126,7 +126,7 @@ export class HUD {
         <div class="rw-legend-row"><span class="rw-legend-key">L</span><span class="rw-legend-label">Pounce</span></div>
         <div class="rw-legend-row"><span class="rw-legend-key">Drag</span><span class="rw-legend-label">Look</span></div>
         <div class="rw-legend-row"><span class="rw-legend-key">C</span><span class="rw-legend-label">View</span></div>
-        <div class="rw-legend-row"><span class="rw-legend-key">1 – 6</span><span class="rw-legend-label">Powers</span></div>
+        <div class="rw-legend-row"><span class="rw-legend-key">1 – 7</span><span class="rw-legend-label">Powers</span></div>
       </div>
       <div class="rw-overlay">
         <div class="rw-panel">

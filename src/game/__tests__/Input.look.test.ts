@@ -134,4 +134,15 @@ describe('Input mouse-drag look', () => {
     window.dispatchEvent(new KeyboardEvent('keydown', { code: 'Digit6' }));
     expect(firedAction).toBe('ability6');
   });
+
+  it('Digit7 emits an ability7 action', () => {
+    const el = fakeElement();
+    const input = new Input(el as unknown as HTMLElement);
+    let firedAction: string | null = null;
+    input.onAction((action) => {
+      firedAction = action;
+    });
+    window.dispatchEvent(new KeyboardEvent('keydown', { code: 'Digit7' }));
+    expect(firedAction).toBe('ability7');
+  });
 });

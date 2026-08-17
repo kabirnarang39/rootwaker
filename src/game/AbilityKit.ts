@@ -1,4 +1,4 @@
-export type AbilityId = 'keen-ear' | 'boar-charge' | 'bear-swipe' | 'kings-roar' | 'owl-dive' | 'viper-venom';
+export type AbilityId = 'keen-ear' | 'boar-charge' | 'bear-swipe' | 'kings-roar' | 'owl-dive' | 'viper-venom' | 'lion-pounce';
 
 export interface Ability {
   id: AbilityId;
@@ -51,6 +51,13 @@ export const ABILITIES: Record<AbilityId, Ability> = {
     cooldownSeconds: 9,
     key: '6',
   },
+  'lion-pounce': {
+    id: 'lion-pounce',
+    name: "Lion's Pounce",
+    description: 'An explosive leaping tackle, learned from the jungle\'s own apex predator.',
+    cooldownSeconds: 5,
+    key: '7',
+  },
 };
 
 // Fixed HUD/keybind order — Digit1..Digit6 map to this array by index.
@@ -61,6 +68,7 @@ export const ABILITY_SLOTS: AbilityId[] = [
   'kings-roar',
   'owl-dive',
   'viper-venom',
+  'lion-pounce',
 ];
 
 export class AbilityKit {

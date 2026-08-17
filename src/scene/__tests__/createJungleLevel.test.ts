@@ -146,12 +146,18 @@ describe('createJungleLevel', () => {
     expect(seg2aBaseZ).toBeCloseTo(level.mountain.segments[0].ledgePosition.z, 5);
   });
 
-  it('diverse-species wildlife arrays exist and are non-empty (owls, vipers, squirrels, one finch flock)', () => {
+  it('diverse-species wildlife arrays exist and are non-empty (owls, vipers, lions, squirrels, one finch flock)', () => {
     const level = createJungleLevel();
     expect(level.owls.length).toBeGreaterThan(0);
     expect(level.vipers.length).toBeGreaterThan(0);
+    expect(level.lions.length).toBeGreaterThan(0);
     expect(level.squirrels.length).toBeGreaterThan(0);
     expect(level.finchFlock).toBeDefined();
+  });
+
+  it('exactly one lion spawns — a real apex predator is rare, not a small pack like every other species', () => {
+    const level = createJungleLevel();
+    expect(level.lions.length).toBe(1);
   });
 
   it('every owl/viper/squirrel spawn sits inside chapterBounds and outside the water/wall exclusion', () => {
@@ -176,6 +182,11 @@ describe('createJungleLevel', () => {
     for (const squirrel of level.squirrels) {
       const { x, z } = squirrel.position;
       expect(level.chapterBounds.containsPoint(squirrel.position)).toBe(true);
+      expect(outsideWater(x, z) && outsideWall(x, z)).toBe(true);
+    }
+    for (const lion of level.lions) {
+      const { x, z } = lion.group.position;
+      expect(level.chapterBounds.containsPoint(lion.group.position)).toBe(true);
       expect(outsideWater(x, z) && outsideWall(x, z)).toBe(true);
     }
   });

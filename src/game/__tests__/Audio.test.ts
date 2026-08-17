@@ -137,4 +137,14 @@ describe('AudioFX species sounds', () => {
       fx.setRainIntensity(1);
     }).not.toThrow();
   });
+
+  it('playLionRoar does not throw before unlock()', () => {
+    const fx = new AudioFX();
+    expect(() => fx.playLionRoar()).not.toThrow();
+  });
+
+  it('playLionPounceActivate does not throw before unlock()', () => {
+    const fx = new AudioFX();
+    expect(() => fx.playLionPounceActivate()).not.toThrow();
+  });
 });

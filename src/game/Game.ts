@@ -15,6 +15,7 @@ import { getGroveBearHitbox } from '../entities/createGroveBear';
 import { getElderBearKingHitbox } from '../entities/createElderBearKing';
 import { getCanopyOwlHitbox } from '../entities/createCanopyOwl';
 import { getVineViperHitbox } from '../entities/createVineViper';
+import { getLionHitbox } from '../entities/createLion';
 import type { FlockState } from '../entities/createDuskFinchFlock';
 import { computeBossPhase, BOSS_PHASE_PARAMS } from '../entities/BossPhaseController';
 import { VenomTracker, VENOM_DAMAGE_PER_TICK } from './Venom';
@@ -80,6 +81,14 @@ const DASH_RADIUS = 0.7;
 const DASH_REACH = 3.2; // meters — the charge's forward hit capsule, well past the base attack's 1m reach
 const DASH_KNOCKBACK = 1.0;
 const HEAVY_SWIPE_DAMAGE = 14;
+// Lion's Pounce reuses the exact same dashEndTime/dashDirection override PlayerController already
+// drives for boar-charge — a real forward-burst attack, same underlying mechanism, just a longer
+// airborne beat and the hardest-hitting of the base powers (apex predator).
+const POUNCE_SECONDS = 0.35;
+const POUNCE_DAMAGE = 18;
+const POUNCE_RADIUS = 0.75;
+const POUNCE_REACH = 3.0;
+const POUNCE_KNOCKBACK = 1.3;
 const HEAVY_SWIPE_RADIUS = 0.9;
 const HEAVY_SWIPE_REACH = 1.3;
 const HEAVY_SWIPE_KNOCKBACK = 0.6;
@@ -129,6 +138,13 @@ const OWL_STRIKE_HOVER_Y = 0.5;
 const OWL_HIT_DAMAGE = 10;
 const VIPER_CHASE_SPEED = 5.5;
 const VIPER_HIT_DAMAGE = 9;
+// Real two-gear hunting, same idiom as the boar's own BOAR_CHARGE_SPEED/BOAR_TROT_SPEED split — a
+// real lion stalks slowly while closing distance, then commits to the fastest burst in the game
+// once it telegraphs the actual pounce. The hardest-hitting regular enemy (short of the King) —
+// a real apex predator.
+const LION_STALK_SPEED = 1.8;
+const LION_CHARGE_SPEED = 7.5;
+const LION_HIT_DAMAGE = 14;
 
 // Owl's Descent: a real forward-and-down leap (mirrors the boar-charge dash idiom — a direct
 // position override for the leap window, falling through to the same obstacle/water checks).
@@ -238,6 +254,7 @@ export class Game {
   // to arrays of many creatures via WeakMap instead of one shared field.
   private prevOwlAiState = new WeakMap<object, string>();
   private prevViperAiState = new WeakMap<object, string>();
+  private prevLionAiState = new WeakMap<object, string>();
   private prevBoarAiState = new WeakMap<object, string>();
   private prevBearAiState = new WeakMap<object, string>();
   private prevSquirrelState = new WeakMap<object, string>();
@@ -382,6 +399,7 @@ export class Game {
       if (action === 'ability4') this.tryActivateAbility(ABILITY_SLOTS[3]);
       if (action === 'ability5') this.tryActivateAbility(ABILITY_SLOTS[4]);
       if (action === 'ability6') this.tryActivateAbility(ABILITY_SLOTS[5]);
+      if (action === 'ability7') this.tryActivateAbility(ABILITY_SLOTS[6]);
     });
 
     this.hud = new HUD(container);
@@ -822,6 +840,28 @@ export class Game {
       }
     }
 
+    for (const lion of this.level.lions) {
+      if (this.beingEaten.has(lion.combatant)) continue;
+      const lionDistance = horizontalDistance(lion.group.position, this.playerController.body.position);
+      const prevLionAiState = this.prevLionAiState.get(lion.ai);
+      lion.update(time, delta, lionDistance);
+      if (lion.ai.state === 'telegraph' && prevLionAiState !== 'telegraph') {
+        this.audio.playLionRoar();
+        this.tryShowStoryBeat('lion');
+      }
+      this.prevLionAiState.set(lion.ai, lion.ai.state);
+
+      if (lion.ai.state !== 'idle') {
+        const lionSpeed = lion.ai.state === 'telegraph' ? LION_CHARGE_SPEED : LION_STALK_SPEED;
+        chaseTowardPlayer(lion.group.position, this.playerController.body.position, lionSpeed, delta, lion.ai.strikeRange);
+      }
+      lion.group.position.y = this.level.groundHeightAt(lion.group.position.x, lion.group.position.z);
+      if (lion.ai.shouldDealDamageThisFrame()) {
+        const hit = resolveMeleeHit(getLionHitbox(lion), this.playerCombatant);
+        if (hit) this.hurtPlayer(LION_HIT_DAMAGE);
+      }
+    }
+
     // Ambient wildlife below: no Combatant/EnemyAI, never damages or is damaged by the player.
     for (const squirrel of this.level.squirrels) {
       const squirrelDistance = squirrel.position.distanceTo(this.playerController.body.position);
@@ -1150,6 +1190,23 @@ export class Game {
       });
     }
 
+    for (const lion of this.level.lions) {
+      entries.push({
+        combatant: lion.combatant,
+        position: lion.group.position,
+        ai: lion.ai,
+        stunnable: true,
+        grantsAbility: 'lion-pounce',
+        onDefeat: () => {
+          this.level.group.remove(lion.group);
+          const idx = this.level.lions.indexOf(lion);
+          if (idx !== -1) this.level.lions.splice(idx, 1);
+          this.abilityKit.unlock('lion-pounce');
+          this.venom.clear(lion.combatant);
+        },
+      });
+    }
+
     // A combatant mid-eat-ritual is already dead — exclude it from every consumer at the one
     // source (melee, King's Roar, Owl's Descent AOE, and the venom-tick lookup all read this
     // list), rather than teaching each of them about beingEaten individually.
@@ -1255,6 +1312,12 @@ export class Game {
           }
         }
         this.audio.playVenomBurst();
+        break;
+      case 'lion-pounce':
+        this.dashEndTime = time + POUNCE_SECONDS;
+        this.dashDirection.copy(this.facingForward());
+        this.audio.playLionPounceActivate();
+        this.meleeSweep(POUNCE_DAMAGE, POUNCE_RADIUS, POUNCE_REACH, POUNCE_KNOCKBACK);
         break;
     }
   }

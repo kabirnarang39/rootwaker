@@ -51,7 +51,14 @@ describe('AbilityKit', () => {
       'kings-roar',
       'owl-dive',
       'viper-venom',
+      'lion-pounce',
     ]);
+  });
+
+  it('lion-pounce is registered with the right key, cooldown, and slot order', () => {
+    expect(ABILITIES['lion-pounce'].key).toBe('7');
+    expect(ABILITIES['lion-pounce'].cooldownSeconds).toBe(5);
+    expect(ABILITY_SLOTS[6]).toBe('lion-pounce');
   });
 
   it('owl-dive and viper-venom activate/cooldown like every other ability once unlocked', () => {

@@ -760,6 +760,68 @@ export class AudioFX {
     this.rainGain.gain.setTargetAtTime(clamped * 0.09, ctx.currentTime, 0.4);
   }
 
+  /** The lion's real telegraph cue — a deep, sustained roar, distinct from every other species'
+   * warning sound (playBearGrowl's short growl, playBoarSnort's quick snort, playWraithGroan's
+   * unearthly moan). A low sawtooth oscillator with a slow pitch dip reads as a real chest-deep
+   * roar rather than a synth tone, layered with filtered noise for breath/rasp. */
+  playLionRoar(): void {
+    if (!this.ctx) return;
+    const ctx = this.ctx;
+    const osc = ctx.createOscillator();
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(110, ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(70, ctx.currentTime + 0.5);
+    const oscFilter = ctx.createBiquadFilter();
+    oscFilter.type = 'lowpass';
+    oscFilter.frequency.value = 500;
+    const oscGain = ctx.createGain();
+    oscGain.gain.setValueAtTime(0, ctx.currentTime);
+    oscGain.gain.linearRampToValueAtTime(0.22, ctx.currentTime + 0.08);
+    oscGain.gain.linearRampToValueAtTime(0.16, ctx.currentTime + 0.3);
+    oscGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.55);
+    osc.connect(oscFilter);
+    oscFilter.connect(oscGain);
+    oscGain.connect(ctx.destination);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.55);
+
+    const noise = ctx.createBufferSource();
+    noise.buffer = makeNoiseBuffer(ctx, 0.55);
+    const noiseFilter = ctx.createBiquadFilter();
+    noiseFilter.type = 'bandpass';
+    noiseFilter.frequency.value = 350;
+    noiseFilter.Q.value = 0.7;
+    const noiseGain = ctx.createGain();
+    noiseGain.gain.setValueAtTime(0.05, ctx.currentTime);
+    noiseGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5);
+    noise.connect(noiseFilter);
+    noiseFilter.connect(noiseGain);
+    noiseGain.connect(ctx.destination);
+    noise.start();
+  }
+
+  /** The player's Lion's Pounce power activation — a short explosive whoosh, distinct from
+   * playChargeDash's driving sawtooth ramp (boar-charge) and playBearSwipeActivate's heavy
+   * whoosh-then-thud (this one has no landing thud; the real hit lands via meleeSweep's own
+   * playHit(), same as every other power). */
+  playLionPounceActivate(): void {
+    if (!this.ctx) return;
+    const ctx = this.ctx;
+    const noise = ctx.createBufferSource();
+    noise.buffer = makeNoiseBuffer(ctx, 0.3);
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'bandpass';
+    filter.frequency.setValueAtTime(300, ctx.currentTime);
+    filter.frequency.exponentialRampToValueAtTime(1400, ctx.currentTime + 0.3);
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0.16, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
+    noise.connect(filter);
+    filter.connect(gain);
+    gain.connect(ctx.destination);
+    noise.start();
+  }
+
   startVillageAmbience(): void {
     // A single warm, sustained drone — deliberately sparser than startJungleAmbience's
     // multi-layer canopy/floor/bird/water soundscape or startMountainWind's noise gusts: this is

@@ -8,6 +8,7 @@ import { createGroveBear, type GroveBear } from '../entities/createGroveBear';
 import { createElderBearKing, type ElderBearKing } from '../entities/createElderBearKing';
 import { createCanopyOwl, type CanopyOwl } from '../entities/createCanopyOwl';
 import { createVineViper, type VineViper } from '../entities/createVineViper';
+import { createLion, type Lion } from '../entities/createLion';
 import { createGroveSquirrel, type GroveSquirrel } from '../entities/createGroveSquirrel';
 import { createDuskFinchFlock, type DuskFinchFlock } from '../entities/createDuskFinchFlock';
 import { createFishSchool } from '../entities/createFishSchool';
@@ -53,6 +54,7 @@ export interface JungleLevel {
   bears: GroveBear[];
   owls: CanopyOwl[];
   vipers: VineViper[];
+  lions: Lion[];
   squirrels: GroveSquirrel[];
   finchFlock: DuskFinchFlock;
   // Not exposed by DuskFinchFlock itself (its `group` stays at local origin — each finch's own
@@ -826,6 +828,7 @@ function buildWildlife(
   bears: GroveBear[];
   owls: CanopyOwl[];
   vipers: VineViper[];
+  lions: Lion[];
   squirrels: GroveSquirrel[];
   finchFlock: DuskFinchFlock;
   finchFlockCenter: THREE.Vector3;
@@ -854,12 +857,20 @@ function buildWildlife(
     viper.group.position.copy(randomPlaceablePosition(heightAt, water, wallBounds));
     return viper;
   });
+  // A real apex predator is rare, not one of a small pack — one lion, the same "singular, worth
+  // real caution" scarcity the King (also singular) gets, distinct from every other species'
+  // 2-4 count.
+  const lions = Array.from({ length: 1 }, () => {
+    const lion = createLion();
+    lion.group.position.copy(randomPlaceablePosition(heightAt, water, wallBounds));
+    return lion;
+  });
   const squirrels = Array.from({ length: 4 }, () =>
     createGroveSquirrel(randomPlaceablePosition(heightAt, water, wallBounds)),
   );
   const finchFlockCenter = randomPlaceablePosition(heightAt, water, wallBounds);
   const finchFlock = createDuskFinchFlock(finchFlockCenter, FINCH_FLOCK_COUNT);
-  return { hares, boars, bears, owls, vipers, squirrels, finchFlock, finchFlockCenter };
+  return { hares, boars, bears, owls, vipers, lions, squirrels, finchFlock, finchFlockCenter };
 }
 
 export function createJungleLevel(): JungleLevel {
@@ -881,7 +892,7 @@ export function createJungleLevel(): JungleLevel {
   group.add(...foliageMeshes);
   const obstacleGrid = new TreeObstacleGrid(obstacles);
 
-  const { hares, boars, bears, owls, vipers, squirrels, finchFlock, finchFlockCenter } = buildWildlife(
+  const { hares, boars, bears, owls, vipers, lions, squirrels, finchFlock, finchFlockCenter } = buildWildlife(
     heightAt,
     water,
     wall.bounds,
@@ -891,6 +902,7 @@ export function createJungleLevel(): JungleLevel {
   group.add(...bears.map((bear) => bear.group));
   group.add(...owls.map((owl) => owl.group));
   group.add(...vipers.map((viper) => viper.group));
+  group.add(...lions.map((lion) => lion.group));
   group.add(...squirrels.map((squirrel) => squirrel.group));
   group.add(finchFlock.group);
 
@@ -929,6 +941,7 @@ export function createJungleLevel(): JungleLevel {
     bears,
     owls,
     vipers,
+    lions,
     squirrels,
     finchFlock,
     finchFlockCenter,
