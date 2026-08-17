@@ -16,6 +16,7 @@ import { getVineViperHitbox } from '../entities/createVineViper';
 import type { FlockState } from '../entities/createDuskFinchFlock';
 import { computeBossPhase, BOSS_PHASE_PARAMS } from '../entities/BossPhaseController';
 import { VenomTracker, VENOM_DAMAGE_PER_TICK } from './Venom';
+import { StoryBeatTracker, type StoryBeatId } from './StoryBeats';
 import type { GroundSlamState } from './GroundSlam';
 import type { GroveHare } from '../entities/groveHare';
 import { resolveMeleeHit, applyDamage, isDefeated, CLAW_SWIPE, type Combatant } from './Combat';
@@ -224,6 +225,7 @@ export class Game {
   private prevWraithAiState = 'idle'; // single instance — no WeakMap needed, unlike the arrays above
 
   private venom = new VenomTracker();
+  private storyBeats = new StoryBeatTracker();
   private owlDiveEndTime = -Infinity;
   private owlDiveDirection = new THREE.Vector3(0, 0, 1);
   private owlDiveAoeApplied = true; // starts "already applied" — no leap has happened yet
@@ -598,6 +600,7 @@ export class Game {
         this.checkpoint.copy(this.level.mountain.summitGate);
         this.hud.showBossBar('King of the Mountain');
         this.hud.setObjective('Defeat the King of the Mountain.');
+        this.tryShowStoryBeat('king');
       }
     }
 
@@ -637,7 +640,10 @@ export class Game {
     if (!this.wraithDefeated) {
       const distanceToPlayer = horizontalDistance(this.wraith.group.position, this.playerController.body.position);
       this.wraith.update(time, delta, distanceToPlayer);
-      if (this.wraith.ai.state === 'telegraph' && this.prevWraithAiState !== 'telegraph') this.audio.playWraithGroan();
+      if (this.wraith.ai.state === 'telegraph' && this.prevWraithAiState !== 'telegraph') {
+        this.audio.playWraithGroan();
+        this.tryShowStoryBeat('wraith');
+      }
       this.prevWraithAiState = this.wraith.ai.state;
       if (this.wraith.ai.state !== 'idle') {
         chaseTowardPlayer(this.wraith.group.position, this.playerController.body.position, WRAITH_CHASE_SPEED, delta, this.wraith.ai.strikeRange);
@@ -681,7 +687,10 @@ export class Game {
       const boarDistance = horizontalDistance(boar.group.position, this.playerController.body.position);
       const prevBoarAiState = this.prevBoarAiState.get(boar.ai);
       boar.update(time, delta, boarDistance);
-      if (boar.ai.state === 'telegraph' && prevBoarAiState !== 'telegraph') this.audio.playBoarSnort();
+      if (boar.ai.state === 'telegraph' && prevBoarAiState !== 'telegraph') {
+        this.audio.playBoarSnort();
+        this.tryShowStoryBeat('boar');
+      }
       this.prevBoarAiState.set(boar.ai, boar.ai.state);
       if (boar.ai.state !== 'idle') {
         const boarSpeed = boar.ai.state === 'telegraph' ? BOAR_CHARGE_SPEED : BOAR_TROT_SPEED;
@@ -699,7 +708,10 @@ export class Game {
       const bearDistance = horizontalDistance(bear.group.position, this.playerController.body.position);
       const prevBearAiState = this.prevBearAiState.get(bear.ai);
       bear.update(time, delta, bearDistance);
-      if (bear.ai.state === 'telegraph' && prevBearAiState !== 'telegraph') this.audio.playBearGrowl();
+      if (bear.ai.state === 'telegraph' && prevBearAiState !== 'telegraph') {
+        this.audio.playBearGrowl();
+        this.tryShowStoryBeat('bear');
+      }
       this.prevBearAiState.set(bear.ai, bear.ai.state);
       if (bear.ai.state !== 'idle') {
         chaseTowardPlayer(bear.group.position, this.playerController.body.position, BEAR_CHASE_SPEED, delta, bear.ai.strikeRange);
@@ -722,7 +734,10 @@ export class Game {
       const owlHorizontalDistance = horizontalDistance(owl.group.position, this.playerController.body.position);
       const prevOwlAiState = this.prevOwlAiState.get(owl.ai);
       owl.update(time, delta, owlHorizontalDistance);
-      if (owl.ai.state === 'telegraph' && prevOwlAiState !== 'telegraph') this.audio.playOwlScreech();
+      if (owl.ai.state === 'telegraph' && prevOwlAiState !== 'telegraph') {
+        this.audio.playOwlScreech();
+        this.tryShowStoryBeat('owl');
+      }
       this.prevOwlAiState.set(owl.ai, owl.ai.state);
 
       // The owl's own Y is actively driven every frame in BOTH branches below (dive toward the
@@ -749,7 +764,10 @@ export class Game {
       const viperDistance = horizontalDistance(viper.group.position, this.playerController.body.position);
       const prevViperAiState = this.prevViperAiState.get(viper.ai);
       viper.update(time, delta, viperDistance);
-      if (viper.ai.state === 'telegraph' && prevViperAiState !== 'telegraph') this.audio.playViperHiss();
+      if (viper.ai.state === 'telegraph' && prevViperAiState !== 'telegraph') {
+        this.audio.playViperHiss();
+        this.tryShowStoryBeat('viper');
+      }
       this.prevViperAiState.set(viper.ai, viper.ai.state);
 
       if (viper.ai.state !== 'idle') {
@@ -846,6 +864,7 @@ export class Game {
         this.abilityKit.unlock('kings-roar');
         this.fox.revealCrown();
         this.hud.setObjective('You are the new King of the Mountain.');
+        this.tryShowStoryBeat('coronation');
       }
     }
 
@@ -966,6 +985,14 @@ export class Game {
     applyDamage(this.playerCombatant, amount);
     this.audio.playPlayerHurt();
     this.hud.flashDamage();
+  }
+
+  /** Shows a story beat if `id` has never fired before this playthrough; a real no-op (no HUD
+   * call at all) on every subsequent encounter with the same species — StoryBeatTracker.consume()
+   * itself owns the once-only guarantee, this is just the show-it-if-real glue. */
+  private tryShowStoryBeat(id: StoryBeatId): void {
+    const beat = this.storyBeats.consume(id);
+    if (beat) this.hud.showStoryBeat(beat.eyebrow, beat.text);
   }
 
   /** Unit forward vector for the fox's actual facing angle (see FoxFacing.ts's atan2(x,z)

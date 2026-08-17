@@ -40,6 +40,10 @@ export class HUD {
   private bossHealthFillEl: HTMLDivElement;
   private arcCompleteEl: HTMLDivElement;
   private arcCompleteTimer: number | null = null;
+  private storyBeatEl: HTMLDivElement;
+  private storyEyebrowEl: HTMLDivElement;
+  private storyTextEl: HTMLDivElement;
+  private storyBeatTimer: number | null = null;
   private overlay: HTMLDivElement;
   private overlayStats: HTMLDivElement;
   private overlayTitle: HTMLDivElement;
@@ -105,6 +109,10 @@ export class HUD {
         <div class="rw-boss-track">
           <div class="rw-boss-fill"></div>
         </div>
+      </div>
+      <div class="rw-story-beat">
+        <div class="rw-story-eyebrow"></div>
+        <div class="rw-story-text"></div>
       </div>
       <div class="rw-arc-complete">
         <div class="rw-arc-eyebrow">Arc Complete</div>
@@ -436,6 +444,47 @@ export class HUD {
         .rw-boss-bar.rw-visible { animation: none; }
       }
 
+      /* Story beat: a real narrative whisper for each first encounter, not a combat-power or
+         boss-specific cue — deliberately traced to the calmer parchment/moss objective-panel
+         palette rather than myth-cyan (abilities) or ember (the boss), so lore reads as its own
+         voice, distinct from mechanical feedback. Sits at top:210px, safely below the boss bar's
+         own footprint (140px + its ~50px height), since the King's own story beat fires the same
+         moment the boss bar first appears — the two must never visually overlap. Held longer
+         (4200ms) than the ability toast's 3000ms since this is real prose worth reading, not a
+         one-line confirmation. */
+      .rw-story-beat {
+        position: fixed; top: 210px; left: 50%; z-index: 13;
+        display: none; pointer-events: none; text-align: center;
+        font-family: var(--body-face); color: var(--parchment);
+        min-width: 240px; max-width: min(400px, 88vw);
+        padding: 13px 28px 12px;
+        background: linear-gradient(180deg, rgba(20,13,9,0.7), rgba(7,10,8,0.88));
+        border-top: 1px solid rgba(74,122,94,0.5);
+        box-shadow: 0 0 20px rgba(74,122,94,0.25), 0 12px 30px rgba(0,0,0,0.5);
+        clip-path: polygon(3% 0, 97% 0, 100% 100%, 0% 100%);
+      }
+      .rw-story-beat.rw-visible {
+        display: block;
+        animation: rw-story-beat-toast 4200ms cubic-bezier(0.16, 1, 0.3, 1) both;
+      }
+      .rw-story-eyebrow {
+        text-transform: uppercase; font-size: 9px; letter-spacing: 0.16em;
+        color: var(--moss); opacity: 0.9; margin-bottom: 5px;
+      }
+      .rw-story-text {
+        font-family: var(--display-face); font-size: 15px; font-style: italic;
+        letter-spacing: 0.01em; line-height: 1.5; opacity: 0.95;
+        text-shadow: 0 0 14px rgba(74,122,94,0.3);
+      }
+      @keyframes rw-story-beat-toast {
+        0% { opacity: 0; transform: translate(-50%, -10px) scale(0.98); }
+        7%, 88% { opacity: 1; transform: translate(-50%, 0) scale(1); }
+        100% { opacity: 0; transform: translate(-50%, -8px) scale(0.99); }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .rw-story-beat.rw-visible { animation: none; opacity: 1; transform: translate(-50%, 0); }
+      }
+
       /* Arc-complete toast: the ability toast's exact fade lifecycle, but centered on the
          screen instead of top-anchored — this is the chapter's climax beat (throne room
          cleared), not a routine pickup notification, so it gets the most prominent position
@@ -719,6 +768,9 @@ export class HUD {
     this.bossNameEl = this.root.querySelector('.rw-boss-name')!;
     this.bossHealthFillEl = this.root.querySelector('.rw-boss-fill')!;
     this.arcCompleteEl = this.root.querySelector('.rw-arc-complete')!;
+    this.storyBeatEl = this.root.querySelector('.rw-story-beat')!;
+    this.storyEyebrowEl = this.root.querySelector('.rw-story-eyebrow')!;
+    this.storyTextEl = this.root.querySelector('.rw-story-text')!;
     this.overlay = this.root.querySelector('.rw-overlay')!;
     this.overlayStats = this.root.querySelector('.rw-overlay-stats')!;
     this.overlayTitle = this.root.querySelector('.rw-overlay-title')!;
@@ -872,6 +924,25 @@ export class HUD {
       this.abilityToastEl.classList.remove('rw-visible');
       this.abilityToastTimer = null;
     }, 3000);
+  }
+
+  /** Short-lived narrative toast for a real story beat (first encounter with a species, the
+   * King's own introduction, the coronation) — same restart-mid-flight pattern as
+   * showAbilityUnlocked, own element/timer so a beat and an ability unlock can never stomp each
+   * other if they happen to fire close together. */
+  showStoryBeat(eyebrow: string, text: string): void {
+    this.storyEyebrowEl.textContent = eyebrow;
+    this.storyTextEl.textContent = text;
+
+    this.storyBeatEl.classList.remove('rw-visible');
+    void this.storyBeatEl.offsetWidth;
+    this.storyBeatEl.classList.add('rw-visible');
+
+    if (this.storyBeatTimer !== null) window.clearTimeout(this.storyBeatTimer);
+    this.storyBeatTimer = window.setTimeout(() => {
+      this.storyBeatEl.classList.remove('rw-visible');
+      this.storyBeatTimer = null;
+    }, 4200);
   }
 
   /** Fades the controls-legend panel out; called once, on the player's first real input. */

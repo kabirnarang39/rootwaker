@@ -171,6 +171,22 @@ describe('HUD boss bar + arc-complete toast — behavior (real HUD instance, fak
   });
 });
 
+describe('HUD story beat — behavior (real HUD instance, fake DOM)', () => {
+  it('showStoryBeat sets the eyebrow/text content and reveals the panel', async () => {
+    const { HUD } = await import('../HUD');
+    const hud = new HUD(fakeElement() as unknown as HTMLElement);
+    hud.showStoryBeat('Old Strength', 'The Grove Bear rises.');
+    const h = hud as unknown as {
+      storyEyebrowEl: ReturnType<typeof fakeElement>;
+      storyTextEl: ReturnType<typeof fakeElement>;
+      storyBeatEl: ReturnType<typeof fakeElement>;
+    };
+    expect(h.storyEyebrowEl.textContent).toBe('Old Strength');
+    expect(h.storyTextEl.textContent).toBe('The Grove Bear rises.');
+    expect(h.storyBeatEl.classList.contains('rw-visible')).toBe(true);
+  });
+});
+
 describe('HUD minimap — behavior (real HUD instance, fake DOM + fake 2D context)', () => {
   const world = {
     bounds: { minX: -20, maxX: 20, minZ: -20, maxZ: 20 },
