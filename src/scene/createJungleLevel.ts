@@ -700,12 +700,22 @@ const SEA_TIDE_AMPLITUDE = 0.4;
 function buildLivingSea(): { mesh: THREE.Mesh; update: (time: number) => void } {
   const geo = new THREE.PlaneGeometry(SEA_SIZE, SEA_SIZE, SEA_SEGMENTS, SEA_SEGMENTS);
   geo.rotateX(-Math.PI / 2);
+  // Found live: the sea was rendering correctly all along, but its original color (0x0a2c3e) was
+  // nearly identical to the scene's own fog/background color (0x0a1420) — a real ocean blended
+  // invisibly into the night sky the instant fog started dimming it, which is almost immediately
+  // at this density. Real moonlit water has a visible sheen regardless of how dark the sky is —
+  // a lighter, more saturated base color plus a real emissive tint (moonlight's own cool
+  // 0xafc8ff color, the same hue Game.ts's directional moonlight already uses) gives the surface
+  // a base visibility that doesn't depend on catching direct light at the right angle, and lower
+  // roughness/higher metalness reads as a real glassy moonlit sheen rather than flat matte water.
   const mat = new THREE.MeshStandardMaterial({
-    color: 0x0a2c3e,
+    color: 0x1c4a63,
     transparent: true,
-    opacity: 0.88,
-    roughness: 0.12,
-    metalness: 0.2,
+    opacity: 0.9,
+    roughness: 0.08,
+    metalness: 0.25,
+    emissive: 0x0d2333,
+    emissiveIntensity: 0.55,
   });
 
   const uniforms = { uTime: { value: 0 }, uTide: { value: 0 } };

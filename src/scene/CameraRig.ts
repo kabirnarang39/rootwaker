@@ -69,7 +69,12 @@ export class CameraRig {
   constructor() {
     // ponytail: default 16:9 aspect ratio in tests; window.innerWidth/Height in production
     const aspect = typeof window !== 'undefined' ? window.innerWidth / window.innerHeight : 16 / 9;
-    this.camera = new THREE.PerspectiveCamera(GROUNDED_FOV, aspect, 0.1, 100);
+    // Far plane widened from 100 to 220: the living sea's own near edge sits right at the
+    // jungle's chapterBounds edge (~20 units from spawn) but the far plane used to hard-clip
+    // most of it out of view even once fixed to be visible at all — found live when the user
+    // reported not seeing the sea during real play. 0.1 near / 220 far is still a comfortable
+    // 2200:1 ratio for a 24-bit depth buffer, no z-fighting risk.
+    this.camera = new THREE.PerspectiveCamera(GROUNDED_FOV, aspect, 0.1, 220);
     // Layer 1 is reserved for "the player's own body" (see createFox.ts) — enabled by default
     // so follow/closeUp/hawkEye render the fox normally, disabled only in foxEye below, since
     // no eye-position tuning reliably keeps wide/glowing parts like the ears out of a close-range
