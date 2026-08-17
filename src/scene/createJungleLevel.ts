@@ -633,6 +633,71 @@ function buildWater(): { mesh: THREE.Mesh; water: WaterBody } {
   return { mesh, water };
 }
 
+// A real living sea beyond the jungle's own land bounds — real wave motion (a genuine
+// vertex-shader displacement, not a static plane) and a real slow tide (the whole surface rises
+// and falls over a multi-minute cycle), matching the jungle's existing night/moonlit palette
+// (see Game.ts's setupLights) rather than a bright daytime ocean. Deliberately atmospheric/visual
+// only, not a second swimmable WaterBody — Game.ts's swim detection reads exactly one water body
+// today (this.level.water), and widening that to check multiple bodies is real, untested surface
+// area on an already-proven system; the sea sits far beyond where normal play ever reaches (past
+// x=20, outside the authored 40x40 chapter, well clear of the wall/mountain/throne-room/river,
+// all of which stay comfortably west of x=0), so it reads as "the world continues past the
+// jungle's coastline" without expanding what the player can actually do.
+const SEA_SIZE = 400;
+const SEA_SEGMENTS = 48;
+const SEA_START_X = 20; // the jungle's own chapterBounds half-width — the sea begins right at its edge
+const SEA_SURFACE_Y = -1.2; // below the jungle's own river's -0.3, reading as a real coastline drop-off
+const SEA_TIDE_PERIOD_SECONDS = 150; // a real, slow tide — noticeable if watched, never jarring
+const SEA_TIDE_AMPLITUDE = 0.4;
+
+function buildLivingSea(): { mesh: THREE.Mesh; update: (time: number) => void } {
+  const geo = new THREE.PlaneGeometry(SEA_SIZE, SEA_SIZE, SEA_SEGMENTS, SEA_SEGMENTS);
+  geo.rotateX(-Math.PI / 2);
+  const mat = new THREE.MeshStandardMaterial({
+    color: 0x0a2c3e,
+    transparent: true,
+    opacity: 0.88,
+    roughness: 0.12,
+    metalness: 0.2,
+  });
+
+  const uniforms = { uTime: { value: 0 }, uTide: { value: 0 } };
+  mat.onBeforeCompile = (shader) => {
+    shader.uniforms.uTime = uniforms.uTime;
+    shader.uniforms.uTide = uniforms.uTide;
+    shader.vertexShader = shader.vertexShader
+      .replace(
+        '#include <common>',
+        `#include <common>
+        uniform float uTime;
+        uniform float uTide;`,
+      )
+      .replace(
+        '#include <begin_vertex>',
+        `#include <begin_vertex>
+        // Three overlapping sine trains at different wavelengths/speeds/directions — a single
+        // sine reads as a mechanical ripple; three layered ones read as real open-water chop.
+        float wave = sin(position.x * 0.07 + uTime * 0.9) * 0.32
+                   + sin(position.z * 0.05 - uTime * 0.55) * 0.24
+                   + sin((position.x + position.z) * 0.14 + uTime * 1.3) * 0.14;
+        transformed.y += wave + uTide;`,
+      );
+  };
+
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.name = 'living-sea';
+  mesh.position.set(SEA_START_X + SEA_SIZE / 2, SEA_SURFACE_Y, 0);
+  mesh.receiveShadow = true;
+
+  return {
+    mesh,
+    update: (time: number) => {
+      uniforms.uTime.value = time;
+      uniforms.uTide.value = Math.sin((time / SEA_TIDE_PERIOD_SECONDS) * Math.PI * 2) * SEA_TIDE_AMPLITUDE;
+    },
+  };
+}
+
 function randomPlaceablePosition(
   heightAt: (x: number, z: number) => number,
   water: WaterBody,
@@ -738,6 +803,9 @@ export function createJungleLevel(): JungleLevel {
   const { meshes: throneRoomMeshes, throneRoom } = buildThroneRoom(mountain.summitGate);
   group.add(...throneRoomMeshes);
 
+  const { mesh: seaMesh, update: updateSea } = buildLivingSea();
+  group.add(seaMesh);
+
   const half = CHAPTER_SIZE / 2;
   const chapterBounds = new THREE.Box3(new THREE.Vector3(-half, -5, -half), new THREE.Vector3(half, 40, half));
 
@@ -760,6 +828,9 @@ export function createJungleLevel(): JungleLevel {
     climbObstacleMeshes: [wallMesh, ...mountain.climbMeshes],
     mountain: { segments: mountain.segments, summitGate: mountain.summitGate },
     throneRoom,
-    update: updateFoliage,
+    update: (time: number) => {
+      updateFoliage(time);
+      updateSea(time);
+    },
   };
 }

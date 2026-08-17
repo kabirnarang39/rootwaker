@@ -1,3 +1,4 @@
+import * as THREE from 'three';
 import { describe, it, expect } from 'vitest';
 import { createJungleLevel } from '../createJungleLevel';
 
@@ -133,5 +134,20 @@ describe('createJungleLevel', () => {
       expect(owl.group.position.y).toBeGreaterThan(ground);
       expect(owl.perchY).toBeCloseTo(owl.group.position.y, 5);
     }
+  });
+
+  it('the living sea sits entirely beyond the jungle\'s own chapterBounds (a backdrop the player never actually reaches during normal play, not new swimmable surface area)', () => {
+    const level = createJungleLevel();
+    const sea = level.group.getObjectByName('living-sea') as THREE.Mesh;
+    expect(sea).toBeDefined();
+    const box = new THREE.Box3().setFromObject(sea);
+    expect(box.min.x).toBeGreaterThanOrEqual(level.chapterBounds.max.x);
+  });
+
+  it('level.update() drives the sea\'s wave/tide animation without throwing across a real time range', () => {
+    const level = createJungleLevel();
+    expect(() => {
+      for (let t = 0; t < 300; t += 0.5) level.update(t);
+    }).not.toThrow();
   });
 });
