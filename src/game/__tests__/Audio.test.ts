@@ -123,4 +123,9 @@ describe('AudioFX species sounds', () => {
     const fx = new AudioFX();
     expect(() => fx.playBearSwipeActivate()).not.toThrow();
   });
+
+  it('startSeaAmbience does not throw before unlock()', () => {
+    const fx = new AudioFX();
+    expect(() => fx.startSeaAmbience()).not.toThrow();
+  });
 });

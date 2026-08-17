@@ -189,12 +189,49 @@ describe('createJungleLevel', () => {
     }
   });
 
-  it('the living sea sits entirely beyond the jungle\'s own chapterBounds (a backdrop the player never actually reaches during normal play, not new swimmable surface area)', () => {
+  it('the living sea rings all 4 sides of the island (east/west/north/south), each slab sitting entirely beyond the jungle\'s own chapterBounds (a backdrop the player never actually reaches during normal play, not new swimmable surface area) — regression: the original single east-only strip left the other 3 coastlines with no sea at all', () => {
     const level = createJungleLevel();
-    const sea = level.group.getObjectByName('living-sea') as THREE.Mesh;
-    expect(sea).toBeDefined();
-    const box = new THREE.Box3().setFromObject(sea);
-    expect(box.min.x).toBeGreaterThanOrEqual(level.chapterBounds.max.x);
+    const slabs: THREE.Mesh[] = [];
+    level.group.traverse((obj) => {
+      if (obj.name === 'living-sea') slabs.push(obj as THREE.Mesh);
+    });
+    expect(slabs.length).toBe(4);
+
+    const island = level.chapterBounds;
+    let coversEast = false;
+    let coversWest = false;
+    let coversNorth = false;
+    let coversSouth = false;
+    for (const slab of slabs) {
+      const box = new THREE.Box3().setFromObject(slab);
+      // Every slab must sit fully clear of the island's own footprint on at least one axis —
+      // it's a ring AROUND the land, never overlapping into it.
+      const clearOfIsland =
+        box.min.x >= island.max.x || box.max.x <= island.min.x ||
+        box.min.z >= island.max.z || box.max.z <= island.min.z;
+      expect(clearOfIsland).toBe(true);
+
+      if (box.min.x >= island.max.x) coversEast = true;
+      if (box.max.x <= island.min.x) coversWest = true;
+      if (box.min.z >= island.max.z) coversNorth = true;
+      if (box.max.z <= island.min.z) coversSouth = true;
+    }
+    expect(coversEast).toBe(true);
+    expect(coversWest).toBe(true);
+    expect(coversNorth).toBe(true);
+    expect(coversSouth).toBe(true);
+  });
+
+  it('a real fish school swims offshore of each of the 4 coastlines — real sea life, not an empty ring of water', () => {
+    const level = createJungleLevel();
+    const schools: THREE.Group[] = [];
+    level.group.traverse((obj) => {
+      if (obj.name === 'fish-school') schools.push(obj as THREE.Group);
+    });
+    expect(schools.length).toBe(4);
+    for (const school of schools) {
+      expect(school.children.length).toBeGreaterThan(0); // real fish, not an empty placeholder group
+    }
   });
 
   it('level.update() drives the sea\'s wave/tide animation without throwing across a real time range', () => {

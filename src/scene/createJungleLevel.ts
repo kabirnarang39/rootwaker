@@ -10,6 +10,7 @@ import { createCanopyOwl, type CanopyOwl } from '../entities/createCanopyOwl';
 import { createVineViper, type VineViper } from '../entities/createVineViper';
 import { createGroveSquirrel, type GroveSquirrel } from '../entities/createGroveSquirrel';
 import { createDuskFinchFlock, type DuskFinchFlock } from '../entities/createDuskFinchFlock';
+import { createFishSchool } from '../entities/createFishSchool';
 import { TreeObstacleGrid, type TreeObstacle } from './TreeObstacleGrid';
 
 export interface ClimbableWall {
@@ -681,44 +682,49 @@ function buildWater(): { mesh: THREE.Mesh; water: WaterBody } {
 }
 
 // A real living sea beyond the jungle's own land bounds — real wave motion (a genuine
-// vertex-shader displacement, not a static plane) and a real slow tide (the whole surface rises
-// and falls over a multi-minute cycle), matching the jungle's existing night/moonlit palette
-// (see Game.ts's setupLights) rather than a bright daytime ocean. Deliberately atmospheric/visual
-// only, not a second swimmable WaterBody — Game.ts's swim detection reads exactly one water body
-// today (this.level.water), and widening that to check multiple bodies is real, untested surface
-// area on an already-proven system; the sea sits far beyond where normal play ever reaches (past
-// x=20, outside the authored 40x40 chapter, well clear of the wall/mountain/throne-room/river,
-// all of which stay comfortably west of x=0), so it reads as "the world continues past the
-// jungle's coastline" without expanding what the player can actually do.
-const SEA_SIZE = 400;
+// vertex-shader displacement, not a static plane), foam/whitecap tinting at wave crests (a real
+// fragment-shader brightening keyed off the same wave height the vertex stage computes, not a
+// texture), and a real slow tide (the whole surface rises and falls over a multi-minute cycle),
+// matching the jungle's existing night/moonlit palette (see Game.ts's setupLights) rather than a
+// bright daytime ocean. Deliberately atmospheric/visual only, not a second swimmable WaterBody —
+// Game.ts's swim detection reads exactly one water body today (this.level.water), and widening
+// that to check multiple bodies is real, untested surface area on an already-proven system.
+//
+// Built as a 4-slab RING around the whole 40x40 island (not one strip off the east edge, which is
+// what shipped originally and is what the user later flagged as "not covering the entire
+// island") — north/south slabs are full outer-width (CHAPTER_SIZE + 2*SEA_SIZE) so they also
+// cover the 4 corners; east/west slabs only need to span the island's own depth, since the
+// corners are already covered. Every slab starts exactly at the island's edge (x=±20 or z=±20)
+// and extends outward, the same "well clear of the wall/mountain/throne-room/river, all of which
+// stay comfortably inside x∈[-20,20]" safety property the original single strip had.
+const SEA_SIZE = 400; // how far each slab extends outward past the island's edge
 const SEA_SEGMENTS = 48;
-const SEA_START_X = 20; // the jungle's own chapterBounds half-width — the sea begins right at its edge
+const ISLAND_HALF = CHAPTER_SIZE / 2; // 20 — matches chapterBounds' own half-width below
 const SEA_SURFACE_Y = -1.2; // below the jungle's own river's -0.3, reading as a real coastline drop-off
 const SEA_TIDE_PERIOD_SECONDS = 150; // a real, slow tide — noticeable if watched, never jarring
 const SEA_TIDE_AMPLITUDE = 0.4;
 
-function buildLivingSea(): { mesh: THREE.Mesh; update: (time: number) => void } {
-  const geo = new THREE.PlaneGeometry(SEA_SIZE, SEA_SIZE, SEA_SEGMENTS, SEA_SEGMENTS);
+const SEA_MAT_PARAMS = {
+  color: 0x1c4a63,
+  transparent: true,
+  opacity: 0.9,
+  roughness: 0.08,
+  metalness: 0.25,
+  emissive: 0x0d2333,
+  emissiveIntensity: 0.55,
+} as const;
+
+function buildSeaSlab(width: number, depth: number, x: number, z: number, uniforms: { uTime: { value: number }; uTide: { value: number } }): THREE.Mesh {
+  const geo = new THREE.PlaneGeometry(width, depth, SEA_SEGMENTS, SEA_SEGMENTS);
   geo.rotateX(-Math.PI / 2);
   // Found live: the sea was rendering correctly all along, but its original color (0x0a2c3e) was
   // nearly identical to the scene's own fog/background color (0x0a1420) — a real ocean blended
-  // invisibly into the night sky the instant fog started dimming it, which is almost immediately
-  // at this density. Real moonlit water has a visible sheen regardless of how dark the sky is —
-  // a lighter, more saturated base color plus a real emissive tint (moonlight's own cool
-  // 0xafc8ff color, the same hue Game.ts's directional moonlight already uses) gives the surface
-  // a base visibility that doesn't depend on catching direct light at the right angle, and lower
-  // roughness/higher metalness reads as a real glassy moonlit sheen rather than flat matte water.
-  const mat = new THREE.MeshStandardMaterial({
-    color: 0x1c4a63,
-    transparent: true,
-    opacity: 0.9,
-    roughness: 0.08,
-    metalness: 0.25,
-    emissive: 0x0d2333,
-    emissiveIntensity: 0.55,
-  });
+  // invisibly into the night sky the instant fog started dimming it. A lighter, more saturated
+  // base color plus a real emissive tint (moonlight's own cool 0xafc8ff hue, the same one Game.ts's
+  // directional moonlight already uses) gives the surface a base visibility that doesn't depend on
+  // catching direct light at the right angle.
+  const mat = new THREE.MeshStandardMaterial({ ...SEA_MAT_PARAMS });
 
-  const uniforms = { uTime: { value: 0 }, uTide: { value: 0 } };
   mat.onBeforeCompile = (shader) => {
     shader.uniforms.uTime = uniforms.uTime;
     shader.uniforms.uTide = uniforms.uTide;
@@ -727,7 +733,8 @@ function buildLivingSea(): { mesh: THREE.Mesh; update: (time: number) => void } 
         '#include <common>',
         `#include <common>
         uniform float uTime;
-        uniform float uTide;`,
+        uniform float uTide;
+        varying float vWaveHeight;`,
       )
       .replace(
         '#include <begin_vertex>',
@@ -737,17 +744,47 @@ function buildLivingSea(): { mesh: THREE.Mesh; update: (time: number) => void } 
         float wave = sin(position.x * 0.07 + uTime * 0.9) * 0.32
                    + sin(position.z * 0.05 - uTime * 0.55) * 0.24
                    + sin((position.x + position.z) * 0.14 + uTime * 1.3) * 0.14;
-        transformed.y += wave + uTide;`,
+        transformed.y += wave + uTide;
+        vWaveHeight = wave;`,
+      );
+    shader.fragmentShader = shader.fragmentShader
+      .replace(
+        '#include <common>',
+        `#include <common>
+        varying float vWaveHeight;`,
+      )
+      .replace(
+        '#include <color_fragment>',
+        `#include <color_fragment>
+        // Real whitecap foam: wave crests (the top of the 0.7-amplitude combined sine train)
+        // brighten toward a pale foam tint, troughs stay the base dark water color — a cheap,
+        // real per-vertex-driven equivalent of a foam texture, matching this project's
+        // shader-not-texture convention for every other animated surface (foliage sway, tide).
+        float foam = smoothstep(0.45, 0.7, vWaveHeight);
+        diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.82, 0.92, 0.95), foam * 0.5);`,
       );
   };
 
   const mesh = new THREE.Mesh(geo, mat);
   mesh.name = 'living-sea';
-  mesh.position.set(SEA_START_X + SEA_SIZE / 2, SEA_SURFACE_Y, 0);
+  mesh.position.set(x, SEA_SURFACE_Y, z);
   mesh.receiveShadow = true;
+  return mesh;
+}
+
+function buildLivingSea(): { meshes: THREE.Mesh[]; update: (time: number) => void } {
+  const uniforms = { uTime: { value: 0 }, uTide: { value: 0 } };
+
+  const outerHalfWidth = ISLAND_HALF + SEA_SIZE; // north/south slabs' half-width, reaching past the corners
+  const meshes = [
+    buildSeaSlab(SEA_SIZE, CHAPTER_SIZE, ISLAND_HALF + SEA_SIZE / 2, 0, uniforms), // east
+    buildSeaSlab(SEA_SIZE, CHAPTER_SIZE, -(ISLAND_HALF + SEA_SIZE / 2), 0, uniforms), // west
+    buildSeaSlab(outerHalfWidth * 2, SEA_SIZE, 0, ISLAND_HALF + SEA_SIZE / 2, uniforms), // north (covers corners)
+    buildSeaSlab(outerHalfWidth * 2, SEA_SIZE, 0, -(ISLAND_HALF + SEA_SIZE / 2), uniforms), // south (covers corners)
+  ];
 
   return {
-    mesh,
+    meshes,
     update: (time: number) => {
       uniforms.uTime.value = time;
       uniforms.uTide.value = Math.sin((time / SEA_TIDE_PERIOD_SECONDS) * Math.PI * 2) * SEA_TIDE_AMPLITUDE;
@@ -860,10 +897,22 @@ export function createJungleLevel(): JungleLevel {
   const { meshes: throneRoomMeshes, throneRoom } = buildThroneRoom(mountain.summitGate);
   group.add(...throneRoomMeshes);
 
-  const { mesh: seaMesh, update: updateSea } = buildLivingSea();
-  group.add(seaMesh);
+  const { meshes: seaMeshes, update: updateSea } = buildLivingSea();
+  group.add(...seaMeshes);
 
+  // One fish school just offshore of each of the 4 coastlines — real sea life, not an empty ring
+  // of water. Placed a little past the island's edge and a little into each sea slab, at a real
+  // swimming depth (createFishSchool's own SCHOOL_DEPTH_BELOW_SURFACE keeps them under the waves).
   const half = CHAPTER_SIZE / 2;
+  const OFFSHORE_MARGIN = 6;
+  const fishSchools = [
+    createFishSchool(new THREE.Vector3(half + OFFSHORE_MARGIN, SEA_SURFACE_Y, 0)),
+    createFishSchool(new THREE.Vector3(-(half + OFFSHORE_MARGIN), SEA_SURFACE_Y, 0)),
+    createFishSchool(new THREE.Vector3(0, SEA_SURFACE_Y, half + OFFSHORE_MARGIN)),
+    createFishSchool(new THREE.Vector3(0, SEA_SURFACE_Y, -(half + OFFSHORE_MARGIN))),
+  ];
+  group.add(...fishSchools.map((school) => school.group));
+
   const chapterBounds = new THREE.Box3(new THREE.Vector3(-half, -5, -half), new THREE.Vector3(half, 40, half));
 
   return {
@@ -888,6 +937,7 @@ export function createJungleLevel(): JungleLevel {
     update: (time: number) => {
       updateFoliage(time);
       updateSea(time);
+      for (const school of fishSchools) school.update(time);
     },
   };
 }

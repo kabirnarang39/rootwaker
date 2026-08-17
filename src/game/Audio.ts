@@ -697,6 +697,40 @@ export class AudioFX {
     thud.stop(ctx.currentTime + 0.3);
   }
 
+  /** Rolling surf — a real ocean's own signature rhythm is not a steady hiss like
+   * startMountainWind's gusts, it's a repeated wash-in/wash-out as each wave breaks and recedes.
+   * A continuous filtered-noise bed (the "shhh" of water) has its gain driven by a slow LFO
+   * (~6.5s period, matching a real breaking-wave cadence) instead of a constant value — that
+   * modulation IS the wave sound, not decoration on top of it. */
+  startSeaAmbience(): void {
+    if (!this.ctx) return;
+    const ctx = this.ctx;
+    const noise = ctx.createBufferSource();
+    noise.buffer = makeNoiseBuffer(ctx, 3);
+    noise.loop = true;
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'bandpass';
+    filter.frequency.value = 700;
+    filter.Q.value = 0.5;
+
+    const gain = ctx.createGain();
+    gain.gain.value = 0.05;
+
+    const lfo = ctx.createOscillator();
+    lfo.type = 'sine';
+    lfo.frequency.value = 1 / 6.5; // one wave every ~6.5 real seconds
+    const lfoGain = ctx.createGain();
+    lfoGain.gain.value = 0.035; // modulation depth — gain swings between ~0.015 and ~0.085
+    lfo.connect(lfoGain);
+    lfoGain.connect(gain.gain);
+
+    noise.connect(filter);
+    filter.connect(gain);
+    gain.connect(ctx.destination);
+    noise.start();
+    lfo.start();
+  }
+
   startVillageAmbience(): void {
     // A single warm, sustained drone — deliberately sparser than startJungleAmbience's
     // multi-layer canopy/floor/bird/water soundscape or startMountainWind's noise gusts: this is

@@ -206,6 +206,7 @@ export class Game {
   private windGust = new WindGust();
   private prevGustState: GustState = 'calm';
   private mountainWindStarted = false;
+  private seaAmbienceStarted = false;
   private summitGateCrossed = false;
   private kingDefeated = false;
   // The root-wraith is unkillable and nothing notices (Task 6 Step 7a): nothing ever checked
@@ -622,6 +623,16 @@ export class Game {
 
     this.fox.group.position.copy(this.playerController.body.position);
     this.fox.update(time, delta, this.playerController.moveSpeed);
+    if (!this.seaAmbienceStarted) {
+      const { min, max } = this.level.chapterBounds;
+      const COAST_TRIGGER_MARGIN = 5; // starts once the player is within 5m of any of the island's 4 edges
+      const p = this.playerController.body.position;
+      if (p.x >= max.x - COAST_TRIGGER_MARGIN || p.x <= min.x + COAST_TRIGGER_MARGIN
+        || p.z >= max.z - COAST_TRIGGER_MARGIN || p.z <= min.z + COAST_TRIGGER_MARGIN) {
+        this.seaAmbienceStarted = true;
+        this.audio.startSeaAmbience(); // additive layer, same idiom as mountainWindStarted below
+      }
+    }
     if (this.currentEat) {
       // Overlays on top of the normal idle/walk blend fox.update() just applied — only the
       // joints eatClip actually authors (spine/head/jaw/tail0) get overridden, so legs/ears etc.
