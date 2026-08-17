@@ -62,3 +62,10 @@ describe('AudioFX combat-clarity sounds', () => {
     expect(() => fx.playSensePulse()).not.toThrow();
   });
 });
+
+describe('AudioFX species sounds', () => {
+  it('playOwlScreech does not throw before unlock()', () => {
+    const fx = new AudioFX();
+    expect(() => fx.playOwlScreech()).not.toThrow();
+  });
+});

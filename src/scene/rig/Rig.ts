@@ -21,7 +21,12 @@ export type JointName =
   | 'tail3'
   | 'tail4'
   | 'tuskL'
-  | 'tuskR';
+  | 'tuskR'
+  // Flyers only (canopy owl, dusk finches). Deliberately not reusing shoulderL/R: a wing pivots
+  // from a different place than a quadruped's shoulder, and sharing the name would make a wing
+  // clip silently animate a bear's foreleg if the two ever got blended.
+  | 'wingL'
+  | 'wingR';
 
 /**
  * A named set of THREE.Group pivots any procedural character is built

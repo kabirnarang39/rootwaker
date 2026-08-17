@@ -293,6 +293,49 @@ export class AudioFX {
     noise.start();
   }
 
+  /** The canopy owl's voice. A barn owl does NOT hoot — its call is a harsh, rasping shriek, so
+   * this is deliberately not a tonal two-note cue. Two layers: noise pre-modulated at ~58Hz
+   * (the rasp lives in that flutter, not in the filter) pushed through a *bandpass* centred high,
+   * and a sawtooth falling fast from 2.2kHz. Contrast with playRoar(), which is the same
+   * noise-buffer technique but lowpass with a downward filter sweep — a bellow, not a shriek;
+   * copying that shape here would make the owl sound like a small bear. */
+  playOwlScreech(): void {
+    if (!this.ctx) return;
+    const ctx = this.ctx;
+    const bufferSize = Math.floor(ctx.sampleRate * 0.45);
+    const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < bufferSize; i++) {
+      const rasp = 0.55 + 0.45 * Math.sign(Math.sin((i / ctx.sampleRate) * 2 * Math.PI * 58));
+      data[i] = (Math.random() * 2 - 1) * rasp;
+    }
+    const noise = ctx.createBufferSource();
+    noise.buffer = buffer;
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'bandpass';
+    filter.frequency.value = 2600;
+    filter.Q.value = 1.4;
+    const noiseGain = ctx.createGain();
+    noiseGain.gain.setValueAtTime(0.14, ctx.currentTime); // no attack ramp: a shriek tears open
+    noiseGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.45);
+    noise.connect(filter);
+    filter.connect(noiseGain);
+    noiseGain.connect(ctx.destination);
+    noise.start();
+
+    const osc = ctx.createOscillator();
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(2200, ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(700, ctx.currentTime + 0.4);
+    const oscGain = ctx.createGain();
+    oscGain.gain.setValueAtTime(0.05, ctx.currentTime);
+    oscGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4);
+    osc.connect(oscGain);
+    oscGain.connect(ctx.destination);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.45);
+  }
+
   /** A quiet, wide echoing ping for Keen Ear — two soft sine layers a fifth apart, longer decay
    * than playCollect so it reads as "sound traveling outward" rather than a pickup chime. */
   playSensePulse(): void {

@@ -93,6 +93,27 @@ function isNearWallHeight(playerY: number, wallTopY: number, segmentHeight: numb
   return Math.abs(playerY - wallBaseY) <= WALL_CLIMB_HEIGHT_TOLERANCE;
 }
 
+/** One live enemy flattened to exactly what the player's damage/kill paths need.
+ *
+ * `position` is the entity's real `group.position` BY REFERENCE — knockback writes through it,
+ * so handing back a `.clone()` here would silently turn every knockback in the game into a no-op
+ * while every test still passed. There is no `hitbox` field because `combatant.hitbox` already
+ * IS the entity's own capsule (`resolveMeleeHit` reads it directly); a second alias for the same
+ * object would be dead weight two readers could disagree about. */
+interface EnemyEntry {
+  combatant: Combatant;
+  position: THREE.Vector3;
+  ai: EnemyAI;
+  /** King's Roar has never staggered the root-wraith, and this refactor deliberately does not
+   * start: the wraith is the chapter's fixed pressure and stunning it is a real difficulty
+   * change, not a structural one. Task 1 is behaviour-preserving, so the exclusion moves from
+   * "the wraith isn't in roarStagger's list" to this explicit flag instead of quietly widening. */
+  stunnable: boolean;
+  /** Scene removal + level-array splice + ability unlock. Absent for the wraith (chapter-
+   * persistent, never removed) and the King (the victory sequence in animate() owns his defeat). */
+  onDefeat?: () => void;
+}
+
 export class Game {
   private scene = new THREE.Scene();
   private renderer: THREE.WebGLRenderer;
@@ -641,11 +662,72 @@ export class Game {
     return new THREE.Vector3(Math.sin(this.foxFacingAngle), 0, Math.cos(this.foxFacingAngle));
   }
 
+  /** THE list of enemies the player can currently damage. Every consumer of "hurt/kill an enemy"
+   * walks this one array instead of repeating a per-species block, which is the duplication that
+   * has produced real bugs here before (a fix landing in one copy and not its siblings).
+   *
+   * A FRESH array every call, deliberately: an `onDefeat` splices `this.level.boars` while a
+   * caller is mid-loop, and iterating the live array would make the splice shift every entry the
+   * loop hasn't reached yet — the exact reason the old meleeSweep() had to count backwards.
+   * Snapshot order is wraith, King (only while the fight is live), boars, bears — the order the
+   * old per-species blocks ran in, so anything order-sensitive (the ability unlocked first when
+   * one sweep kills two different species) is unchanged. */
+  private enemyEntries(): EnemyEntry[] {
+    const entries: EnemyEntry[] = [
+      {
+        combatant: this.wraith.combatant,
+        position: this.wraith.group.position,
+        ai: this.wraith.ai,
+        stunnable: false,
+      },
+    ];
+
+    if (this.summitGateCrossed && !this.kingDefeated) {
+      const king = this.level.throneRoom.king;
+      entries.push({ combatant: king.combatant, position: king.group.position, ai: king.ai, stunnable: true });
+    }
+
+    for (const boar of this.level.boars) {
+      entries.push({
+        combatant: boar.combatant,
+        position: boar.group.position,
+        ai: boar.ai,
+        stunnable: true,
+        onDefeat: () => {
+          this.level.group.remove(boar.group);
+          // indexOf, not a captured index: the entry outlives the array layout it was built from,
+          // and a second kill source (venom) may run onDefeat after something else already
+          // spliced. -1 just means "already removed" — removal and unlock both stay idempotent.
+          const idx = this.level.boars.indexOf(boar);
+          if (idx !== -1) this.level.boars.splice(idx, 1);
+          this.abilityKit.unlock('boar-charge');
+        },
+      });
+    }
+
+    for (const bear of this.level.bears) {
+      entries.push({
+        combatant: bear.combatant,
+        position: bear.group.position,
+        ai: bear.ai,
+        stunnable: true,
+        onDefeat: () => {
+          this.level.group.remove(bear.group);
+          const idx = this.level.bears.indexOf(bear);
+          if (idx !== -1) this.level.bears.splice(idx, 1);
+          this.abilityKit.unlock('bear-swipe');
+        },
+      });
+    }
+
+    return entries;
+  }
+
   /** Shared hit-resolution for every player melee move (base attack, Boar's Charge, Bear
    * Swipe): a forward capsule of `radius` reaching `reach` meters along the fox's actual
-   * facing, dealing `damage` and shoving anything hit back by `knockback` meters. Boars/bears
-   * are removed and grant their ability on kill; the wraith and King are chapter-persistent
-   * targets handled by their own defeat logic elsewhere. */
+   * facing, dealing `damage` and shoving anything hit back by `knockback` meters. Knockback
+   * lands on every hit including the killing one, and one sound plays for the whole sweep no
+   * matter how many enemies it caught. */
   private meleeSweep(damage: number, radius: number, reach: number, knockback: number): void {
     const forward = this.facingForward();
     const hitbox = {
@@ -655,70 +737,31 @@ export class Game {
     };
     let hitAnything = false;
 
-    if (resolveMeleeHit(hitbox, this.wraith.combatant)) {
-      applyDamage(this.wraith.combatant, damage);
-      this.wraith.group.position.addScaledVector(forward, knockback);
+    for (const entry of this.enemyEntries()) {
+      if (!resolveMeleeHit(hitbox, entry.combatant)) continue;
+      applyDamage(entry.combatant, damage);
+      entry.position.addScaledVector(forward, knockback);
       hitAnything = true;
-    }
-
-    if (this.summitGateCrossed && !this.kingDefeated) {
-      const king = this.level.throneRoom.king;
-      if (resolveMeleeHit(hitbox, king.combatant)) {
-        applyDamage(king.combatant, damage);
-        king.group.position.addScaledVector(forward, knockback);
-        hitAnything = true;
-      }
-    }
-
-    for (let i = this.level.boars.length - 1; i >= 0; i--) {
-      const boar = this.level.boars[i];
-      if (!resolveMeleeHit(hitbox, boar.combatant)) continue;
-      applyDamage(boar.combatant, damage);
-      boar.group.position.addScaledVector(forward, knockback);
-      hitAnything = true;
-      if (isDefeated(boar.combatant)) {
-        this.level.group.remove(boar.group);
-        this.level.boars.splice(i, 1);
-        this.abilityKit.unlock('boar-charge');
-      }
-    }
-
-    for (let i = this.level.bears.length - 1; i >= 0; i--) {
-      const bear = this.level.bears[i];
-      if (!resolveMeleeHit(hitbox, bear.combatant)) continue;
-      applyDamage(bear.combatant, damage);
-      bear.group.position.addScaledVector(forward, knockback);
-      hitAnything = true;
-      if (isDefeated(bear.combatant)) {
-        this.level.group.remove(bear.group);
-        this.level.bears.splice(i, 1);
-        this.abilityKit.unlock('bear-swipe');
-      }
+      if (isDefeated(entry.combatant)) entry.onDefeat?.();
     }
 
     if (hitAnything) this.audio.playHit();
   }
 
   /** King's Roar: staggers (EnemyAI.stun) and shoves back every enemy within ROAR_RADIUS of the
-   * player — an area power, not a melee sweep, so it doesn't go through meleeSweep(). */
+   * player — an area power, not a melee sweep, so it doesn't go through meleeSweep(). Skips
+   * anything not `stunnable` (today: the wraith only — see EnemyEntry.stunnable). */
   private roarStagger(): void {
     const playerPos = this.playerController.body.position;
-    const targets: Array<{ position: THREE.Vector3; ai: EnemyAI }> = [
-      ...this.level.boars.map((b) => ({ position: b.group.position, ai: b.ai })),
-      ...this.level.bears.map((b) => ({ position: b.group.position, ai: b.ai })),
-    ];
-    if (this.summitGateCrossed && !this.kingDefeated) {
-      const king = this.level.throneRoom.king;
-      targets.push({ position: king.group.position, ai: king.ai });
-    }
-    for (const { position, ai } of targets) {
-      if (position.distanceTo(playerPos) > ROAR_RADIUS) continue;
-      ai.stun(ROAR_STUN_SECONDS);
-      const dx = position.x - playerPos.x;
-      const dz = position.z - playerPos.z;
+    for (const entry of this.enemyEntries()) {
+      if (!entry.stunnable) continue;
+      if (entry.position.distanceTo(playerPos) > ROAR_RADIUS) continue;
+      entry.ai.stun(ROAR_STUN_SECONDS);
+      const dx = entry.position.x - playerPos.x;
+      const dz = entry.position.z - playerPos.z;
       const dist = Math.hypot(dx, dz) || 1;
-      position.x += (dx / dist) * ROAR_KNOCKBACK;
-      position.z += (dz / dist) * ROAR_KNOCKBACK;
+      entry.position.x += (dx / dist) * ROAR_KNOCKBACK;
+      entry.position.z += (dz / dist) * ROAR_KNOCKBACK;
     }
   }
 
