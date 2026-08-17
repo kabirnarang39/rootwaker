@@ -84,6 +84,13 @@ const SENSE_RANGE_MULTIPLIER = 3;
 // same distance EnemyAI itself gates a completed telegraph on, so the chase and the attack gate
 // never disagree about "in range." Speeds are per-species: the wraith slithers, the boar/bear
 // surge, the King lumbers but hits harder.
+// A real, legitimate design consequence, not a bug: the fox's own top speed
+// (PlayerController.ts's MOVE_SPEED) is 4.5 m/s. A player who simply runs at full speed
+// permanently outruns the wraith (3.2), bear (3.4), and King (2.6) — they visibly chase but can
+// never close the gap unless the player slows, turns to fight, or gets cornered. The boar (4.5)
+// exactly matches player speed and so never gains ground either. Only the owl (5.0, horizontal)
+// and the viper (5.5) can actually run a fleeing player down. A fox genuinely outrunning a bear
+// is correct, not a balance oversight.
 const WRAITH_CHASE_SPEED = 3.2;
 const BOAR_CHASE_SPEED = 4.5; // a boar's real charge is a real sprint, not a walk
 const BEAR_CHASE_SPEED = 3.4;

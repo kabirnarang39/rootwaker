@@ -48,7 +48,18 @@ export class EnemyAI {
       this.stunTimer -= delta;
       return;
     }
-    this.timeInState += delta;
+    // Telegraph's own wind-up clock only advances once the player is actually within
+    // strikeRange (every other state's timer advances unconditionally, same as before). Without
+    // this, a fast enemy's telegraph timer keeps ticking while it's still closing distance — by
+    // the time it arrives in range the timer has often already elapsed, so the attack fires on
+    // the very frame contact becomes possible, with zero real wind-up visible to the player. The
+    // telegraph is this game's whole fairness mechanic (see the class doc comment); a telegraph
+    // that can silently complete before the enemy is even close enough to matter defeats it. For
+    // any enemy still on the default strikeRange (Infinity), distanceToPlayer <= Infinity is
+    // always true, so this is a no-op — byte-identical to before.
+    if (this.state !== 'telegraph' || distanceToPlayer <= this.strikeRange) {
+      this.timeInState += delta;
+    }
 
     switch (this.state) {
       case 'idle':
