@@ -73,4 +73,14 @@ describe('AudioFX species sounds', () => {
     const fx = new AudioFX();
     expect(() => fx.playViperHiss()).not.toThrow();
   });
+
+  it('playSquirrelChatter does not throw before unlock()', () => {
+    const fx = new AudioFX();
+    expect(() => fx.playSquirrelChatter()).not.toThrow();
+  });
+
+  it('playBirdFlush does not throw before unlock()', () => {
+    const fx = new AudioFX();
+    expect(() => fx.playBirdFlush()).not.toThrow();
+  });
 });

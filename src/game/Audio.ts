@@ -361,6 +361,49 @@ export class AudioFX {
     noise.start();
   }
 
+  /** The grove squirrel's alarm call. A real squirrel's "kuk-kuk-kuk" is tonal and staccato —
+   * contrast with playViperHiss/playOwlScreech, which are pure or noise-dominant; this is 5 short
+   * square-wave clicks with almost no decay tail, aimed *at* the predator rather than fled with. */
+  playSquirrelChatter(): void {
+    const clickCount = 5;
+    const clickSpacing = 0.09;
+    for (let i = 0; i < clickCount; i++) {
+      this.tone(1900 + (i % 2) * 220, 0.045, 'square', 0.07, i * clickSpacing);
+    }
+  }
+
+  /** The dusk finch flock's explosive group takeoff. A short noise burst amplitude-modulated at
+   * ~14Hz — fast enough to read as fluttering wingbeats, contrasted with playOwlScreech's slower
+   * ~58Hz modulation which reads as a vocal rasp, not a mechanical flutter — plus 2-3 short rising
+   * chirps riding on top as the flock scatters and calls out. */
+  playBirdFlush(): void {
+    if (!this.ctx) return;
+    const ctx = this.ctx;
+    const bufferSize = Math.floor(ctx.sampleRate * 0.35);
+    const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < bufferSize; i++) {
+      const flutter = 0.5 + 0.5 * Math.sin((i / ctx.sampleRate) * 2 * Math.PI * 14);
+      data[i] = (Math.random() * 2 - 1) * flutter;
+    }
+    const noise = ctx.createBufferSource();
+    noise.buffer = buffer;
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'bandpass';
+    filter.frequency.value = 2200;
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0.05, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
+    noise.connect(filter);
+    filter.connect(gain);
+    gain.connect(ctx.destination);
+    noise.start();
+
+    this.tone(2600, 0.08, 'sine', 0.04, 0.05);
+    this.tone(3100, 0.08, 'sine', 0.04, 0.15);
+    this.tone(3600, 0.09, 'sine', 0.035, 0.25);
+  }
+
   startVillageAmbience(): void {
     // A single warm, sustained drone — deliberately sparser than startJungleAmbience's
     // multi-layer canopy/floor/bird/water soundscape or startMountainWind's noise gusts: this is
