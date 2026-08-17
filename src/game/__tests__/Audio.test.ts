@@ -93,4 +93,9 @@ describe('AudioFX species sounds', () => {
     const fx = new AudioFX();
     expect(() => fx.playVenomBurst()).not.toThrow();
   });
+
+  it('playEatBite does not throw before unlock()', () => {
+    const fx = new AudioFX();
+    expect(() => fx.playEatBite()).not.toThrow();
+  });
 });

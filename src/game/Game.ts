@@ -32,6 +32,8 @@ import { resolvePlayerObstacleCollision } from './ObstacleCollision';
 import { toCameraRelative } from './CameraRelativeMove';
 import { computeFacingAngle } from './FoxFacing';
 import { chaseTowardPlayer, horizontalDistance } from './EnemyChase';
+import { applyClipToRig } from '../scene/rig/Clip';
+import { eatClip } from '../scene/foxClips';
 
 // Mirrors PlayerController's own (unexported) pounce range so the hunt-prompt lights up
 // exactly when a pounce would actually succeed. Keep these two in sync by hand.
@@ -124,6 +126,11 @@ const OWL_DIVE_AOE_KNOCKBACK = 1.0;
 // owns the tick timing/damage-per-tick, this is only the application radius.
 const VENOM_APPLY_RADIUS = 3.5;
 
+// Eat-to-gain-power ritual: long enough to read as 2-3 real chomps (eatClip loops on a 0.5s
+// cycle — see foxClips.ts), short enough not to feel like a stall mid-fight with other enemies
+// still closing in.
+const EAT_RITUAL_SECONDS = 1.4;
+
 // All mountain wall/segments share a fixed 6-unit segment height, so each one's base is
 // wall.topY - 6. Gate proximity checks on this so stacked segments (same x/z, different
 // height) don't false-match each other.
@@ -151,6 +158,13 @@ interface EnemyEntry {
   /** Scene removal + level-array splice + ability unlock. Absent for the wraith (chapter-
    * persistent, never removed) and the King (the victory sequence in animate() owns his defeat). */
   onDefeat?: () => void;
+  /** Set only for the real animals whose defeat grants a power (boar/bear/owl/viper) — this is
+   * what gates the eat-ritual: a kill on a `grantsAbility` entry is queued through
+   * queueEatRitual() (a real visible pause before onDefeat actually fires) instead of resolving
+   * onDefeat immediately. The wraith (a root-spirit, not an animal, and its onDefeat only removes
+   * it — no power) and the King (no onDefeat at all; a coronation, not a meal) are deliberately
+   * excluded — the fox does not eat either of them. */
+  grantsAbility?: AbilityId;
 }
 
 export class Game {
@@ -203,6 +217,20 @@ export class Game {
   private owlDiveEndTime = -Infinity;
   private owlDiveDirection = new THREE.Vector3(0, 0, 1);
   private owlDiveAoeApplied = true; // starts "already applied" — no leap has happened yet
+
+  // Eat-to-gain-power ritual: a kill on a real animal (grantsAbility set) doesn't resolve its
+  // onDefeat instantly — it's queued here first, so the fox visibly consumes the fallen creature
+  // BEFORE the power actually unlocks, replacing the old silent/instant unlock. One ritual runs
+  // at a time; a second kill mid-ritual queues behind the first rather than being dropped or
+  // resolving early — a fair, deterministic order, not a race.
+  private eatQueue: Array<{ combatant: Combatant; onComplete?: () => void }> = [];
+  private currentEat: { combatant: Combatant; onComplete?: () => void; endTime: number } | null = null;
+  private eatChompIndex = -1; // which eatClip loop cycle the current ritual is on, for the per-chomp sound trigger
+  // Every combatant currently mid-ritual — its own per-species update() is skipped entirely while
+  // present here (frozen pose, no AI/chase/attack progression) so a "dead" body can't keep
+  // fighting during its own eat-ritual pause. Checked by reference, so it stays correct even
+  // though enemyEntries() rebuilds a fresh EnemyEntry wrapper around the same combatant every call.
+  private beingEaten = new Set<Combatant>();
 
   private input: Input;
   private hud: HUD;
@@ -510,7 +538,7 @@ export class Game {
         const dist = Math.hypot(dx, dz) || 1;
         entry.position.x += (dx / dist) * OWL_DIVE_AOE_KNOCKBACK;
         entry.position.z += (dz / dist) * OWL_DIVE_AOE_KNOCKBACK;
-        if (isDefeated(entry.combatant)) entry.onDefeat?.();
+        if (isDefeated(entry.combatant)) this.resolveDefeat(entry);
       }
     }
 
@@ -552,6 +580,14 @@ export class Game {
 
     this.fox.group.position.copy(this.playerController.body.position);
     this.fox.update(time, delta, this.playerController.moveSpeed);
+    if (this.currentEat) {
+      // Overlays on top of the normal idle/walk blend fox.update() just applied — only the
+      // joints eatClip actually authors (spine/head/jaw/tail0) get overridden, so legs/ears etc.
+      // stay under whatever fox.update() already gave them. applyPositionOffset/setLocalRotation
+      // both write from the captured bind pose, not accumulate on the previous frame's value, so
+      // calling this a second time per frame is safe (see Rig.captureBasePose's own doc comment).
+      applyClipToRig(this.fox.rig, eatClip, time - (this.currentEat.endTime - EAT_RITUAL_SECONDS));
+    }
     this.foxFacingAngle = computeFacingAngle(
       this.playerController.body.velocity.x,
       this.playerController.body.velocity.z,
@@ -603,6 +639,9 @@ export class Game {
     }
 
     for (const boar of this.level.boars) {
+      // Mid-eat-ritual: a real "dead body, frozen" beat — skip AI/chase/animation entirely so it
+      // doesn't keep fighting while the fox is visibly consuming it.
+      if (this.beingEaten.has(boar.combatant)) continue;
       const boarDistance = horizontalDistance(boar.group.position, this.playerController.body.position);
       boar.update(time, delta, boarDistance);
       if (boar.ai.state !== 'idle') {
@@ -616,6 +655,7 @@ export class Game {
     }
 
     for (const bear of this.level.bears) {
+      if (this.beingEaten.has(bear.combatant)) continue;
       const bearDistance = horizontalDistance(bear.group.position, this.playerController.body.position);
       bear.update(time, delta, bearDistance);
       if (bear.ai.state !== 'idle') {
@@ -629,6 +669,7 @@ export class Game {
     }
 
     for (const owl of this.level.owls) {
+      if (this.beingEaten.has(owl.combatant)) continue;
       // horizontalDistance, not the 3D .distanceTo() this loop used before Task 6's own live
       // verification found the general reason every ground species needs it too (see that
       // function's doc comment) — for the owl specifically it's not just "usually smaller," it's
@@ -661,6 +702,7 @@ export class Game {
     }
 
     for (const viper of this.level.vipers) {
+      if (this.beingEaten.has(viper.combatant)) continue;
       const viperDistance = horizontalDistance(viper.group.position, this.playerController.body.position);
       const prevViperAiState = this.prevViperAiState.get(viper.ai);
       viper.update(time, delta, viperDistance);
@@ -775,9 +817,35 @@ export class Game {
       const combatant = target as Combatant;
       applyDamage(combatant, VENOM_DAMAGE_PER_TICK);
       if (isDefeated(combatant)) {
-        this.enemyEntries().find((entry) => entry.combatant === combatant)?.onDefeat?.();
+        const entry = this.enemyEntries().find((e) => e.combatant === combatant);
+        if (entry) this.resolveDefeat(entry);
       }
     });
+
+    // Eat-ritual queue: one at a time. Starts the next queued kill once idle, resolves the
+    // current one — the deferred onComplete (removal + array splice + ability unlock, exactly
+    // what onDefeat used to do instantly) — once its real visible duration elapses, and plays a
+    // real bite sound once per chomp cycle of eatClip (not once for the whole ritual), tracked by
+    // the same "index changed since last frame" idiom prevGustState/prevGroundSlamState use.
+    if (!this.currentEat && this.eatQueue.length > 0) {
+      const next = this.eatQueue.shift()!;
+      this.currentEat = { ...next, endTime: time + EAT_RITUAL_SECONDS };
+      this.eatChompIndex = -1;
+    }
+    if (this.currentEat) {
+      const elapsed = EAT_RITUAL_SECONDS - (this.currentEat.endTime - time);
+      const chompIndex = Math.floor(elapsed / eatClip.duration);
+      if (chompIndex !== this.eatChompIndex) {
+        this.eatChompIndex = chompIndex;
+        this.audio.playEatBite();
+      }
+    }
+    if (this.currentEat && time >= this.currentEat.endTime) {
+      const finished = this.currentEat;
+      this.currentEat = null;
+      this.beingEaten.delete(finished.combatant);
+      finished.onComplete?.();
+    }
 
     if (isDefeated(this.playerCombatant)) {
       // silent checkpoint respawn — no game-over screen, matches the chapter-restart design spec
@@ -903,6 +971,7 @@ export class Game {
         position: boar.group.position,
         ai: boar.ai,
         stunnable: true,
+        grantsAbility: 'boar-charge',
         onDefeat: () => {
           this.level.group.remove(boar.group);
           // indexOf, not a captured index: the entry outlives the array layout it was built from,
@@ -922,6 +991,7 @@ export class Game {
         position: bear.group.position,
         ai: bear.ai,
         stunnable: true,
+        grantsAbility: 'bear-swipe',
         onDefeat: () => {
           this.level.group.remove(bear.group);
           const idx = this.level.bears.indexOf(bear);
@@ -938,6 +1008,7 @@ export class Game {
         position: owl.group.position,
         ai: owl.ai,
         stunnable: true,
+        grantsAbility: 'owl-dive',
         onDefeat: () => {
           this.level.group.remove(owl.group);
           const idx = this.level.owls.indexOf(owl);
@@ -954,6 +1025,7 @@ export class Game {
         position: viper.group.position,
         ai: viper.ai,
         stunnable: true,
+        grantsAbility: 'viper-venom',
         onDefeat: () => {
           this.level.group.remove(viper.group);
           const idx = this.level.vipers.indexOf(viper);
@@ -964,7 +1036,29 @@ export class Game {
       });
     }
 
-    return entries;
+    // A combatant mid-eat-ritual is already dead — exclude it from every consumer at the one
+    // source (melee, King's Roar, Owl's Descent AOE, and the venom-tick lookup all read this
+    // list), rather than teaching each of them about beingEaten individually.
+    return entries.filter((e) => !this.beingEaten.has(e.combatant));
+  }
+
+  /** THE single place every kill path (meleeSweep, Owl's Descent AOE, Viper Venom ticks) routes
+   * an `isDefeated(entry.combatant)` result through. A real animal (grantsAbility set) is queued
+   * into the eat-ritual instead of resolving onDefeat instantly — the fox visibly consumes it
+   * first. The wraith and the King (both without grantsAbility) resolve immediately, exactly as
+   * before this ritual existed. */
+  private resolveDefeat(entry: EnemyEntry): void {
+    if (entry.grantsAbility) {
+      // Idempotency guard: a venom tick can still fire on a later frame against a combatant
+      // that's already queued for its own eat-ritual (the array splice that would remove it from
+      // enemyEntries() only happens inside the DEFERRED onComplete, not yet run) — without this
+      // check that would push a second, duplicate ritual for the same kill.
+      if (this.beingEaten.has(entry.combatant)) return;
+      this.beingEaten.add(entry.combatant);
+      this.eatQueue.push({ combatant: entry.combatant, onComplete: entry.onDefeat });
+    } else {
+      entry.onDefeat?.();
+    }
   }
 
   /** Shared hit-resolution for every player melee move (base attack, Boar's Charge, Bear
@@ -986,7 +1080,7 @@ export class Game {
       applyDamage(entry.combatant, damage);
       entry.position.addScaledVector(forward, knockback);
       hitAnything = true;
-      if (isDefeated(entry.combatant)) entry.onDefeat?.();
+      if (isDefeated(entry.combatant)) this.resolveDefeat(entry);
     }
 
     if (hitAnything) this.audio.playHit();

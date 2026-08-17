@@ -474,6 +474,43 @@ export class AudioFX {
     sting.stop(ctx.currentTime + 0.3);
   }
 
+  /** A single real bite/chomp for the eat-ritual (Game.ts loops this once per real chomp in the
+   * ritual's animation cycle, not once per whole ritual). Deliberately wet and meaty, not a
+   * combat impact: a short LOWPASS noise burst (playHit's own combat thud is a raw
+   * sawtooth/square hit, no filtered noise at all — this needs to read as biting flesh, not
+   * striking it) layered under a fast, low, downward-snapping tone standing in for the jaw
+   * itself closing. */
+  playEatBite(): void {
+    if (!this.ctx) return;
+    const ctx = this.ctx;
+    const noise = ctx.createBufferSource();
+    noise.buffer = makeNoiseBuffer(ctx, 0.22);
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.value = 900;
+    filter.Q.value = 0.7;
+    const noiseGain = ctx.createGain();
+    noiseGain.gain.setValueAtTime(0.001, ctx.currentTime);
+    noiseGain.gain.linearRampToValueAtTime(0.11, ctx.currentTime + 0.02);
+    noiseGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.22);
+    noise.connect(filter);
+    filter.connect(noiseGain);
+    noiseGain.connect(ctx.destination);
+    noise.start();
+
+    const snap = ctx.createOscillator();
+    snap.type = 'square';
+    snap.frequency.setValueAtTime(140, ctx.currentTime);
+    snap.frequency.exponentialRampToValueAtTime(60, ctx.currentTime + 0.09);
+    const snapGain = ctx.createGain();
+    snapGain.gain.setValueAtTime(0.08, ctx.currentTime);
+    snapGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.1);
+    snap.connect(snapGain);
+    snapGain.connect(ctx.destination);
+    snap.start(ctx.currentTime);
+    snap.stop(ctx.currentTime + 0.12);
+  }
+
   startVillageAmbience(): void {
     // A single warm, sustained drone — deliberately sparser than startJungleAmbience's
     // multi-layer canopy/floor/bird/water soundscape or startMountainWind's noise gusts: this is
