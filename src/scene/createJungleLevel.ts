@@ -351,7 +351,7 @@ function buildClimbableWall(heightAt: (x: number, z: number) => number): { mesh:
       new THREE.Vector2(wallX - 0.3, baseZ - wallZWidth / 2),
       new THREE.Vector2(wallX + 0.3, baseZ + wallZWidth / 2),
     ),
-    pathAt: () => ({ dx: 0, dz: 0 }), // real winding wired in a later task
+    pathAt: makeWindingPath(CLIMB_PATH_AMPLITUDE, CLIMB_PATH_WAVELENGTH),
   };
   return { mesh, wall };
 }
@@ -359,6 +359,8 @@ function buildClimbableWall(heightAt: (x: number, z: number) => number): { mesh:
 const MOUNTAIN_WALL_COLOR = 0x2c2216; // matches the phase-1 climbable wall
 const MOUNTAIN_LEDGE_COLOR = 0x4a4842; // matches mountainGuard.ts's stone
 const MOUNTAIN_GATE_TRIM_COLOR = 0x8a6a3a; // matches mountainGuard.ts's trim
+const CLIMB_PATH_AMPLITUDE = 1.2; // meters either side of the wall's own base Z — inside wallZWidth=6
+const CLIMB_PATH_WAVELENGTH = 4; // meters of height per full winding cycle
 
 // Generalized version of buildClimbableWall's pattern: stacked segments need an explicit
 // base Y (the ledge below them) rather than deriving it from ground terrain.
@@ -379,7 +381,7 @@ function buildClimbSegment(
       new THREE.Vector2(wallX - 0.3, baseZ - wallZWidth / 2),
       new THREE.Vector2(wallX + 0.3, baseZ + wallZWidth / 2),
     ),
-    pathAt: () => ({ dx: 0, dz: 0 }), // real winding wired in a later task
+    pathAt: makeWindingPath(CLIMB_PATH_AMPLITUDE, CLIMB_PATH_WAVELENGTH),
   };
   return { mesh, wall };
 }
@@ -455,27 +457,38 @@ function buildMountain(
   const seg1 = buildClimbSegment(wallX, baseZ, startY, wallZWidth, segmentHeight);
   meshes.push(seg1.mesh);
   climbMeshes.push(seg1.mesh);
-  const ledge1 = buildLedge(wallX, seg1.wall.topY, baseZ, 8, 4);
+  // Real path endpoint — where the wall's own winding path actually lands after a full
+  // segment's height — not the shared, fixed baseZ every segment used to sit on. seg1's own
+  // pathAt(0) is guaranteed (0, 0) by construction, so this is exactly baseZ plus the real
+  // drift at segmentHeight.
+  const seg1LedgeZ = baseZ + seg1.wall.pathAt(segmentHeight).dz;
+  const ledge1 = buildLedge(wallX, seg1.wall.topY, seg1LedgeZ, 8, 4);
   meshes.push(ledge1.mesh);
   climbMeshes.push(ledge1.mesh);
   segments.push({ wall: seg1.wall, ledgePosition: ledge1.position });
 
-  // Segment 2: branches into two parallel paths that both lead to ledge 2.
-  const seg2a = buildClimbSegment(wallX - branchOffset, baseZ, ledge1.position.y, wallZWidth, segmentHeight);
-  const seg2b = buildClimbSegment(wallX + branchOffset, baseZ, ledge1.position.y, wallZWidth, segmentHeight);
+  // Segment 2: branches into two parallel paths, each based at ledge 1's real Z, that both lead
+  // to ledge 2.
+  const seg2a = buildClimbSegment(wallX - branchOffset, seg1LedgeZ, ledge1.position.y, wallZWidth, segmentHeight);
+  const seg2b = buildClimbSegment(wallX + branchOffset, seg1LedgeZ, ledge1.position.y, wallZWidth, segmentHeight);
   meshes.push(seg2a.mesh, seg2b.mesh);
   climbMeshes.push(seg2a.mesh, seg2b.mesh);
-  const ledge2 = buildLedge(wallX, seg2a.wall.topY, baseZ, 8, 4);
+  // Both branches share ledge 2's real position; anchoring to seg2a's own path endpoint is an
+  // arbitrary-but-consistent choice — a player finishing either branch lands on the same real
+  // ledge2 object either way, exactly like before this change.
+  const ledge2Z = seg1LedgeZ + seg2a.wall.pathAt(segmentHeight).dz;
+  const ledge2 = buildLedge(wallX, seg2a.wall.topY, ledge2Z, 8, 4);
   meshes.push(ledge2.mesh);
   climbMeshes.push(ledge2.mesh);
   segments.push({ wall: seg2a.wall, ledgePosition: ledge2.position });
   segments.push({ wall: seg2b.wall, ledgePosition: ledge2.position });
 
-  // Segment 3: single path to the summit.
-  const seg3 = buildClimbSegment(wallX, baseZ, ledge2.position.y, wallZWidth, segmentHeight);
+  // Segment 3: single path to the summit, based at ledge 2's real Z.
+  const seg3 = buildClimbSegment(wallX, ledge2Z, ledge2.position.y, wallZWidth, segmentHeight);
   meshes.push(seg3.mesh);
   climbMeshes.push(seg3.mesh);
-  const ledge3 = buildLedge(wallX, seg3.wall.topY, baseZ, 6, 4);
+  const seg3LedgeZ = ledge2Z + seg3.wall.pathAt(segmentHeight).dz;
+  const ledge3 = buildLedge(wallX, seg3.wall.topY, seg3LedgeZ, 6, 4);
   meshes.push(ledge3.mesh);
   climbMeshes.push(ledge3.mesh);
   segments.push({ wall: seg3.wall, ledgePosition: ledge3.position });

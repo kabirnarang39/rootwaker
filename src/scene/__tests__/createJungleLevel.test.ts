@@ -118,6 +118,34 @@ describe('createJungleLevel', () => {
     expect(villageMeshes[0].visible).toBe(true); // both reveal together, neither replaces the other
   });
 
+  it('every real climb segment has a real (non-default) pathAt — pathAt(0) is always zero-drift, but pathAt at a real height is not', () => {
+    const level = createJungleLevel();
+    const segmentHeight = 6; // matches buildMountain's own segmentHeight constant
+    for (const segment of level.mountain.segments) {
+      const atBase = segment.wall.pathAt(0);
+      expect(atBase.dx).toBe(0);
+      expect(atBase.dz).toBeCloseTo(0, 10);
+      const atMid = segment.wall.pathAt(segmentHeight / 2);
+      expect(Math.abs(atMid.dz)).toBeGreaterThan(0.01);
+    }
+  });
+
+  it('each climb segment\'s ledge sits at its own wall\'s real path endpoint, not a fixed Z shared by every segment', () => {
+    const level = createJungleLevel();
+    const segmentHeight = 6;
+    for (const segment of level.mountain.segments) {
+      const { dz } = segment.wall.pathAt(segmentHeight);
+      const baseZ = (segment.wall.bounds.min.y + segment.wall.bounds.max.y) / 2;
+      expect(segment.ledgePosition.z).toBeCloseTo(baseZ + dz, 5);
+    }
+  });
+
+  it('a segment\'s own wall.bounds is centered on ITS real base Z (chained from the previous segment\'s real ledge, not a fixed value shared by every segment)', () => {
+    const level = createJungleLevel();
+    const seg2aBaseZ = (level.mountain.segments[1].wall.bounds.min.y + level.mountain.segments[1].wall.bounds.max.y) / 2;
+    expect(seg2aBaseZ).toBeCloseTo(level.mountain.segments[0].ledgePosition.z, 5);
+  });
+
   it('diverse-species wildlife arrays exist and are non-empty (owls, vipers, squirrels, one finch flock)', () => {
     const level = createJungleLevel();
     expect(level.owls.length).toBeGreaterThan(0);
