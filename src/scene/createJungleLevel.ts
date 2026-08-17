@@ -291,6 +291,148 @@ function buildFoliage(
   };
 }
 
+const FERN_COLOR = 0x2c5a34;
+const FERN_COLOR_DARK = 0x1e4526;
+const LOG_COLOR = 0x4a3626;
+const CLUTTER_ROCK_COLOR = 0x5a5648;
+
+/** Real jungle-floor detail: ferns, fallen logs, and scattered rocks — the ground-level density
+ * "improve the area of jungle" was actually asking for. `buildFoliage` above already puts 1300
+ * real trees across the island (canopy density was never the gap); what the floor BETWEEN those
+ * trees has always lacked is anything at eye level. Purely visual, same as the throne room's own
+ * perimeter boulders — no new collision geometry, so this can't regress movement/pathing. */
+function buildFern(): THREE.BufferGeometry {
+  // A real fern's silhouette: several thin, flattened, tapering fronds radiating from one base
+  // point at different angles/heights — not a single blob. Built the same lobe-merge technique
+  // buildTreeSpeciesMeshes uses for canopies.
+  const frondGeoms: THREE.BufferGeometry[] = [];
+  const frondCount = 6;
+  for (let i = 0; i < frondCount; i++) {
+    const angle = (i / frondCount) * Math.PI * 2 + Math.random() * 0.3;
+    const frond = new THREE.ConeGeometry(0.035, 0.32, 3);
+    frond.rotateX(Math.PI / 2 - 0.5); // tilts the frond up and outward from vertical
+    frond.rotateY(angle);
+    frond.translate(Math.cos(angle) * 0.12, 0.12, Math.sin(angle) * 0.12);
+    frondGeoms.push(frond);
+  }
+  const merged = mergeGeometries(frondGeoms, false);
+  if (!merged) throw new Error('buildFern: failed to merge frond geometry');
+  return merged;
+}
+
+function buildGroundClutter(
+  heightAt: (x: number, z: number) => number,
+  water: WaterBody,
+  wallBounds: THREE.Box2,
+): THREE.Object3D[] {
+  const meshes: THREE.Object3D[] = [];
+  const dummy = new THREE.Object3D();
+
+  const FERN_COUNT = 450;
+  const fernGeo = buildFern();
+  const fernMat = new THREE.MeshStandardMaterial({ color: FERN_COLOR, flatShading: true, roughness: 0.9 });
+  const fernMesh = new THREE.InstancedMesh(fernGeo, fernMat, FERN_COUNT);
+  fernMesh.name = 'ground-ferns';
+  let fernPlaced = 0;
+  let attempts = 0;
+  while (fernPlaced < FERN_COUNT && attempts < FERN_COUNT * 4) {
+    attempts++;
+    const x = (Math.random() - 0.5) * CHAPTER_SIZE;
+    const z = (Math.random() - 0.5) * CHAPTER_SIZE;
+    if (!isPlaceable(x, z, water, wallBounds)) continue;
+    dummy.position.set(x, heightAt(x, z), z);
+    dummy.rotation.y = Math.random() * Math.PI * 2;
+    dummy.scale.setScalar(0.7 + Math.random() * 0.8);
+    dummy.updateMatrix();
+    fernMesh.setMatrixAt(fernPlaced, dummy.matrix);
+    fernPlaced++;
+  }
+  fernMesh.count = fernPlaced;
+  fernMesh.instanceMatrix.needsUpdate = true;
+  meshes.push(fernMesh);
+
+  // A second, darker fern variant scattered more sparsely — real jungle floor has real color
+  // variety underfoot, not one repeated plant.
+  const FERN_DARK_COUNT = 180;
+  const fernDarkMat = new THREE.MeshStandardMaterial({ color: FERN_COLOR_DARK, flatShading: true, roughness: 0.95 });
+  const fernDarkMesh = new THREE.InstancedMesh(fernGeo, fernDarkMat, FERN_DARK_COUNT);
+  fernDarkMesh.name = 'ground-ferns-dark';
+  let fernDarkPlaced = 0;
+  attempts = 0;
+  while (fernDarkPlaced < FERN_DARK_COUNT && attempts < FERN_DARK_COUNT * 4) {
+    attempts++;
+    const x = (Math.random() - 0.5) * CHAPTER_SIZE;
+    const z = (Math.random() - 0.5) * CHAPTER_SIZE;
+    if (!isPlaceable(x, z, water, wallBounds)) continue;
+    dummy.position.set(x, heightAt(x, z), z);
+    dummy.rotation.y = Math.random() * Math.PI * 2;
+    dummy.scale.setScalar(0.55 + Math.random() * 0.6);
+    dummy.updateMatrix();
+    fernDarkMesh.setMatrixAt(fernDarkPlaced, dummy.matrix);
+    fernDarkPlaced++;
+  }
+  fernDarkMesh.count = fernDarkPlaced;
+  fernDarkMesh.instanceMatrix.needsUpdate = true;
+  meshes.push(fernDarkMesh);
+
+  // Fallen logs: sparse, real forest-floor decay — a living jungle has dead wood on the ground,
+  // not just standing trees.
+  const LOG_COUNT = 18;
+  const logGeo = new THREE.CylinderGeometry(0.09, 0.11, 1.4, 6);
+  const logMat = new THREE.MeshStandardMaterial({ color: LOG_COLOR, flatShading: true, roughness: 0.95 });
+  for (let i = 0; i < LOG_COUNT; i++) {
+    let x = 0;
+    let z = 0;
+    let placed = false;
+    for (let a = 0; a < 20; a++) {
+      x = (Math.random() - 0.5) * CHAPTER_SIZE;
+      z = (Math.random() - 0.5) * CHAPTER_SIZE;
+      if (isPlaceable(x, z, water, wallBounds)) {
+        placed = true;
+        break;
+      }
+    }
+    if (!placed) continue;
+    const log = new THREE.Mesh(logGeo, logMat);
+    log.name = 'ground-log';
+    log.position.set(x, heightAt(x, z) + 0.09, z);
+    log.rotation.z = Math.PI / 2;
+    log.rotation.y = Math.random() * Math.PI * 2;
+    log.scale.setScalar(0.8 + Math.random() * 0.5);
+    log.castShadow = true;
+    log.receiveShadow = true;
+    meshes.push(log);
+  }
+
+  // Scattered rocks: small 2-lobe clusters (same clustering technique as the mane/canopy lobes),
+  // real terrain variety, not perfectly smooth ground everywhere.
+  const ROCK_COUNT = 60;
+  const rockMat = new THREE.MeshStandardMaterial({ color: CLUTTER_ROCK_COLOR, flatShading: true, roughness: 1 });
+  for (let i = 0; i < ROCK_COUNT; i++) {
+    let x = 0;
+    let z = 0;
+    let placed = false;
+    for (let a = 0; a < 20; a++) {
+      x = (Math.random() - 0.5) * CHAPTER_SIZE;
+      z = (Math.random() - 0.5) * CHAPTER_SIZE;
+      if (isPlaceable(x, z, water, wallBounds)) {
+        placed = true;
+        break;
+      }
+    }
+    if (!placed) continue;
+    const rock = new THREE.Mesh(new THREE.IcosahedronGeometry(0.1 + Math.random() * 0.1, 0), rockMat);
+    rock.name = 'ground-rock';
+    rock.position.set(x, heightAt(x, z) + 0.05, z);
+    rock.rotation.set(Math.random(), Math.random() * Math.PI * 2, Math.random());
+    rock.castShadow = true;
+    rock.receiveShadow = true;
+    meshes.push(rock);
+  }
+
+  return meshes;
+}
+
 // A real jagged rock face, not a smooth box: N angular chunks (icosahedra scaled into rough
 // slabs, not round boulders) scattered across the wall's height/width and merged into ONE
 // BufferGeometry/Mesh — same clustering technique buildTreeSpeciesMeshes already uses for canopy
@@ -891,6 +1033,9 @@ export function createJungleLevel(): JungleLevel {
   const { meshes: foliageMeshes, update: updateFoliage, obstacles } = buildFoliage(heightAt, water, wall.bounds);
   group.add(...foliageMeshes);
   const obstacleGrid = new TreeObstacleGrid(obstacles);
+
+  const groundClutterMeshes = buildGroundClutter(heightAt, water, wall.bounds);
+  group.add(...groundClutterMeshes);
 
   const { hares, boars, bears, owls, vipers, lions, squirrels, finchFlock, finchFlockCenter } = buildWildlife(
     heightAt,

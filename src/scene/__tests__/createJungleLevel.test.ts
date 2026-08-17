@@ -160,6 +160,39 @@ describe('createJungleLevel', () => {
     expect(level.lions.length).toBe(1);
   });
 
+  it('real jungle-floor ground clutter (ferns, fallen logs, rocks) exists — the "improve the area of jungle" density pass, not just tree canopy', () => {
+    const level = createJungleLevel();
+    let fernCount = 0;
+    let fernDarkCount = 0;
+    let logCount = 0;
+    let rockCount = 0;
+    level.group.traverse((obj) => {
+      if (obj.name === 'ground-ferns') fernCount = (obj as THREE.InstancedMesh).count;
+      if (obj.name === 'ground-ferns-dark') fernDarkCount = (obj as THREE.InstancedMesh).count;
+      if (obj.name === 'ground-log') logCount++;
+      if (obj.name === 'ground-rock') rockCount++;
+    });
+    expect(fernCount).toBeGreaterThan(0);
+    expect(fernDarkCount).toBeGreaterThan(0);
+    expect(logCount).toBeGreaterThan(0);
+    expect(rockCount).toBeGreaterThan(0);
+  });
+
+  it('every ground-clutter piece sits outside the water/wall exclusion (regression: decorative clutter spawning inside the water crossing would read as floating debris)', () => {
+    const level = createJungleLevel();
+    const outsideWater = (x: number, z: number) =>
+      x < level.water.bounds.min.x || x > level.water.bounds.max.x ||
+      z < level.water.bounds.min.z || z > level.water.bounds.max.z;
+    const outsideWall = (x: number, z: number) =>
+      x < level.climbableWall.bounds.min.x || x > level.climbableWall.bounds.max.x ||
+      z < level.climbableWall.bounds.min.y || z > level.climbableWall.bounds.max.y;
+    level.group.traverse((obj) => {
+      if (obj.name !== 'ground-log' && obj.name !== 'ground-rock') return;
+      const { x, z } = obj.position;
+      expect(outsideWater(x, z) && outsideWall(x, z)).toBe(true);
+    });
+  });
+
   it('every owl/viper/squirrel spawn sits inside chapterBounds and outside the water/wall exclusion', () => {
     const level = createJungleLevel();
     const outsideWater = (x: number, z: number) =>
