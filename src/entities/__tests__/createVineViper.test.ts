@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import * as THREE from 'three';
 import { createVineViper, getVineViperHitbox } from '../createVineViper';
-import { slitherClip } from '../vineViperClips';
+import { slitherClip, coilClip, TAIL_CURL_PER_JOINT } from '../vineViperClips';
 import { sampleClip } from '../../scene/rig/Clip';
 
 function meshNames(group: THREE.Object3D): Set<string> {
@@ -101,6 +101,19 @@ describe('createVineViper', () => {
     expect(hitbox.end.y - hitbox.start.y).toBeCloseTo(0.25, 5);
   });
 
+  it('the coiled idle pose is a real curled spiral, not a straight tube (regression: coilClip used to pin the whole tail chain to identity, so a resting viper read as a flat segmented rod with a wedge head, not a snake)', () => {
+    const t = 0; // the coil pin is a single fixed keyframe, sampled at any time
+    const sample = sampleClip(coilClip, t);
+    const tailJoints = ['tail0', 'tail1', 'tail2', 'tail3', 'tail4'] as const;
+    for (const joint of tailJoints) {
+      expect(sample.get(joint)!.rotation![1]).toBeCloseTo(TAIL_CURL_PER_JOINT, 5);
+    }
+    // A real coil is a smooth, non-zero curl — not just "some rotation," but the SAME repeated
+    // local increment down the chain, which is what makes it read as one continuous arc rather
+    // than a random kink at one joint.
+    expect(TAIL_CURL_PER_JOINT).toBeGreaterThan(0.1);
+  });
+
   it('the slither clip drives a real travelling S-wave: joints down the body chain get different lateral rotations at the same sample time, not a uniform whole-body swing', () => {
     const t = slitherClip.duration * 0.27; // an arbitrary, non-symmetric sample point
     const sample = sampleClip(slitherClip, t);
@@ -118,7 +131,7 @@ describe('createVineViper', () => {
     }
   });
 
-  it('tail joints return to identity after a full slither -> strike -> recover -> idle cycle (regression: slitherClip loops and gets cut off mid-wave at an arbitrary phase; neither coilClip nor strikeClip used to touch tail0..tail4 at all, so the lower body stayed kinked forever after the viper\'s first fight)', () => {
+  it('tail joints settle back to the real coiled resting pose (not a stale mid-slither kink) after a full slither -> strike -> recover -> idle cycle (regression: slitherClip loops and gets cut off mid-wave at an arbitrary phase; neither coilClip nor strikeClip used to touch tail0..tail4 at all, so the lower body stayed kinked forever after the viper\'s first fight)', () => {
     const viper = createVineViper();
     const tailJoints = ['tail0', 'tail1', 'tail2', 'tail3', 'tail4'] as const;
     let t = 0;
@@ -159,7 +172,7 @@ describe('createVineViper', () => {
     expect(viper.ai.state).toBe('idle');
 
     for (const joint of tailJoints) {
-      expect(Math.abs(viper.group.getObjectByName(joint)!.rotation.y)).toBeLessThan(1e-6);
+      expect(viper.group.getObjectByName(joint)!.rotation.y).toBeCloseTo(TAIL_CURL_PER_JOINT, 5);
     }
   });
 });
