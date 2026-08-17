@@ -162,6 +162,11 @@ export function createVineViper(): VineViper {
     // rule createCanopyOwl's update() documents; assigning them after leaves the state machine
     // advancing one frame on stale values.
     ai.telegraphSeconds = VIPER_TELEGRAPH_SECONDS;
+    // A real snake re-coils before it can strike again — the fastest telegraph in the game (see
+    // VIPER_TELEGRAPH_SECONDS) is balanced by a real recovery cost, not a spammable poke.
+    // Recovery-only, same safe pattern as every other species: strikeClip's own duration already
+    // matches VIPER_TELEGRAPH_SECONDS + the default attack window exactly.
+    ai.recoverSeconds = 1.0;
     ai.strikeRange = computeStrikeRange(combatant.hitbox.radius);
     ai.update(distanceToPlayer, delta);
 

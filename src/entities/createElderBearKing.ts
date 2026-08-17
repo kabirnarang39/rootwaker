@@ -140,6 +140,7 @@ export function createElderBearKing(): ElderBearKing {
     const phase = computeBossPhase(combatant.hp, combatant.maxHp);
     const params = BOSS_PHASE_PARAMS[phase];
     ai.telegraphSeconds = params.telegraphSeconds;
+    ai.recoverSeconds = params.recoverSeconds;
     ai.strikeRange = computeStrikeRange(combatant.hitbox.radius);
     ai.update(distanceToPlayer, delta);
 

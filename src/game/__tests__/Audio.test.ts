@@ -103,4 +103,24 @@ describe('AudioFX species sounds', () => {
     const fx = new AudioFX();
     expect(() => fx.playCoronationCheer()).not.toThrow();
   });
+
+  it('playBearGrowl does not throw before unlock()', () => {
+    const fx = new AudioFX();
+    expect(() => fx.playBearGrowl()).not.toThrow();
+  });
+
+  it('playBoarSnort does not throw before unlock()', () => {
+    const fx = new AudioFX();
+    expect(() => fx.playBoarSnort()).not.toThrow();
+  });
+
+  it('playWraithGroan does not throw before unlock()', () => {
+    const fx = new AudioFX();
+    expect(() => fx.playWraithGroan()).not.toThrow();
+  });
+
+  it('playBearSwipeActivate does not throw before unlock()', () => {
+    const fx = new AudioFX();
+    expect(() => fx.playBearSwipeActivate()).not.toThrow();
+  });
 });

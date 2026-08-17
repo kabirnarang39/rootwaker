@@ -25,4 +25,8 @@ describe('BossPhaseController', () => {
     expect(BOSS_PHASE_PARAMS.calm.groundSlamArmed).toBe(false);
     expect(BOSS_PHASE_PARAMS.enraged.groundSlamArmed).toBe(true);
   });
+
+  it('enraged phase recovers faster than calm (a real boss should feel more relentless once enraged, not just hit harder)', () => {
+    expect(BOSS_PHASE_PARAMS.enraged.recoverSeconds).toBeLessThan(BOSS_PHASE_PARAMS.calm.recoverSeconds);
+  });
 });

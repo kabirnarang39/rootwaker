@@ -94,7 +94,14 @@ const SENSE_RANGE_MULTIPLIER = 3;
 // and the viper (5.5) can actually run a fleeing player down. A fox genuinely outrunning a bear
 // is correct, not a balance oversight.
 const WRAITH_CHASE_SPEED = 3.2;
-const BOAR_CHASE_SPEED = 4.5; // a boar's real charge is a real sprint, not a walk
+// A boar's real charge has two real gears, not one constant pursuit speed: it's an all-out sprint
+// while actually committed to the charge (telegraph — this is also the phase EnemyAI keeps
+// closing distance during), and a much slower repositioning trot everywhere else (recovering from
+// a spent charge, or just having noticed the player) — real boars don't sprint continuously, they
+// commit to short violent charges. This is what makes the boar READ as "charging," distinct from
+// the bear's/wraith's steady, uniform pursuit.
+const BOAR_CHARGE_SPEED = 6.2;
+const BOAR_TROT_SPEED = 2.0;
 const BEAR_CHASE_SPEED = 3.4;
 const KING_CHASE_SPEED = 2.6;
 
@@ -210,8 +217,11 @@ export class Game {
   // to arrays of many creatures via WeakMap instead of one shared field.
   private prevOwlAiState = new WeakMap<object, string>();
   private prevViperAiState = new WeakMap<object, string>();
+  private prevBoarAiState = new WeakMap<object, string>();
+  private prevBearAiState = new WeakMap<object, string>();
   private prevSquirrelState = new WeakMap<object, string>();
   private prevFinchFlockState: FlockState = 'perched';
+  private prevWraithAiState = 'idle'; // single instance — no WeakMap needed, unlike the arrays above
 
   private venom = new VenomTracker();
   private owlDiveEndTime = -Infinity;
@@ -608,6 +618,8 @@ export class Game {
     if (!this.wraithDefeated) {
       const distanceToPlayer = horizontalDistance(this.wraith.group.position, this.playerController.body.position);
       this.wraith.update(time, delta, distanceToPlayer);
+      if (this.wraith.ai.state === 'telegraph' && this.prevWraithAiState !== 'telegraph') this.audio.playWraithGroan();
+      this.prevWraithAiState = this.wraith.ai.state;
       if (this.wraith.ai.state !== 'idle') {
         chaseTowardPlayer(this.wraith.group.position, this.playerController.body.position, WRAITH_CHASE_SPEED, delta, this.wraith.ai.strikeRange);
       }
@@ -648,9 +660,13 @@ export class Game {
       // doesn't keep fighting while the fox is visibly consuming it.
       if (this.beingEaten.has(boar.combatant)) continue;
       const boarDistance = horizontalDistance(boar.group.position, this.playerController.body.position);
+      const prevBoarAiState = this.prevBoarAiState.get(boar.ai);
       boar.update(time, delta, boarDistance);
+      if (boar.ai.state === 'telegraph' && prevBoarAiState !== 'telegraph') this.audio.playBoarSnort();
+      this.prevBoarAiState.set(boar.ai, boar.ai.state);
       if (boar.ai.state !== 'idle') {
-        chaseTowardPlayer(boar.group.position, this.playerController.body.position, BOAR_CHASE_SPEED, delta, boar.ai.strikeRange);
+        const boarSpeed = boar.ai.state === 'telegraph' ? BOAR_CHARGE_SPEED : BOAR_TROT_SPEED;
+        chaseTowardPlayer(boar.group.position, this.playerController.body.position, boarSpeed, delta, boar.ai.strikeRange);
       }
       boar.group.position.y = this.level.groundHeightAt(boar.group.position.x, boar.group.position.z);
       if (boar.ai.shouldDealDamageThisFrame()) {
@@ -662,7 +678,10 @@ export class Game {
     for (const bear of this.level.bears) {
       if (this.beingEaten.has(bear.combatant)) continue;
       const bearDistance = horizontalDistance(bear.group.position, this.playerController.body.position);
+      const prevBearAiState = this.prevBearAiState.get(bear.ai);
       bear.update(time, delta, bearDistance);
+      if (bear.ai.state === 'telegraph' && prevBearAiState !== 'telegraph') this.audio.playBearGrowl();
+      this.prevBearAiState.set(bear.ai, bear.ai.state);
       if (bear.ai.state !== 'idle') {
         chaseTowardPlayer(bear.group.position, this.playerController.body.position, BEAR_CHASE_SPEED, delta, bear.ai.strikeRange);
       }
@@ -1127,6 +1146,7 @@ export class Game {
         this.meleeSweep(DASH_DAMAGE, DASH_RADIUS, DASH_REACH, DASH_KNOCKBACK);
         break;
       case 'bear-swipe':
+        this.audio.playBearSwipeActivate();
         this.meleeSweep(HEAVY_SWIPE_DAMAGE, HEAVY_SWIPE_RADIUS, HEAVY_SWIPE_REACH, HEAVY_SWIPE_KNOCKBACK);
         break;
       case 'kings-roar':

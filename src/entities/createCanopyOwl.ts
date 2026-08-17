@@ -201,6 +201,11 @@ export function createCanopyOwl(): CanopyOwl {
     // leaves the state machine advancing one frame on stale values — that exact ordering bug has
     // shipped and been fixed twice in this codebase, so it is written out explicitly here.
     ai.telegraphSeconds = OWL_TELEGRAPH_SECONDS;
+    // A real owl's own combat rhythm: after a dive-strike it has to climb back up to hover/perch
+    // height before it can stoop again — a real recovery cost a ground predator doesn't pay.
+    // Recovery-only, same safe pattern as every other species: diveClip's own duration already
+    // matches OWL_TELEGRAPH_SECONDS + the default attack window exactly.
+    ai.recoverSeconds = 1.0;
     ai.strikeRange = computeStrikeRange(combatant.hitbox.radius);
     ai.update(distanceToPlayer, delta);
 

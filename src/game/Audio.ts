@@ -566,6 +566,137 @@ export class AudioFX {
     noise.start(t0);
   }
 
+  /** The Grove Bear's/Elder Bear King's own telegraph warning — a real animal characteristic
+   * ("resemble the real animal") distinct from playRoar() (King's Roar, a player POWER — a big
+   * triumphant sweep 1400->120Hz over 0.6s). This is shorter, narrower, and stays low the whole
+   * time: a warning grumble before a swipe, not an epic bellow — the bear hasn't attacked yet,
+   * it's telling you it's about to. */
+  playBearGrowl(): void {
+    if (!this.ctx) return;
+    const ctx = this.ctx;
+    const noise = ctx.createBufferSource();
+    noise.buffer = makeNoiseBuffer(ctx, 0.4);
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.setValueAtTime(420, ctx.currentTime);
+    filter.frequency.exponentialRampToValueAtTime(150, ctx.currentTime + 0.4);
+    const noiseGain = ctx.createGain();
+    noiseGain.gain.setValueAtTime(0.12, ctx.currentTime);
+    noiseGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4);
+    noise.connect(filter);
+    filter.connect(noiseGain);
+    noiseGain.connect(ctx.destination);
+    noise.start();
+
+    const growl = ctx.createOscillator();
+    growl.type = 'sawtooth';
+    growl.frequency.setValueAtTime(70, ctx.currentTime);
+    growl.frequency.linearRampToValueAtTime(55, ctx.currentTime + 0.4);
+    const growlGain = ctx.createGain();
+    growlGain.gain.setValueAtTime(0.06, ctx.currentTime);
+    growlGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4);
+    growl.connect(growlGain);
+    growlGain.connect(ctx.destination);
+    growl.start(ctx.currentTime);
+    growl.stop(ctx.currentTime + 0.42);
+  }
+
+  /** The Tusk Boar's own telegraph warning — a sharp, short, aggressive snort, nothing like
+   * the bear's low sustained growl: real boars snort explosively right before a charge, not a
+   * sustained sound. Deliberately very short (0.18s) and percussive. */
+  playBoarSnort(): void {
+    if (!this.ctx) return;
+    const ctx = this.ctx;
+    const noise = ctx.createBufferSource();
+    noise.buffer = makeNoiseBuffer(ctx, 0.18);
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'bandpass';
+    filter.frequency.value = 650;
+    filter.Q.value = 0.9;
+    const noiseGain = ctx.createGain();
+    noiseGain.gain.setValueAtTime(0.15, ctx.currentTime);
+    noiseGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.18);
+    noise.connect(filter);
+    filter.connect(noiseGain);
+    noiseGain.connect(ctx.destination);
+    noise.start();
+
+    const grunt = ctx.createOscillator();
+    grunt.type = 'square';
+    grunt.frequency.setValueAtTime(110, ctx.currentTime);
+    grunt.frequency.exponentialRampToValueAtTime(60, ctx.currentTime + 0.15);
+    const gruntGain = ctx.createGain();
+    gruntGain.gain.setValueAtTime(0.08, ctx.currentTime);
+    gruntGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.16);
+    grunt.connect(gruntGain);
+    gruntGain.connect(ctx.destination);
+    grunt.start(ctx.currentTime);
+    grunt.stop(ctx.currentTime + 0.18);
+  }
+
+  /** The root-wraith's own telegraph warning — an eerie, dissonant, slow-bending groan, matching
+   * its established creepy root-spirit identity (see rootWraith.ts's own dark-magenta glow), not
+   * a real-animal sound at all. Two slightly detuned sine tones sliding downward together create
+   * the unsettling beat/dissonance. */
+  playWraithGroan(): void {
+    if (!this.ctx) return;
+    const ctx = this.ctx;
+    const a = ctx.createOscillator();
+    a.type = 'sine';
+    a.frequency.setValueAtTime(140, ctx.currentTime);
+    a.frequency.exponentialRampToValueAtTime(70, ctx.currentTime + 0.5);
+    const b = ctx.createOscillator();
+    b.type = 'sine';
+    b.frequency.setValueAtTime(146, ctx.currentTime); // slightly detuned from `a` for real dissonance
+    b.frequency.exponentialRampToValueAtTime(72, ctx.currentTime + 0.5);
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0.1, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5);
+    a.connect(gain);
+    b.connect(gain);
+    gain.connect(ctx.destination);
+    a.start(ctx.currentTime);
+    b.start(ctx.currentTime);
+    a.stop(ctx.currentTime + 0.52);
+    b.stop(ctx.currentTime + 0.52);
+  }
+
+  /** The player's Bear Swipe power activation — previously silent (every other numbered power has
+   * its own activation cue; this one relied only on meleeSweep's shared playHit() landing on
+   * contact). A heavy whoosh-then-thud, distinct from playChargeDash's driving sawtooth charge-up
+   * and from playBearGrowl's own warning-growl role (that's the ENEMY bear warning you; this is
+   * YOU swinging). */
+  playBearSwipeActivate(): void {
+    if (!this.ctx) return;
+    const ctx = this.ctx;
+    const noise = ctx.createBufferSource();
+    noise.buffer = makeNoiseBuffer(ctx, 0.22);
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.setValueAtTime(900, ctx.currentTime);
+    filter.frequency.exponentialRampToValueAtTime(200, ctx.currentTime + 0.22);
+    const noiseGain = ctx.createGain();
+    noiseGain.gain.setValueAtTime(0.13, ctx.currentTime);
+    noiseGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.22);
+    noise.connect(filter);
+    filter.connect(noiseGain);
+    noiseGain.connect(ctx.destination);
+    noise.start();
+
+    const thud = ctx.createOscillator();
+    thud.type = 'sine';
+    thud.frequency.setValueAtTime(85, ctx.currentTime + 0.08);
+    thud.frequency.exponentialRampToValueAtTime(45, ctx.currentTime + 0.24);
+    const thudGain = ctx.createGain();
+    thudGain.gain.setValueAtTime(0.001, ctx.currentTime + 0.08);
+    thudGain.gain.linearRampToValueAtTime(0.14, ctx.currentTime + 0.1);
+    thudGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.28);
+    thud.connect(thudGain);
+    thudGain.connect(ctx.destination);
+    thud.start(ctx.currentTime + 0.08);
+    thud.stop(ctx.currentTime + 0.3);
+  }
+
   startVillageAmbience(): void {
     // A single warm, sustained drone — deliberately sparser than startJungleAmbience's
     // multi-layer canopy/floor/bird/water soundscape or startMountainWind's noise gusts: this is

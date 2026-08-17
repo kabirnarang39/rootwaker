@@ -69,6 +69,10 @@ export function createRootWraith(): RootWraith {
 
   function update(time: number, delta: number, distanceToPlayer: number) {
     ai.strikeRange = computeStrikeRange(combatant.hitbox.radius);
+    // A real root-spirit's own combat rhythm: slow, inexorable, relentless — never frantic, but
+    // never really stops either. Recovery-only, same safe pattern as every other species below:
+    // lungeClip's own duration already matches the default telegraph+attack window exactly.
+    ai.recoverSeconds = 1.1;
     ai.update(distanceToPlayer, delta);
     const isIdle = ai.state === 'idle' || ai.state === 'aggro';
     if (isIdle) {

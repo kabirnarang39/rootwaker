@@ -65,6 +65,12 @@ describe('createCanopyOwl', () => {
     expect(owl.ai.strikeRange).toBeCloseTo(0.32 + 0.4 - 0.05, 5); // computeStrikeRange(0.32)
   });
 
+  it('has a real recovery window after a strike (a real owl must climb back to hover/perch height before it can stoop again)', () => {
+    const owl = createCanopyOwl();
+    owl.update(0, 1 / 60, 1);
+    expect(owl.ai.recoverSeconds).toBe(1.0);
+  });
+
   it('a telegraph that completes while the player is still beyond strikeRange never deals damage (real pursuit contract: the owl must actually close the distance, not swing from its perch)', () => {
     const owl = createCanopyOwl();
     const farButAggroed = 3; // inside EnemyAI's aggro range (4), well beyond strikeRange (0.67)

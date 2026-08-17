@@ -63,6 +63,12 @@ describe('createVineViper', () => {
     expect(viper.ai.strikeRange).toBeCloseTo(0.22 + 0.4 - 0.05, 5); // computeStrikeRange(0.22)
   });
 
+  it('has a real recovery window after a strike (a real snake re-coils before it can strike again — not a spammable poke)', () => {
+    const viper = createVineViper();
+    viper.update(0, 1 / 60, 0.1);
+    expect(viper.ai.recoverSeconds).toBe(1.0);
+  });
+
   it('a telegraph that completes while the player is still beyond strikeRange never deals damage (real pursuit contract: the viper must actually close the distance, not strike from its perch)', () => {
     const viper = createVineViper();
     const farButAggroed = 3; // inside EnemyAI's aggro range (4), well beyond strikeRange (0.57)

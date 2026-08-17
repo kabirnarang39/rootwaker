@@ -126,6 +126,13 @@ export function createTuskBoar(): TuskBoar {
 
   function update(time: number, delta: number, distanceToPlayer: number) {
     ai.strikeRange = computeStrikeRange(combatant.hitbox.radius);
+    // A real boar's own combat rhythm: fast to recover and charge again — aggressive, not
+    // deliberate like the bear. Recovery-only (not attackSeconds): the charge clip's own
+    // duration already matches EnemyAI's default telegraph+attack window exactly (see
+    // tuskBoarClips.ts's TELEGRAPH_PLUS_CHARGE comment), and shortening attackSeconds would cut
+    // the charge animation off mid-motion — recoverSeconds is pure post-clip hold time, safe to
+    // tune independently.
+    ai.recoverSeconds = 0.5;
     ai.update(distanceToPlayer, delta);
     const isIdle = ai.state === 'idle' || ai.state === 'aggro';
     if (isIdle) {

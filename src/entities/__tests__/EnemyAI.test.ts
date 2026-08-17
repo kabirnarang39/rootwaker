@@ -88,6 +88,26 @@ describe('EnemyAI', () => {
     expect(ai.strikeRange).toBe(Infinity);
   });
 
+  it('attackSeconds and recoverSeconds default to the old module constants, and are honored when overridden per-instance (real per-species combat rhythm)', () => {
+    const ai = new EnemyAI();
+    expect(ai.attackSeconds).toBe(ATTACK_SECONDS);
+    expect(ai.recoverSeconds).toBe(RECOVER_SECONDS);
+
+    ai.attackSeconds = 0.1;
+    ai.recoverSeconds = 0.2;
+    ai.update(1, 0.001); // enter telegraph
+    ai.update(1, TELEGRAPH_SECONDS + 0.01); // enter attacking
+    expect(ai.state).toBe('attacking');
+    ai.update(1, 0.05); // less than the overridden 0.1s attackSeconds
+    expect(ai.state).toBe('attacking');
+    ai.update(1, 0.06); // now past 0.1s total
+    expect(ai.state).toBe('recovering');
+    ai.update(1, 0.19); // less than the overridden 0.2s recoverSeconds
+    expect(ai.state).toBe('recovering');
+    ai.update(1, 0.02); // now past 0.2s total, still in range so re-enters telegraph
+    expect(ai.state).toBe('telegraph');
+  });
+
   it('stun() freezes progression (a mid-telegraph enemy never reaches attacking while stunned)', () => {
     const ai = new EnemyAI();
     ai.update(1, 0.001); // enter telegraph

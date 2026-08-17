@@ -131,6 +131,10 @@ export function createGroveBear(): GroveBear {
 
   function update(time: number, delta: number, distanceToPlayer: number) {
     ai.strikeRange = computeStrikeRange(combatant.hitbox.radius);
+    // A real bear's own combat rhythm: heavy and deliberate, can't spam swipes the way a boar
+    // charges again — a long, real recovery window. Recovery-only, same reasoning as tuskBoar.ts:
+    // clawSwipeClip's own duration already matches the default telegraph+attack window exactly.
+    ai.recoverSeconds = 1.3;
     ai.update(distanceToPlayer, delta);
     const isIdle = ai.state === 'idle' || ai.state === 'aggro';
     if (isIdle) {

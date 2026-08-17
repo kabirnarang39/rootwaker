@@ -18,6 +18,13 @@ export class EnemyAI {
   // with a shorter reaction window) can reassign this at runtime without recreating the
   // instance mid-fight, which would otherwise reset the whole state machine mid-attack.
   telegraphSeconds = TELEGRAPH_SECONDS;
+  // Same mutable-defaults-to-old-constant pattern as telegraphSeconds above, now extended to the
+  // attack/recovery windows too — real per-species combat rhythm (a boar's fast lunge-and-reset
+  // vs. a bear's slow heavy swing) needs more than just a different telegraph length; the whole
+  // shape of the attack matters. Every enemy built before this stays byte-identical unless it
+  // explicitly opts in by setting these.
+  attackSeconds = ATTACK_SECONDS;
+  recoverSeconds = RECOVER_SECONDS;
   // How close the player must actually be for a completed telegraph to launch the attack.
   // Defaults to Infinity — every enemy built before real chase movement existed never sets
   // this, so a telegraph that finishes its timer always fires regardless of distance, exactly
@@ -72,10 +79,10 @@ export class EnemyAI {
         }
         break;
       case 'attacking':
-        if (this.timeInState >= ATTACK_SECONDS) this.enter('recovering');
+        if (this.timeInState >= this.attackSeconds) this.enter('recovering');
         break;
       case 'recovering':
-        if (this.timeInState >= RECOVER_SECONDS) {
+        if (this.timeInState >= this.recoverSeconds) {
           this.enter(distanceToPlayer <= AGGRO_RANGE ? 'telegraph' : 'idle');
         }
         break;

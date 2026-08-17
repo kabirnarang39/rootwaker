@@ -40,6 +40,19 @@ describe('createElderBearKing', () => {
     expect(king.ai.strikeRange).toBeCloseTo(king.combatant.hitbox.radius + 0.4 - 0.05, 5);
   });
 
+  it('the enraged phase also recovers faster, alongside the shorter telegraph — a real boss should feel MORE relentless once enraged, not just hit harder', () => {
+    const king = createElderBearKing();
+    king.update(0, 1 / 60, 1);
+    const calmRecover = king.ai.recoverSeconds;
+
+    king.combatant.hp = 50;
+    king.ai.state = 'idle';
+    king.update(1, 1 / 60, 1);
+    const enragedRecover = king.ai.recoverSeconds;
+
+    expect(enragedRecover).toBeLessThan(calmRecover);
+  });
+
   it('a stunned King does not let an already-armed ground slam keep advancing (regression: King\'s Roar used to stagger the AI state machine but the ground-slam hazard kept ticking toward its damaging window regardless)', () => {
     const king = createElderBearKing();
     king.combatant.hp = 50; // enraged phase, ground-slam-armable

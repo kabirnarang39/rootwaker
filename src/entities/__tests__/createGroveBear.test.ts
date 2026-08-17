@@ -29,4 +29,10 @@ describe('createGroveBear', () => {
     bear.update(0, 1 / 60, 1);
     expect(bear.ai.strikeRange).toBeCloseTo(bear.combatant.hitbox.radius + 0.4 - 0.05, 5);
   });
+
+  it('has a real, heavy recovery window after attacking (a bear cannot spam swipes the way a boar charges again)', () => {
+    const bear = createGroveBear();
+    bear.update(0, 1 / 60, 1);
+    expect(bear.ai.recoverSeconds).toBe(1.3);
+  });
 });
