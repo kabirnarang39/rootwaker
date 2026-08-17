@@ -296,7 +296,13 @@ function buildFoliage(
 // consulted by the climb mechanic, which reads ClimbableWall's numeric bounds/topY/normal only
 // (confirmed against Game.ts's nearWall/nearSegmentWall checks) — so this can never regress
 // climbing itself, only how it looks.
-function buildRockFaceMesh(thickness: number, height: number, faceWidth: number, color: number): THREE.Mesh {
+function buildRockFaceMesh(
+  thickness: number,
+  height: number,
+  faceWidth: number,
+  color: number,
+  pathAt: (heightAboveBase: number) => { dx: number; dz: number } = () => ({ dx: 0, dz: 0 }),
+): THREE.Mesh {
   const CHUNK_COUNT = 12;
   const geoms: THREE.BufferGeometry[] = [];
   for (let i = 0; i < CHUNK_COUNT; i++) {
@@ -306,7 +312,12 @@ function buildRockFaceMesh(thickness: number, height: number, faceWidth: number,
     geo.scale(0.55 + Math.random() * 0.35, 1 + Math.random() * 0.7, 0.7 + Math.random() * 0.6);
     const x = thickness * (0.15 + Math.random() * 0.55); // biased outward — chunks jut toward the climber
     const y = (Math.random() - 0.5) * height * 0.96;
-    const z = (Math.random() - 0.5) * faceWidth * 0.92;
+    // Bias toward the real path's own drift at this chunk's height (y ranges -height/2..height/2,
+    // so shift to a real 0..height "heightAboveBase" before sampling the path), plus real jitter
+    // so it doesn't read as a mechanically precise line of boulders.
+    const heightAboveBase = y + height / 2;
+    const { dz: pathDz } = pathAt(heightAboveBase);
+    const z = pathDz + (Math.random() - 0.5) * faceWidth * 0.4;
     geo.translate(x, y, z);
     geo.rotateY(Math.random() * Math.PI);
     geo.rotateX((Math.random() - 0.5) * 0.4);
@@ -341,7 +352,8 @@ function buildClimbableWall(heightAt: (x: number, z: number) => number): { mesh:
   const baseY = heightAt(wallX, baseZ);
   const height = 6;
 
-  const mesh = buildRockFaceMesh(0.6, height, wallZWidth, 0x2c2216);
+  const path = makeWindingPath(CLIMB_PATH_AMPLITUDE, CLIMB_PATH_WAVELENGTH);
+  const mesh = buildRockFaceMesh(0.6, height, wallZWidth, 0x2c2216, path);
   mesh.position.set(wallX, baseY + height / 2, baseZ);
 
   const wall: ClimbableWall = {
@@ -351,7 +363,7 @@ function buildClimbableWall(heightAt: (x: number, z: number) => number): { mesh:
       new THREE.Vector2(wallX - 0.3, baseZ - wallZWidth / 2),
       new THREE.Vector2(wallX + 0.3, baseZ + wallZWidth / 2),
     ),
-    pathAt: makeWindingPath(CLIMB_PATH_AMPLITUDE, CLIMB_PATH_WAVELENGTH),
+    pathAt: path,
   };
   return { mesh, wall };
 }
@@ -371,7 +383,8 @@ function buildClimbSegment(
   wallZWidth: number,
   height: number,
 ): { mesh: THREE.Mesh; wall: ClimbableWall } {
-  const mesh = buildRockFaceMesh(0.6, height, wallZWidth, MOUNTAIN_WALL_COLOR);
+  const path = makeWindingPath(CLIMB_PATH_AMPLITUDE, CLIMB_PATH_WAVELENGTH);
+  const mesh = buildRockFaceMesh(0.6, height, wallZWidth, MOUNTAIN_WALL_COLOR, path);
   mesh.position.set(wallX, baseY + height / 2, baseZ);
 
   const wall: ClimbableWall = {
@@ -381,7 +394,7 @@ function buildClimbSegment(
       new THREE.Vector2(wallX - 0.3, baseZ - wallZWidth / 2),
       new THREE.Vector2(wallX + 0.3, baseZ + wallZWidth / 2),
     ),
-    pathAt: makeWindingPath(CLIMB_PATH_AMPLITUDE, CLIMB_PATH_WAVELENGTH),
+    pathAt: path,
   };
   return { mesh, wall };
 }
