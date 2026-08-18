@@ -205,3 +205,35 @@ describe('AudioFX real per-species hurt reactions', () => {
     expect(() => fx.playCrocodileHurt()).not.toThrow();
   });
 });
+
+describe('AudioFX real per-species death cries', () => {
+  it('playBoarDeath does not throw before unlock()', () => {
+    const fx = new AudioFX();
+    expect(() => fx.playBoarDeath()).not.toThrow();
+  });
+
+  it('playBearDeath does not throw before unlock()', () => {
+    const fx = new AudioFX();
+    expect(() => fx.playBearDeath()).not.toThrow();
+  });
+
+  it('playOwlDeath does not throw before unlock()', () => {
+    const fx = new AudioFX();
+    expect(() => fx.playOwlDeath()).not.toThrow();
+  });
+
+  it('playViperDeath does not throw before unlock()', () => {
+    const fx = new AudioFX();
+    expect(() => fx.playViperDeath()).not.toThrow();
+  });
+
+  it('playLionDeath does not throw before unlock()', () => {
+    const fx = new AudioFX();
+    expect(() => fx.playLionDeath()).not.toThrow();
+  });
+
+  it('playCrocodileDeath does not throw before unlock()', () => {
+    const fx = new AudioFX();
+    expect(() => fx.playCrocodileDeath()).not.toThrow();
+  });
+});

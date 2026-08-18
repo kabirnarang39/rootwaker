@@ -1208,4 +1208,200 @@ export class AudioFX {
     thrash.start();
     thrash.stop(ctx.currentTime + 0.22);
   }
+
+  // Real per-species DEATH cries — play alongside playKnockout()'s own generic crack/boom/rumble
+  // (that stays as the universal physical-impact layer; these add the missing vocal identity on
+  // top). Distinct from the hurt reactions above in shape, not just duration: a death cry has a
+  // real ATTACK then a long FALLING fade to nothing — expiring, not flinching — where a hurt
+  // reaction snaps open and cuts off short. Wraith and King intentionally excluded: the wraith's
+  // "defeat" is dissolving, not a normal animal dying, and the King's fall is its own scripted
+  // coronation beat elsewhere, neither is a normal kill.
+
+  /** Real boar death: the hurt squeal's rising shape inverted — starts high, falls and fades,
+   * roughly triple the hurt reaction's own length. */
+  playBoarDeath(): void {
+    if (!this.ctx) return;
+    const ctx = this.ctx;
+    const cry = ctx.createOscillator();
+    cry.type = 'sawtooth';
+    cry.frequency.setValueAtTime(600, ctx.currentTime);
+    cry.frequency.exponentialRampToValueAtTime(120, ctx.currentTime + 0.4);
+    const cryGain = ctx.createGain();
+    cryGain.gain.setValueAtTime(0.1, ctx.currentTime);
+    cryGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.42);
+    cry.connect(cryGain);
+    cryGain.connect(ctx.destination);
+    cry.start();
+    cry.stop(ctx.currentTime + 0.44);
+
+    const noise = ctx.createBufferSource();
+    noise.buffer = makeNoiseBuffer(ctx, 0.3);
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'bandpass';
+    filter.frequency.value = 900;
+    const noiseGain = ctx.createGain();
+    noiseGain.gain.setValueAtTime(0.08, ctx.currentTime);
+    noiseGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
+    noise.connect(filter);
+    filter.connect(noiseGain);
+    noiseGain.connect(ctx.destination);
+    noise.start();
+  }
+
+  /** Real bear death: a deep falling groan-roar that fades over 0.6s — much longer and lower
+   * than playBearHurt's short bright bark, a real final sound. */
+  playBearDeath(): void {
+    if (!this.ctx) return;
+    const ctx = this.ctx;
+    const roar = ctx.createOscillator();
+    roar.type = 'sawtooth';
+    roar.frequency.setValueAtTime(140, ctx.currentTime);
+    roar.frequency.exponentialRampToValueAtTime(45, ctx.currentTime + 0.6);
+    const roarFilter = ctx.createBiquadFilter();
+    roarFilter.type = 'lowpass';
+    roarFilter.frequency.value = 400;
+    const roarGain = ctx.createGain();
+    roarGain.gain.setValueAtTime(0.14, ctx.currentTime);
+    roarGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.6);
+    roar.connect(roarFilter);
+    roarFilter.connect(roarGain);
+    roarGain.connect(ctx.destination);
+    roar.start();
+    roar.stop(ctx.currentTime + 0.62);
+
+    const noise = ctx.createBufferSource();
+    noise.buffer = makeNoiseBuffer(ctx, 0.5);
+    const noiseFilter = ctx.createBiquadFilter();
+    noiseFilter.type = 'lowpass';
+    noiseFilter.frequency.value = 350;
+    const noiseGain = ctx.createGain();
+    noiseGain.gain.setValueAtTime(0.06, ctx.currentTime);
+    noiseGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5);
+    noise.connect(noiseFilter);
+    noiseFilter.connect(noiseGain);
+    noiseGain.connect(ctx.destination);
+    noise.start();
+  }
+
+  /** Real owl death: a falling screech that fades to nothing over 0.5s — the wings going still,
+   * unlike playOwlHurt's short, sharp yelp. */
+  playOwlDeath(): void {
+    if (!this.ctx) return;
+    const ctx = this.ctx;
+    const noise = ctx.createBufferSource();
+    noise.buffer = makeNoiseBuffer(ctx, 0.5);
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'bandpass';
+    filter.frequency.setValueAtTime(2800, ctx.currentTime);
+    filter.frequency.exponentialRampToValueAtTime(900, ctx.currentTime + 0.5);
+    filter.Q.value = 1.3;
+    const noiseGain = ctx.createGain();
+    noiseGain.gain.setValueAtTime(0.12, ctx.currentTime);
+    noiseGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5);
+    noise.connect(filter);
+    filter.connect(noiseGain);
+    noiseGain.connect(ctx.destination);
+    noise.start();
+
+    const osc = ctx.createOscillator();
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(2000, ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(500, ctx.currentTime + 0.45);
+    const oscGain = ctx.createGain();
+    oscGain.gain.setValueAtTime(0.04, ctx.currentTime);
+    oscGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.45);
+    osc.connect(oscGain);
+    oscGain.connect(ctx.destination);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.48);
+  }
+
+  /** Real viper death: a long hiss that thins and fades over 0.5s, with no recoil thump at all —
+   * unlike playViperHurt, there's no more body left to recoil. */
+  playViperDeath(): void {
+    if (!this.ctx) return;
+    const ctx = this.ctx;
+    const noise = ctx.createBufferSource();
+    noise.buffer = makeNoiseBuffer(ctx, 0.55);
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'bandpass';
+    filter.frequency.setValueAtTime(5000, ctx.currentTime);
+    filter.frequency.exponentialRampToValueAtTime(2200, ctx.currentTime + 0.55);
+    filter.Q.value = 0.9;
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0.08, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.55);
+    noise.connect(filter);
+    filter.connect(gain);
+    gain.connect(ctx.destination);
+    noise.start();
+  }
+
+  /** Real lion death: a falling roar that fades over 0.6s — the jungle's own crown falling
+   * silent, longer and lower than playLionHurt's sharp snarl. */
+  playLionDeath(): void {
+    if (!this.ctx) return;
+    const ctx = this.ctx;
+    const osc = ctx.createOscillator();
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(180, ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(50, ctx.currentTime + 0.6);
+    const oscFilter = ctx.createBiquadFilter();
+    oscFilter.type = 'lowpass';
+    oscFilter.frequency.value = 550;
+    const oscGain = ctx.createGain();
+    oscGain.gain.setValueAtTime(0.15, ctx.currentTime);
+    oscGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.6);
+    osc.connect(oscFilter);
+    oscFilter.connect(oscGain);
+    oscGain.connect(ctx.destination);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.62);
+
+    const noise = ctx.createBufferSource();
+    noise.buffer = makeNoiseBuffer(ctx, 0.5);
+    const noiseFilter = ctx.createBiquadFilter();
+    noiseFilter.type = 'bandpass';
+    noiseFilter.frequency.value = 400;
+    noiseFilter.Q.value = 0.7;
+    const noiseGain = ctx.createGain();
+    noiseGain.gain.setValueAtTime(0.05, ctx.currentTime);
+    noiseGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5);
+    noise.connect(noiseFilter);
+    noiseFilter.connect(noiseGain);
+    noiseGain.connect(ctx.destination);
+    noise.start();
+  }
+
+  /** Real crocodile death: a low fading growl-hiss with one final splashy thud — longer and
+   * lower than playCrocodileHurt's sharp thrash. */
+  playCrocodileDeath(): void {
+    if (!this.ctx) return;
+    const ctx = this.ctx;
+    const noise = ctx.createBufferSource();
+    noise.buffer = makeNoiseBuffer(ctx, 0.5);
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'bandpass';
+    filter.frequency.value = 750;
+    filter.Q.value = 1.0;
+    const noiseGain = ctx.createGain();
+    noiseGain.gain.setValueAtTime(0.11, ctx.currentTime);
+    noiseGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5);
+    noise.connect(filter);
+    filter.connect(noiseGain);
+    noiseGain.connect(ctx.destination);
+    noise.start();
+
+    const splash = ctx.createOscillator();
+    splash.type = 'sine';
+    splash.frequency.setValueAtTime(70, ctx.currentTime);
+    splash.frequency.exponentialRampToValueAtTime(30, ctx.currentTime + 0.4);
+    const splashGain = ctx.createGain();
+    splashGain.gain.setValueAtTime(0.1, ctx.currentTime);
+    splashGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4);
+    splash.connect(splashGain);
+    splashGain.connect(ctx.destination);
+    splash.start();
+    splash.stop(ctx.currentTime + 0.42);
+  }
 }

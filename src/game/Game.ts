@@ -1729,7 +1729,11 @@ export class Game {
       if (this.beingEaten.has(entry.combatant)) return;
       // A real, distinct killing-blow beat — fires exactly once per real kill regardless of
       // source (melee, venom tick, AOE), since every kill funnels through this one method.
+      // playKnockout() stays the universal physical-impact layer; playDeathSoundFor adds the
+      // missing real per-species vocal identity on top (same "not just tuun tuun" gap the hurt
+      // reactions closed, now for the killing blow specifically).
       this.audio.playKnockout();
+      this.playDeathSoundFor(entry);
       this.hud.flashKO();
       // grantsAbility is exactly the field that distinguishes a real huntable animal from the
       // wraith (a root-spirit, no power, no count) — the leaderboard's animalsDefeated stat
@@ -1744,11 +1748,35 @@ export class Game {
     }
   }
 
-  /** Shared hit-resolution for every player melee move (base attack, Boar's Charge, Bear
-   * Swipe): a forward capsule of `radius` reaching `reach` meters along the fox's actual
-   * facing, dealing `damage` and shoving anything hit back by `knockback` meters. Knockback
-   * lands on every hit including the killing one, and one sound plays for the whole sweep no
-   * matter how many enemies it caught. */
+  /** Real per-species death cry, played alongside resolveDefeat's own playKnockout() — same
+   * grantsAbility/combatant-identity routing as playHurtSoundFor, but deliberately does NOT fall
+   * back to any sound for the wraith or King: the wraith dissolves rather than dying like an
+   * animal, and the King's fall is its own scripted coronation beat elsewhere (resolveDefeat's
+   * non-grantsAbility branch already runs for both, and playKnockout() alone already covers the
+   * physical-impact beat for them). */
+  private playDeathSoundFor(entry: EnemyEntry): void {
+    switch (entry.grantsAbility) {
+      case 'boar-charge':
+        this.audio.playBoarDeath();
+        return;
+      case 'bear-swipe':
+        this.audio.playBearDeath();
+        return;
+      case 'owl-dive':
+        this.audio.playOwlDeath();
+        return;
+      case 'viper-venom':
+        this.audio.playViperDeath();
+        return;
+      case 'lion-pounce':
+        this.audio.playLionDeath();
+        return;
+      case 'croc-lunge':
+        this.audio.playCrocodileDeath();
+        return;
+    }
+  }
+
   /** Real per-species hurt reaction on a landed hit — previously every melee hit played the same
    * generic playHit() thud regardless of which animal was struck (a real, user-reported gap: real
    * animal voices, "not just tuun tuun"). `grantsAbility` already uniquely tags the 6 huntable
