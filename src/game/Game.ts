@@ -12,6 +12,7 @@ import type { PlayableCharacter, SpeciesId } from '../scene/PlayableCharacter';
 import { createRootWraith, getAttackHitbox } from '../entities/rootWraith';
 import { getBoarHitbox } from '../entities/tuskBoar';
 import { getGroveBearHitbox } from '../entities/createGroveBear';
+import { getCrocodileHitbox } from '../entities/createCrocodile';
 import { getElderBearKingHitbox } from '../entities/createElderBearKing';
 import { getCanopyOwlHitbox } from '../entities/createCanopyOwl';
 import { getVineViperHitbox } from '../entities/createVineViper';
@@ -131,6 +132,15 @@ const POUNCE_DAMAGE = 18;
 const POUNCE_RADIUS = 0.75;
 const POUNCE_REACH = 3.0;
 const POUNCE_KNOCKBACK = 1.3;
+// Croc Lunge: same dash+meleeSweep mechanism as boar-charge/lion-pounce, but shaped like a real
+// bite-lunge rather than a body charge — shorter reach (it's a snap, not a sprint), the shortest
+// duration of the 3 (a real bite is instantaneous), the hardest raw damage in the base kit
+// (a real crocodile bite force is genuinely the most dangerous single hit in the animal kingdom).
+const CROC_LUNGE_SECONDS = 0.25;
+const CROC_LUNGE_DAMAGE = 20;
+const CROC_LUNGE_RADIUS = 0.65;
+const CROC_LUNGE_REACH = 2.0;
+const CROC_LUNGE_KNOCKBACK = 1.5;
 const HEAVY_SWIPE_RADIUS = 0.9;
 const HEAVY_SWIPE_REACH = 1.3;
 const HEAVY_SWIPE_KNOCKBACK = 0.6;
@@ -187,6 +197,13 @@ const VIPER_HIT_DAMAGE = 9;
 const LION_STALK_SPEED = 1.8;
 const LION_CHARGE_SPEED = 7.5;
 const LION_HIT_DAMAGE = 18; // bumped with the lion's real-size scale-up in createLion.ts
+
+// Crocodile: a real ambush predator — a near-motionless crawl while just aggro'd (real
+// crocodiles barely move on land until they commit), then the fastest burst in the game to match
+// the lion's own explosive pounce, since a real crocodile strike is just as sudden.
+const CROC_STALK_SPEED = 0.6;
+const CROC_LUNGE_SPEED = 7.5;
+const CROC_HIT_DAMAGE = 15;
 
 // Owl's Descent: a real forward-and-down leap (mirrors the boar-charge dash idiom — a direct
 // position override for the leap window, falling through to the same obstacle/water checks).
@@ -321,6 +338,7 @@ export class Game {
   private prevLionAiState = new WeakMap<object, string>();
   private prevBoarAiState = new WeakMap<object, string>();
   private prevBearAiState = new WeakMap<object, string>();
+  private prevCrocAiState = new WeakMap<object, string>();
   private prevSquirrelState = new WeakMap<object, string>();
   private prevFinchFlockState: FlockState = 'perched';
   private prevWraithAiState = 'idle'; // single instance — no WeakMap needed, unlike the arrays above
@@ -1052,6 +1070,27 @@ export class Game {
       }
     }
 
+    for (const crocodile of this.level.crocodiles) {
+      if (this.beingEaten.has(crocodile.combatant)) continue;
+      const crocDistance = horizontalDistance(crocodile.group.position, this.playerController.body.position);
+      const prevCrocAiState = this.prevCrocAiState.get(crocodile.ai);
+      crocodile.update(time, delta, crocDistance);
+      if (crocodile.ai.state === 'telegraph' && prevCrocAiState !== 'telegraph') {
+        this.audio.playCrocodileHiss();
+        this.tryShowStoryBeat('crocodile');
+      }
+      this.prevCrocAiState.set(crocodile.ai, crocodile.ai.state);
+      if (crocodile.ai.state !== 'idle') {
+        const crocSpeed = crocodile.ai.state === 'telegraph' ? CROC_LUNGE_SPEED : CROC_STALK_SPEED;
+        chaseTowardPlayer(crocodile.group.position, this.playerController.body.position, crocSpeed, delta, crocodile.ai.strikeRange);
+      }
+      crocodile.group.position.y = this.level.groundHeightAt(crocodile.group.position.x, crocodile.group.position.z);
+      if (crocodile.ai.shouldDealDamageThisFrame()) {
+        const hit = resolveMeleeHit(getCrocodileHitbox(crocodile), this.playerCombatant);
+        if (hit) this.hurtPlayer(CROC_HIT_DAMAGE);
+      }
+    }
+
     for (const owl of this.level.owls) {
       if (this.beingEaten.has(owl.combatant)) continue;
       // horizontalDistance, not the 3D .distanceTo() this loop used before Task 6's own live
@@ -1503,6 +1542,23 @@ export class Game {
       });
     }
 
+    for (const crocodile of this.level.crocodiles) {
+      entries.push({
+        combatant: crocodile.combatant,
+        position: crocodile.group.position,
+        ai: crocodile.ai,
+        stunnable: true,
+        grantsAbility: 'croc-lunge',
+        onDefeat: () => {
+          this.level.group.remove(crocodile.group);
+          const idx = this.level.crocodiles.indexOf(crocodile);
+          if (idx !== -1) this.level.crocodiles.splice(idx, 1);
+          this.abilityKit.unlock('croc-lunge');
+          this.venom.clear(crocodile.combatant);
+        },
+      });
+    }
+
     // A combatant mid-eat-ritual is already dead — exclude it from every consumer at the one
     // source (melee, King's Roar, Owl's Descent AOE, and the venom-tick lookup all read this
     // list), rather than teaching each of them about beingEaten individually.
@@ -1740,6 +1796,12 @@ export class Game {
         this.dashDirection.copy(this.facingForward());
         this.audio.playLionPounceActivate();
         this.meleeSweep(POUNCE_DAMAGE, POUNCE_RADIUS, POUNCE_REACH, POUNCE_KNOCKBACK);
+        break;
+      case 'croc-lunge':
+        this.dashEndTime = time + CROC_LUNGE_SECONDS;
+        this.dashDirection.copy(this.facingForward());
+        this.audio.playCrocodileLungeActivate();
+        this.meleeSweep(CROC_LUNGE_DAMAGE, CROC_LUNGE_RADIUS, CROC_LUNGE_REACH, CROC_LUNGE_KNOCKBACK);
         break;
     }
   }

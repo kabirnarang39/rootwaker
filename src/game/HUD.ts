@@ -179,7 +179,7 @@ export class HUD {
         <div class="rw-legend-row"><span class="rw-legend-key">L</span><span class="rw-legend-label">Pounce</span></div>
         <div class="rw-legend-row"><span class="rw-legend-key">Drag</span><span class="rw-legend-label">Look</span></div>
         <div class="rw-legend-row"><span class="rw-legend-key">C</span><span class="rw-legend-label">View</span></div>
-        <div class="rw-legend-row"><span class="rw-legend-key">1 – 7</span><span class="rw-legend-label">Powers</span></div>
+        <div class="rw-legend-row"><span class="rw-legend-key">1 – 8</span><span class="rw-legend-label">Powers</span></div>
         <div class="rw-legend-row"><span class="rw-legend-key">M</span><span class="rw-legend-label">Challenge</span></div>
         <div class="rw-legend-row"><span class="rw-legend-key">O</span><span class="rw-legend-label">Leaderboard</span></div>
         <div class="rw-legend-row"><span class="rw-legend-key">T</span><span class="rw-legend-label">Duel Chat</span></div>
@@ -305,7 +305,7 @@ export class HUD {
       /* Objective: bottom-center chapter prompt, styled as a carved bark plaque consistent
          with the overlay panel's material language rather than a floating toast. */
       .rw-objective {
-        position: fixed; bottom: 26px; left: 50%; transform: translateX(-50%); z-index: 10;
+        position: fixed; bottom: 82px; left: 50%; transform: translateX(-50%); z-index: 10;
         pointer-events: none;
         font-family: var(--body-face); font-size: 13px; letter-spacing: 0.01em;
         color: var(--parchment); opacity: 0.92; text-align: center;

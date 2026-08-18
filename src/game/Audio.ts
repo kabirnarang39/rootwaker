@@ -936,4 +936,72 @@ export class AudioFX {
     gain.connect(ctx.destination);
     osc.start();
   }
+
+  /** The crocodile's telegraph — a real threat-display hiss, deliberately much lower and throatier
+   * than the viper's own airy 5200Hz hiss (a crocodile is a far bigger animal): a low bandpass
+   * growl around 900Hz with a real sub-bass rumble underneath for genuine weight, not just a
+   * pitched-down copy of the viper's cue. */
+  playCrocodileHiss(): void {
+    if (!this.ctx) return;
+    const ctx = this.ctx;
+    const noise = ctx.createBufferSource();
+    noise.buffer = makeNoiseBuffer(ctx, 0.6);
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'bandpass';
+    filter.frequency.value = 900;
+    filter.Q.value = 1.1;
+    const noiseGain = ctx.createGain();
+    noiseGain.gain.setValueAtTime(0, ctx.currentTime);
+    noiseGain.gain.linearRampToValueAtTime(0.09, ctx.currentTime + 0.15);
+    noiseGain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.6);
+    noise.connect(filter);
+    filter.connect(noiseGain);
+    noiseGain.connect(ctx.destination);
+    noise.start();
+
+    const rumble = ctx.createOscillator();
+    rumble.type = 'sine';
+    rumble.frequency.value = 55;
+    const rumbleGain = ctx.createGain();
+    rumbleGain.gain.setValueAtTime(0, ctx.currentTime);
+    rumbleGain.gain.linearRampToValueAtTime(0.06, ctx.currentTime + 0.2);
+    rumbleGain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.6);
+    rumble.connect(rumbleGain);
+    rumbleGain.connect(ctx.destination);
+    rumble.start();
+    rumble.stop(ctx.currentTime + 0.62);
+  }
+
+  /** Croc Lunge's real bite-snap: a sharp high-frequency crack (jaws slamming shut) landing right
+   * on top of a deep thud (real impact weight) — the two layers arrive together, not staggered
+   * like playBearSwipeActivate's noise-then-thud, since a real bite is one instantaneous event,
+   * not a wind-up-then-impact swing. */
+  playCrocodileLungeActivate(): void {
+    if (!this.ctx) return;
+    const ctx = this.ctx;
+    const crack = ctx.createBufferSource();
+    crack.buffer = makeNoiseBuffer(ctx, 0.1);
+    const crackFilter = ctx.createBiquadFilter();
+    crackFilter.type = 'highpass';
+    crackFilter.frequency.value = 2200;
+    const crackGain = ctx.createGain();
+    crackGain.gain.setValueAtTime(0.2, ctx.currentTime);
+    crackGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.08);
+    crack.connect(crackFilter);
+    crackFilter.connect(crackGain);
+    crackGain.connect(ctx.destination);
+    crack.start();
+
+    const thud = ctx.createOscillator();
+    thud.type = 'sine';
+    thud.frequency.setValueAtTime(90, ctx.currentTime);
+    thud.frequency.exponentialRampToValueAtTime(40, ctx.currentTime + 0.22);
+    const thudGain = ctx.createGain();
+    thudGain.gain.setValueAtTime(0.16, ctx.currentTime);
+    thudGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.25);
+    thud.connect(thudGain);
+    thudGain.connect(ctx.destination);
+    thud.start();
+    thud.stop(ctx.currentTime + 0.27);
+  }
 }

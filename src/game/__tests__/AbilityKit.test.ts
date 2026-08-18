@@ -52,6 +52,7 @@ describe('AbilityKit', () => {
       'owl-dive',
       'viper-venom',
       'lion-pounce',
+      'croc-lunge',
     ]);
   });
 
@@ -59,6 +60,12 @@ describe('AbilityKit', () => {
     expect(ABILITIES['lion-pounce'].key).toBe('7');
     expect(ABILITIES['lion-pounce'].cooldownSeconds).toBe(5);
     expect(ABILITY_SLOTS[6]).toBe('lion-pounce');
+  });
+
+  it('croc-lunge is registered with the right key, cooldown, and slot order', () => {
+    expect(ABILITIES['croc-lunge'].key).toBe('8');
+    expect(ABILITIES['croc-lunge'].cooldownSeconds).toBe(5);
+    expect(ABILITY_SLOTS[7]).toBe('croc-lunge');
   });
 
   it('owl-dive and viper-venom activate/cooldown like every other ability once unlocked', () => {

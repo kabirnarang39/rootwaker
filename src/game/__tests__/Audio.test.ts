@@ -148,6 +148,16 @@ describe('AudioFX species sounds', () => {
     expect(() => fx.playLionPounceActivate()).not.toThrow();
   });
 
+  it('playCrocodileHiss does not throw before unlock()', () => {
+    const fx = new AudioFX();
+    expect(() => fx.playCrocodileHiss()).not.toThrow();
+  });
+
+  it('playCrocodileLungeActivate does not throw before unlock()', () => {
+    const fx = new AudioFX();
+    expect(() => fx.playCrocodileLungeActivate()).not.toThrow();
+  });
+
   it('playDodgeRoll does not throw before unlock()', () => {
     const fx = new AudioFX();
     expect(() => fx.playDodgeRoll()).not.toThrow();

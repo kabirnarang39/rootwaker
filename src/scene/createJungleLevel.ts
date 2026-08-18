@@ -10,6 +10,7 @@ import { createCanopyOwl, type CanopyOwl } from '../entities/createCanopyOwl';
 import { createVineViper, type VineViper } from '../entities/createVineViper';
 import { createLion, type Lion } from '../entities/createLion';
 import { createGroveSquirrel, type GroveSquirrel } from '../entities/createGroveSquirrel';
+import { createCrocodile, type Crocodile } from '../entities/createCrocodile';
 import { createDuskFinchFlock, type DuskFinchFlock } from '../entities/createDuskFinchFlock';
 import { createFishSchool } from '../entities/createFishSchool';
 import { TreeObstacleGrid, type TreeObstacle } from './TreeObstacleGrid';
@@ -56,6 +57,7 @@ export interface JungleLevel {
   vipers: VineViper[];
   lions: Lion[];
   squirrels: GroveSquirrel[];
+  crocodiles: Crocodile[];
   finchFlock: DuskFinchFlock;
   // Not exposed by DuskFinchFlock itself (its `group` stays at local origin — each finch's own
   // rig.root carries its real world position) — Game.ts needs this to compute distanceToPlayer
@@ -955,6 +957,48 @@ function randomPlaceablePosition(
   return new THREE.Vector3(x, heightAt(x, z), z);
 }
 
+// A real ambush predator's real position: right at the water's edge, not deep in the jungle
+// canopy where every other ground species roams. Samples a random point just outside one of the
+// water body's 4 edges (a real narrow band, not "anywhere placeable") — isPlaceable's own
+// exclusion margin already keeps it out of the water itself.
+function randomWaterEdgePosition(
+  heightAt: (x: number, z: number) => number,
+  water: WaterBody,
+  wallBounds: THREE.Box2,
+): THREE.Vector3 {
+  const { min, max } = water.bounds;
+  const bandMin = EXCLUSION_MARGIN;
+  const bandMax = EXCLUSION_MARGIN + 2.5;
+  let x = 0;
+  let z = 0;
+  let attempts = 0;
+  do {
+    const side = Math.floor(Math.random() * 4);
+    const along = Math.random();
+    const offset = bandMin + Math.random() * (bandMax - bandMin);
+    switch (side) {
+      case 0:
+        x = min.x + along * (max.x - min.x);
+        z = min.z - offset;
+        break;
+      case 1:
+        x = min.x + along * (max.x - min.x);
+        z = max.z + offset;
+        break;
+      case 2:
+        x = min.x - offset;
+        z = min.z + along * (max.z - min.z);
+        break;
+      default:
+        x = max.x + offset;
+        z = min.z + along * (max.z - min.z);
+        break;
+    }
+    attempts++;
+  } while (!isPlaceable(x, z, water, wallBounds) && attempts < 40);
+  return new THREE.Vector3(x, heightAt(x, z), z);
+}
+
 // How high above ground an owl perches — well clear of a standing player's reach, but low
 // enough that its dive (OWL_DIVE_SPEED in Game.ts) closes the gap in well under a second.
 const OWL_PERCH_HEIGHT = 3.2;
@@ -972,6 +1016,7 @@ function buildWildlife(
   vipers: VineViper[];
   lions: Lion[];
   squirrels: GroveSquirrel[];
+  crocodiles: Crocodile[];
   finchFlock: DuskFinchFlock;
   finchFlockCenter: THREE.Vector3;
 } {
@@ -1010,9 +1055,16 @@ function buildWildlife(
   const squirrels = Array.from({ length: 4 }, () =>
     createGroveSquirrel(randomPlaceablePosition(heightAt, water, wallBounds)),
   );
+  // A real ambush predator belongs at the water's edge, not scattered anywhere in the jungle
+  // like every other ground species — same "rare, worth real caution" scarcity as the lion.
+  const crocodiles = Array.from({ length: 1 }, () => {
+    const crocodile = createCrocodile();
+    crocodile.group.position.copy(randomWaterEdgePosition(heightAt, water, wallBounds));
+    return crocodile;
+  });
   const finchFlockCenter = randomPlaceablePosition(heightAt, water, wallBounds);
   const finchFlock = createDuskFinchFlock(finchFlockCenter, FINCH_FLOCK_COUNT);
-  return { hares, boars, bears, owls, vipers, lions, squirrels, finchFlock, finchFlockCenter };
+  return { hares, boars, bears, owls, vipers, lions, squirrels, crocodiles, finchFlock, finchFlockCenter };
 }
 
 export function createJungleLevel(): JungleLevel {
@@ -1037,7 +1089,7 @@ export function createJungleLevel(): JungleLevel {
   const groundClutterMeshes = buildGroundClutter(heightAt, water, wall.bounds);
   group.add(...groundClutterMeshes);
 
-  const { hares, boars, bears, owls, vipers, lions, squirrels, finchFlock, finchFlockCenter } = buildWildlife(
+  const { hares, boars, bears, owls, vipers, lions, squirrels, crocodiles, finchFlock, finchFlockCenter } = buildWildlife(
     heightAt,
     water,
     wall.bounds,
@@ -1049,6 +1101,7 @@ export function createJungleLevel(): JungleLevel {
   group.add(...vipers.map((viper) => viper.group));
   group.add(...lions.map((lion) => lion.group));
   group.add(...squirrels.map((squirrel) => squirrel.group));
+  group.add(...crocodiles.map((crocodile) => crocodile.group));
   group.add(finchFlock.group);
 
   const mountain = buildMountain(-12, 8, wall.topY);
@@ -1088,6 +1141,7 @@ export function createJungleLevel(): JungleLevel {
     vipers,
     lions,
     squirrels,
+    crocodiles,
     finchFlock,
     finchFlockCenter,
     obstacleGrid,

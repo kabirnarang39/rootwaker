@@ -150,6 +150,17 @@ describe('Input mouse-drag look', () => {
     expect(firedAction).toBe('ability7');
   });
 
+  it('Digit8 emits an ability8 action', () => {
+    const el = fakeElement();
+    const input = new Input(el as unknown as HTMLElement);
+    let firedAction: string | null = null;
+    input.onAction((action) => {
+      firedAction = action;
+    });
+    window.dispatchEvent(new KeyboardEvent('keydown', { code: 'Digit8' }));
+    expect(firedAction).toBe('ability8');
+  });
+
   it('KeyM emits a multiplayer action', () => {
     const el = fakeElement();
     const input = new Input(el as unknown as HTMLElement);
