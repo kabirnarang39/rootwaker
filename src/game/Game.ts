@@ -1509,10 +1509,11 @@ export class Game {
         stunnable: true,
         grantsAbility: 'boar-charge',
         onDefeat: () => {
-          this.level.group.remove(boar.group);
-          // indexOf, not a captured index: the entry outlives the array layout it was built from,
-          // and a second kill source (venom) may run onDefeat after something else already
-          // spliced. -1 just means "already removed" — removal and unlock both stay idempotent.
+          // Deliberately NOT this.level.group.remove(boar.group) — a real kill leaves a real
+          // corpse behind (see resolveDefeat's own spawnBloodPool call), not a clean despawn.
+          // The array splice below still stops it from ever being tracked as a live enemy again
+          // (no more update()/collision/enemyEntries() involvement) — only the visible mesh, left
+          // frozen in playDeathPoseFor's collapse pose, remains.
           const idx = this.level.boars.indexOf(boar);
           if (idx !== -1) this.level.boars.splice(idx, 1);
           this.abilityKit.unlock('boar-charge');
@@ -1530,7 +1531,8 @@ export class Game {
         stunnable: true,
         grantsAbility: 'bear-swipe',
         onDefeat: () => {
-          this.level.group.remove(bear.group);
+          // Deliberately NOT this.level.group.remove(bear.group) — see the boar's own onDefeat
+          // comment above for why: a real kill leaves a real corpse behind.
           const idx = this.level.bears.indexOf(bear);
           if (idx !== -1) this.level.bears.splice(idx, 1);
           this.abilityKit.unlock('bear-swipe');
@@ -1548,7 +1550,8 @@ export class Game {
         stunnable: true,
         grantsAbility: 'owl-dive',
         onDefeat: () => {
-          this.level.group.remove(owl.group);
+          // Deliberately NOT this.level.group.remove(owl.group) — see the boar's own onDefeat
+          // comment above for why: a real kill leaves a real corpse behind.
           const idx = this.level.owls.indexOf(owl);
           if (idx !== -1) this.level.owls.splice(idx, 1);
           this.abilityKit.unlock('owl-dive');
@@ -1566,7 +1569,8 @@ export class Game {
         stunnable: true,
         grantsAbility: 'viper-venom',
         onDefeat: () => {
-          this.level.group.remove(viper.group);
+          // Deliberately NOT this.level.group.remove(viper.group) — see the boar's own onDefeat
+          // comment above for why: a real kill leaves a real corpse behind.
           const idx = this.level.vipers.indexOf(viper);
           if (idx !== -1) this.level.vipers.splice(idx, 1);
           this.abilityKit.unlock('viper-venom');
@@ -1584,7 +1588,8 @@ export class Game {
         stunnable: true,
         grantsAbility: 'lion-pounce',
         onDefeat: () => {
-          this.level.group.remove(lion.group);
+          // Deliberately NOT this.level.group.remove(lion.group) — see the boar's own onDefeat
+          // comment above for why: a real kill leaves a real corpse behind.
           const idx = this.level.lions.indexOf(lion);
           if (idx !== -1) this.level.lions.splice(idx, 1);
           this.abilityKit.unlock('lion-pounce');
@@ -1602,7 +1607,8 @@ export class Game {
         stunnable: true,
         grantsAbility: 'croc-lunge',
         onDefeat: () => {
-          this.level.group.remove(crocodile.group);
+          // Deliberately NOT this.level.group.remove(crocodile.group) — see the boar's own
+          // onDefeat comment above for why: a real kill leaves a real corpse behind.
           const idx = this.level.crocodiles.indexOf(crocodile);
           if (idx !== -1) this.level.crocodiles.splice(idx, 1);
           this.abilityKit.unlock('croc-lunge');
@@ -1750,6 +1756,14 @@ export class Game {
       this.audio.playKnockout();
       this.playDeathSoundFor(entry);
       this.playDeathPoseFor(entry);
+      // Real gravity for a corpse that dies airborne: the owl's own per-frame hover-height
+      // logic (in the main animate() loop, below) is gated on `!beingEaten` just like its
+      // update() call — once dead it stops running entirely, so without this an owl killed
+      // mid-dive would otherwise stay frozen floating in mid-air forever as a persistent corpse.
+      // Every ground species is already at groundHeightAt on its last live frame, so this is a
+      // no-op for them.
+      entry.position.y = this.level.groundHeightAt(entry.position.x, entry.position.z);
+      this.spawnBloodPool(entry.position);
       this.hud.flashKO();
       // grantsAbility is exactly the field that distinguishes a real huntable animal from the
       // wraith (a root-spirit, no power, no count) — the leaderboard's animalsDefeated stat
@@ -1761,6 +1775,31 @@ export class Game {
       this.audio.playKnockout();
       this.hud.flashKO();
       entry.onDefeat?.();
+    }
+  }
+
+  /** A real, permanent blood pool at a real kill site — flat, irregular-edged dark-red patches
+   * scattered around the exact death position (never one perfect circle; real blood spreads
+   * unevenly), matching this project's own flat-shaded no-texture material language. Added
+   * directly to the persistent corpse (a child of `this.level.group`, never removed — see
+   * resolveDefeat's own onDefeat comments on why corpses now stay), so it survives exactly as
+   * long as the corpse itself does. */
+  private spawnBloodPool(position: THREE.Vector3): void {
+    const bloodMat = new THREE.MeshStandardMaterial({ color: 0x5a0a0a, flatShading: true, roughness: 0.35 });
+    const patchCount = 3 + Math.floor(Math.random() * 3); // 3-5 real irregular patches, not one clean circle
+    for (let i = 0; i < patchCount; i++) {
+      const radius = 0.15 + Math.random() * 0.35;
+      const patch = new THREE.Mesh(new THREE.CircleGeometry(radius, 7), bloodMat);
+      patch.rotation.x = -Math.PI / 2;
+      patch.rotation.z = Math.random() * Math.PI * 2; // irregular silhouette per patch, same low-poly circle geometry
+      const offsetRadius = i === 0 ? 0 : Math.random() * 0.5; // first patch always centered on the kill site
+      const offsetAngle = Math.random() * Math.PI * 2;
+      patch.position.set(
+        position.x + Math.cos(offsetAngle) * offsetRadius,
+        position.y + 0.008, // just above the shadow-mesh plane (y=0.01 elsewhere) to avoid z-fighting with terrain
+        position.z + Math.sin(offsetAngle) * offsetRadius,
+      );
+      this.level.group.add(patch);
     }
   }
 
