@@ -59,4 +59,21 @@ describe('PlayerController climbing', () => {
     pc.updateClimb({ x: 1, z: 1, jump: false }, 1);
     expect(pc.body.position.x).toBeGreaterThan(xBefore); // unchanged existing behavior
   });
+
+  it('X stays anchored within a small real range of the wall face even under sustained held lateral input (regression: X previously had no anchor at all — unlike Y/topY and Z/the winding path, nothing ever corrected it, so holding the shuffle input the whole climb could walk the player through a wall only ~0.6m thick)', () => {
+    const pc = new PlayerController(new THREE.Vector3(0, 0, 5));
+    pc.beginClimb(new THREE.Vector3(0, 0, 1), 50); // tall wall, plenty of climbing room
+    const baseX = pc.body.position.x;
+    for (let i = 0; i < 200; i++) pc.updateClimb({ x: 1, z: 0.1, jump: false }, 0.05); // held shuffle the whole climb
+    expect(pc.body.position.x).toBeLessThanOrEqual(baseX + 0.5 + 1e-9);
+  });
+
+  it('X re-anchors to the wall face on the next climb update even after an external push (regression: WindGust.forceVector() is added directly to body.position in Game.ts, outside this class, at ~2.7m per gust with no correction — over a multi-gust climb this drifted the player many meters off the rock face)', () => {
+    const pc = new PlayerController(new THREE.Vector3(0, 0, 5));
+    pc.beginClimb(new THREE.Vector3(0, 0, 1), 50);
+    const baseX = pc.body.position.x;
+    pc.body.position.x += 2.7; // simulates a single WindGust displacement applied externally
+    pc.updateClimb({ x: 0, z: 0, jump: false }, 0.016); // the very next climb frame
+    expect(pc.body.position.x).toBeLessThanOrEqual(baseX + 0.5 + 1e-9);
+  });
 });

@@ -20,6 +20,16 @@ const POUNCE_MAX_RANGE = 2; // meters — real fox pounces reach much further, b
 const MAX_STAMINA = 100;
 const STAMINA_DRAIN_PER_SECOND = 15; // climbing for ~6.7s at rest drains a full bar
 const STAMINA_REGEN_PER_SECOND = 25; // resting recovers faster than climbing drains — a real ledge pause matters
+// X during a climb represents perpendicular distance from the rock face (staying pressed against
+// it) — real climbable wall geometry is only ~0.6m thick (see createJungleLevel.ts's
+// ClimbableWall.bounds), so this must stay small. Unlike Y (clamped to climbTopY every frame) and
+// Z (fully recomputed from the deterministic winding path every frame), X previously had NO
+// authoritative anchor at all: the lateral-shuffle input nudge could accumulate indefinitely if
+// held the whole climb, and WindGust's own force (added directly to position in Game.ts, outside
+// this class) pushes ~2.7m per gust with nothing to correct it — over a multi-gust climb this
+// drifted the player many meters off the rock face with no self-correction, a real bug found by
+// tracing what happens to every position component during a climb, not just Y/Z.
+const CLIMB_LATERAL_MAX_DRIFT = 0.5;
 
 export class PlayerController {
   readonly body: PhysicsBody;
@@ -29,6 +39,7 @@ export class PlayerController {
   private climbTopY = 0;
   private lastLedgePosition: THREE.Vector3 | null = null;
   // Open-terrain climb: the reference frame the winding path measures from.
+  private climbBaseX = 0;
   private climbBaseY = 0;
   private climbBaseZ = 0;
   private climbPathAt: (heightAboveBase: number) => { dx: number; dz: number } = () => ({ dx: 0, dz: 0 });
@@ -75,6 +86,7 @@ export class PlayerController {
     if (this.mode !== 'grounded') return; // canTransition('grounded', 'climbing') is the only legal entry
     this.mode = 'climbing';
     this.climbTopY = topY;
+    this.climbBaseX = this.body.position.x;
     this.climbBaseY = this.body.position.y;
     this.climbBaseZ = this.body.position.z;
     this.climbPathAt = pathAt ?? (() => ({ dx: 0, dz: 0 }));
@@ -104,6 +116,13 @@ export class PlayerController {
     // project's own real end-to-end climb integration test, not assumed safe by inspection.
     this.body.position.y = Math.min(this.body.position.y + input.z * CLIMB_SPEED * delta, this.climbTopY);
     this.body.position.x += input.x * CLIMB_SPEED * delta * 0.5; // lateral shuffle along the wall, slower than vertical
+    // Re-anchored every frame, same treatment Y/Z already get — bounds both held-input drift and
+    // any external push (WindGust) applied to position between climb updates, see
+    // CLIMB_LATERAL_MAX_DRIFT's own comment for the real bug this closes.
+    this.body.position.x = Math.max(
+      this.climbBaseX - CLIMB_LATERAL_MAX_DRIFT,
+      Math.min(this.climbBaseX + CLIMB_LATERAL_MAX_DRIFT, this.body.position.x),
+    );
     // Real winding path: Z is a deterministic function of height climbed so far, always
     // re-derived from the wall's own base (never accumulated frame-to-frame), so it can never
     // drift or double-count. climbPathAt defaults to a zero-offset function, so this is a pure
