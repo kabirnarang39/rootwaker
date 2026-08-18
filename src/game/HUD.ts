@@ -32,6 +32,7 @@ export class HUD {
   private staminaBarEl: HTMLDivElement;
   private objectiveEl: HTMLDivElement;
   private huntPromptEl: HTMLDivElement;
+  private climbPromptEl: HTMLDivElement;
   private abilityToastEl: HTMLDivElement;
   private abilityNameEl: HTMLDivElement;
   private abilityDescEl: HTMLDivElement;
@@ -111,8 +112,12 @@ export class HUD {
       </div>
       <div class="rw-objective"></div>
       <div class="rw-hunt-prompt">
-        <span class="rw-hunt-key">Space</span>
+        <span class="rw-hunt-key">L</span>
         <span class="rw-hunt-label">Pounce</span>
+      </div>
+      <div class="rw-climb-prompt">
+        <span class="rw-climb-key">W</span>
+        <span class="rw-climb-label">Climb</span>
       </div>
       <div class="rw-ability-toast">
         <div class="rw-ability-eyebrow">Ability Unlocked</div>
@@ -358,6 +363,35 @@ export class HUD {
       .rw-hunt-label { text-transform: uppercase; font-size: 10px; letter-spacing: 0.1em; opacity: 0.85; }
       @media (prefers-reduced-motion: reduce) {
         .rw-hunt-prompt.rw-visible { animation: none; }
+      }
+
+      /* Climb prompt: real, previously-missing guidance — a player standing at the mountain's
+         real jagged rock-face walls had zero on-screen indication that walking forward would
+         start a climb (only the hunt system had this kind of near-interactable prompt). Same
+         plaque treatment as the hunt prompt, always at "ready" glow since climbing has no
+         readiness gate — being in range IS being able to climb. */
+      .rw-climb-prompt {
+        position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%); z-index: 10;
+        pointer-events: none; display: none; align-items: center; gap: 8px;
+        font-family: var(--body-face); color: var(--parchment);
+        padding: 7px 16px 6px;
+        background: linear-gradient(180deg, rgba(20,13,9,0.6), rgba(7,10,8,0.78));
+        border-top: 1px solid rgba(111,242,255,0.55);
+        box-shadow: 0 0 18px rgba(111,242,255,0.3);
+        clip-path: polygon(6% 0, 94% 0, 100% 100%, 0% 100%);
+      }
+      .rw-climb-prompt.rw-visible {
+        display: flex;
+        animation: rw-objective-in 320ms cubic-bezier(0.16, 1, 0.3, 1) both;
+      }
+      .rw-climb-key {
+        font-family: var(--mono-face); font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em;
+        padding: 2px 7px; border-radius: 3px; line-height: 1.5;
+        background: rgba(111,242,255,0.16); border: 1px solid rgba(111,242,255,0.55); color: var(--myth-cyan);
+      }
+      .rw-climb-label { text-transform: uppercase; font-size: 10px; letter-spacing: 0.1em; opacity: 0.85; }
+      @media (prefers-reduced-motion: reduce) {
+        .rw-climb-prompt.rw-visible { animation: none; }
       }
 
       /* Ability toast: same plaque geometry as the objective/hunt prompts, but the
@@ -834,6 +868,7 @@ export class HUD {
     this.objectiveEl = this.root.querySelector('.rw-objective')!;
     this.objectiveEl.textContent = 'Cross the hollow. Reach the climbing wall.';
     this.huntPromptEl = this.root.querySelector('.rw-hunt-prompt')!;
+    this.climbPromptEl = this.root.querySelector('.rw-climb-prompt')!;
     this.abilityToastEl = this.root.querySelector('.rw-ability-toast')!;
     this.abilityNameEl = this.root.querySelector('.rw-ability-name')!;
     this.abilityDescEl = this.root.querySelector('.rw-ability-desc')!;
@@ -1050,6 +1085,15 @@ export class HUD {
 
   hideHuntPrompt() {
     this.huntPromptEl.classList.remove('rw-visible', 'rw-hunt-ready');
+  }
+
+  /** Real, previously-missing guidance — driven every frame by Game.ts's near-wall check. */
+  showClimbPrompt() {
+    this.climbPromptEl.classList.add('rw-visible');
+  }
+
+  hideClimbPrompt() {
+    this.climbPromptEl.classList.remove('rw-visible');
   }
 
   /** Short-lived toast for a newly unlocked ability; auto-dismisses after ~3s. */

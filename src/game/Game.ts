@@ -739,34 +739,49 @@ export class Game {
         this.playerController.body.position.z >= this.level.climbableWall.bounds.min.y &&
         this.playerController.body.position.z <= this.level.climbableWall.bounds.max.y &&
         isNearWallHeight(this.playerController.body.position.y, this.level.climbableWall.topY, 6);
-      if (nearWall && this.rawMoveInput.z > 0) {
-        this.playerController.beginClimb(
-          this.level.climbableWall.normal,
-          this.level.climbableWall.topY,
-          undefined,
-          this.level.climbableWall.pathAt,
-        );
+
+      // Real, previously-missing guidance: proximity is now checked every grounded frame
+      // (not just while already holding W, which is all the ORIGINAL mountain-segment loop
+      // below did) so the "W to climb" prompt can appear the moment the player arrives, before
+      // they've even tried. The climb face went fully naturalistic (real jagged rock, see the
+      // open-terrain-climb work) with nothing marking it as interactive — this is the fix.
+      let nearestSegment: (typeof this.level.mountain.segments)[number] | null = null;
+      for (const segment of this.level.mountain.segments) {
+        const { wall } = segment;
+        const nearSegmentWall =
+          this.playerController.body.position.x <= wall.bounds.max.x + 0.5 &&
+          this.playerController.body.position.x >= wall.bounds.min.x - 0.5 &&
+          this.playerController.body.position.z >= wall.bounds.min.y &&
+          this.playerController.body.position.z <= wall.bounds.max.y &&
+          isNearWallHeight(this.playerController.body.position.y, wall.topY, 6);
+        if (nearSegmentWall) {
+          nearestSegment = segment;
+          break;
+        }
       }
 
-      if (this.playerController.mode === 'grounded' && this.rawMoveInput.z > 0) {
-        for (const segment of this.level.mountain.segments) {
-          const { wall } = segment;
-          const nearSegmentWall =
-            this.playerController.body.position.x <= wall.bounds.max.x + 0.5 &&
-            this.playerController.body.position.x >= wall.bounds.min.x - 0.5 &&
-            this.playerController.body.position.z >= wall.bounds.min.y &&
-            this.playerController.body.position.z <= wall.bounds.max.y &&
-            isNearWallHeight(this.playerController.body.position.y, wall.topY, 6);
-          if (nearSegmentWall) {
-            this.playerController.beginClimb(wall.normal, wall.topY, segment.ledgePosition, wall.pathAt);
-            if (!this.mountainWindStarted) {
-              this.mountainWindStarted = true;
-              this.audio.startMountainWind(); // additive layer on top of jungle ambience — no zone-swap system exists in this project
-            }
-            break;
+      if (nearWall || nearestSegment) this.hud.showClimbPrompt();
+      else this.hud.hideClimbPrompt();
+
+      if (this.rawMoveInput.z > 0) {
+        if (nearWall) {
+          this.playerController.beginClimb(
+            this.level.climbableWall.normal,
+            this.level.climbableWall.topY,
+            undefined,
+            this.level.climbableWall.pathAt,
+          );
+        } else if (nearestSegment) {
+          const { wall } = nearestSegment;
+          this.playerController.beginClimb(wall.normal, wall.topY, nearestSegment.ledgePosition, wall.pathAt);
+          if (!this.mountainWindStarted) {
+            this.mountainWindStarted = true;
+            this.audio.startMountainWind(); // additive layer on top of jungle ambience — no zone-swap system exists in this project
           }
         }
       }
+    } else {
+      this.hud.hideClimbPrompt();
     }
 
     if (this.playerController.mode === 'climbing') {

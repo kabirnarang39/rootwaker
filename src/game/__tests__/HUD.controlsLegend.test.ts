@@ -117,9 +117,33 @@ describe('HUD controls legend — content (source-text check, no DOM needed)', (
   it('does NOT list Interact — the key is bound in Input.ts but Game.ts\'s onAction ignores it, so listing it would be a control that does nothing (Dodge, unlike Interact, is now real — see combat-depth-round-2)', () => {
     expect(legendMarkup).not.toMatch(/>Interact</i);
   });
+
+  it('the hunt prompt shows the real bound pounce key (L), not a stale label (regression: shipped showing "Space" — Input.ts actually binds pounce to KeyL, Space is Jump)', () => {
+    const huntMatch = hudSource.match(/<div class="rw-hunt-prompt">([\s\S]*?)<\/div>/);
+    if (!huntMatch) throw new Error('rw-hunt-prompt markup block not found in HUD.ts — has it moved or been renamed?');
+    expect(huntMatch[1]).toContain('>L<');
+    expect(huntMatch[1]).not.toContain('>Space<');
+  });
+
+  it('a real climb prompt exists showing the real bound forward-move key (W) (regression: standing at a climbable wall gave zero on-screen indication it was interactive)', () => {
+    const climbMatch = hudSource.match(/<div class="rw-climb-prompt">([\s\S]*?)<\/div>/);
+    if (!climbMatch) throw new Error('rw-climb-prompt markup block not found in HUD.ts — has it moved or been renamed?');
+    expect(climbMatch[1]).toContain('>W<');
+    expect(climbMatch[1]).toContain('>Climb<');
+  });
 });
 
 describe('HUD boss bar + arc-complete toast — behavior (real HUD instance, fake DOM)', () => {
+  it('showClimbPrompt/hideClimbPrompt toggle the real climb-prompt panel', async () => {
+    const { HUD } = await import('../HUD');
+    const hud = new HUD(fakeElement() as unknown as HTMLElement);
+    const h = hud as unknown as { climbPromptEl: ReturnType<typeof fakeElement> };
+    hud.showClimbPrompt();
+    expect(h.climbPromptEl.classList.contains('rw-visible')).toBe(true);
+    hud.hideClimbPrompt();
+    expect(h.climbPromptEl.classList.contains('rw-visible')).toBe(false);
+  });
+
   it('showBossBar sets the name label and reveals the panel', async () => {
     const { HUD } = await import('../HUD');
     const hud = new HUD(fakeElement() as unknown as HTMLElement);
