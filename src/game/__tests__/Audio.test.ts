@@ -173,3 +173,35 @@ describe('AudioFX species sounds', () => {
     expect(() => fx.playKnockout()).not.toThrow();
   });
 });
+
+describe('AudioFX real per-species hurt reactions', () => {
+  it('playBoarHurt does not throw before unlock()', () => {
+    const fx = new AudioFX();
+    expect(() => fx.playBoarHurt()).not.toThrow();
+  });
+
+  it('playBearHurt does not throw before unlock()', () => {
+    const fx = new AudioFX();
+    expect(() => fx.playBearHurt()).not.toThrow();
+  });
+
+  it('playOwlHurt does not throw before unlock()', () => {
+    const fx = new AudioFX();
+    expect(() => fx.playOwlHurt()).not.toThrow();
+  });
+
+  it('playViperHurt does not throw before unlock()', () => {
+    const fx = new AudioFX();
+    expect(() => fx.playViperHurt()).not.toThrow();
+  });
+
+  it('playLionHurt does not throw before unlock()', () => {
+    const fx = new AudioFX();
+    expect(() => fx.playLionHurt()).not.toThrow();
+  });
+
+  it('playCrocodileHurt does not throw before unlock()', () => {
+    const fx = new AudioFX();
+    expect(() => fx.playCrocodileHurt()).not.toThrow();
+  });
+});

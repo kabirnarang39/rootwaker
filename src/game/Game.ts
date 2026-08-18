@@ -928,6 +928,9 @@ export class Game {
         const dist = Math.hypot(dx, dz) || 1;
         entry.position.x += (dx / dist) * OWL_DIVE_AOE_KNOCKBACK;
         entry.position.z += (dz / dist) * OWL_DIVE_AOE_KNOCKBACK;
+        // Real, pre-existing gap found alongside meleeSweep's own fix: this AOE applied damage
+        // but never played any hit sound at all (playHit() was only ever called from meleeSweep).
+        this.playHurtSoundFor(entry);
         if (isDefeated(entry.combatant)) this.resolveDefeat(entry);
       }
     }
@@ -1746,6 +1749,44 @@ export class Game {
    * facing, dealing `damage` and shoving anything hit back by `knockback` meters. Knockback
    * lands on every hit including the killing one, and one sound plays for the whole sweep no
    * matter how many enemies it caught. */
+  /** Real per-species hurt reaction on a landed hit — previously every melee hit played the same
+   * generic playHit() thud regardless of which animal was struck (a real, user-reported gap: real
+   * animal voices, "not just tuun tuun"). `grantsAbility` already uniquely tags the 6 huntable
+   * species (see EnemyEntry's own doc comment); the wraith and King aren't ability-granting so
+   * they're matched by combatant identity instead. Falls back to the old generic thud for any
+   * future entry this doesn't yet recognize, rather than silently playing nothing. */
+  private playHurtSoundFor(entry: EnemyEntry): void {
+    switch (entry.grantsAbility) {
+      case 'boar-charge':
+        this.audio.playBoarHurt();
+        return;
+      case 'bear-swipe':
+        this.audio.playBearHurt();
+        return;
+      case 'owl-dive':
+        this.audio.playOwlHurt();
+        return;
+      case 'viper-venom':
+        this.audio.playViperHurt();
+        return;
+      case 'lion-pounce':
+        this.audio.playLionHurt();
+        return;
+      case 'croc-lunge':
+        this.audio.playCrocodileHurt();
+        return;
+    }
+    if (entry.combatant === this.wraith.combatant) {
+      this.audio.playWraithGroan();
+      return;
+    }
+    if (entry.combatant === this.level.throneRoom.king.combatant) {
+      this.audio.playBearHurt(); // the Elder Bear King is a real bear underneath the crown
+      return;
+    }
+    this.audio.playHit();
+  }
+
   private meleeSweep(damage: number, radius: number, reach: number, knockback: number, staggerEnemies = false): void {
     const forward = this.facingForward();
     const hitbox = {
@@ -1753,20 +1794,17 @@ export class Game {
       end: this.playerController.body.position.clone().addScaledVector(forward, reach),
       radius,
     };
-    let hitAnything = false;
 
     for (const entry of this.enemyEntries()) {
       if (!resolveMeleeHit(hitbox, entry.combatant)) continue;
       applyDamage(entry.combatant, damage);
       entry.position.addScaledVector(forward, knockback);
-      hitAnything = true;
+      this.playHurtSoundFor(entry);
       // A landed combo finisher is a real tactical opening, not just a bigger number — reuses
       // the exact same EnemyAI.stun() King's Roar already drives.
       if (staggerEnemies && entry.stunnable) entry.ai.stun(FINISHER_STAGGER_SECONDS);
       if (isDefeated(entry.combatant)) this.resolveDefeat(entry);
     }
-
-    if (hitAnything) this.audio.playHit();
   }
 
   /** King's Roar: staggers (EnemyAI.stun) and shoves back every enemy within ROAR_RADIUS of the

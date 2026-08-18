@@ -1004,4 +1004,208 @@ export class AudioFX {
     thud.start();
     thud.stop(ctx.currentTime + 0.27);
   }
+
+  // Real per-species HURT reactions — every landed player hit used to route through the one
+  // generic playHit() thud regardless of which animal was struck (a real, user-reported gap: "not
+  // just eating eating is a ceremony... real animal voices should be there... not just tuun
+  // tuun"). Each of these is deliberately distinct from BOTH playHit() (still used as the
+  // fallback for species with no dedicated cue) and that species' own telegraph/aggro sound above
+  // — a hurt reaction has a hard, unramped attack (pain snaps open, it doesn't build like a
+  // threat display) and is shorter, reading as "struck," not "warning."
+
+  /** Real boar squeal: a RISING pitch burst, the opposite direction of playBoarSnort's falling
+   * grunt — a real pained squeal climbs, a threat-snort doesn't. */
+  playBoarHurt(): void {
+    if (!this.ctx) return;
+    const ctx = this.ctx;
+    const noise = ctx.createBufferSource();
+    noise.buffer = makeNoiseBuffer(ctx, 0.12);
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'bandpass';
+    filter.frequency.value = 1400;
+    filter.Q.value = 1.2;
+    const noiseGain = ctx.createGain();
+    noiseGain.gain.setValueAtTime(0.14, ctx.currentTime);
+    noiseGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.12);
+    noise.connect(filter);
+    filter.connect(noiseGain);
+    noiseGain.connect(ctx.destination);
+    noise.start();
+
+    const squeal = ctx.createOscillator();
+    squeal.type = 'sawtooth';
+    squeal.frequency.setValueAtTime(300, ctx.currentTime);
+    squeal.frequency.linearRampToValueAtTime(650, ctx.currentTime + 0.1);
+    const squealGain = ctx.createGain();
+    squealGain.gain.setValueAtTime(0.09, ctx.currentTime);
+    squealGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.15);
+    squeal.connect(squealGain);
+    squealGain.connect(ctx.destination);
+    squeal.start();
+    squeal.stop(ctx.currentTime + 0.16);
+  }
+
+  /** Real bear hurt-bark: higher and brighter than playBearGrowl's low 420->150Hz sweep, with a
+   * hard unramped attack instead of the growl's own building swell — reused for the Elder Bear
+   * King too, since he's the same animal underneath the crown. */
+  playBearHurt(): void {
+    if (!this.ctx) return;
+    const ctx = this.ctx;
+    const noise = ctx.createBufferSource();
+    noise.buffer = makeNoiseBuffer(ctx, 0.16);
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.value = 700;
+    const noiseGain = ctx.createGain();
+    noiseGain.gain.setValueAtTime(0.16, ctx.currentTime);
+    noiseGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.16);
+    noise.connect(filter);
+    filter.connect(noiseGain);
+    noiseGain.connect(ctx.destination);
+    noise.start();
+
+    const bark = ctx.createOscillator();
+    bark.type = 'sawtooth';
+    bark.frequency.setValueAtTime(160, ctx.currentTime);
+    bark.frequency.exponentialRampToValueAtTime(90, ctx.currentTime + 0.15);
+    const barkGain = ctx.createGain();
+    barkGain.gain.setValueAtTime(0.1, ctx.currentTime);
+    barkGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.15);
+    bark.connect(barkGain);
+    barkGain.connect(ctx.destination);
+    bark.start();
+    bark.stop(ctx.currentTime + 0.17);
+  }
+
+  /** Real owl hurt-yelp: much shorter than playOwlScreech's 0.45s hunting cry, and snaps down
+   * fast (2600->1400Hz over 0.15s) instead of the screech's long, deliberate glide. */
+  playOwlHurt(): void {
+    if (!this.ctx) return;
+    const ctx = this.ctx;
+    const noise = ctx.createBufferSource();
+    noise.buffer = makeNoiseBuffer(ctx, 0.18);
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'bandpass';
+    filter.frequency.value = 3200;
+    filter.Q.value = 1.6;
+    const noiseGain = ctx.createGain();
+    noiseGain.gain.setValueAtTime(0.13, ctx.currentTime);
+    noiseGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.18);
+    noise.connect(filter);
+    filter.connect(noiseGain);
+    noiseGain.connect(ctx.destination);
+    noise.start();
+
+    const osc = ctx.createOscillator();
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(2600, ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(1400, ctx.currentTime + 0.15);
+    const oscGain = ctx.createGain();
+    oscGain.gain.setValueAtTime(0.05, ctx.currentTime);
+    oscGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.15);
+    osc.connect(oscGain);
+    oscGain.connect(ctx.destination);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.18);
+  }
+
+  /** Real viper hurt hiss-spit: a hard-attack burst (vs. playViperHiss's gentle swell-then-fall)
+   * plus a short low body-recoil thump — real recoil weight the pure-hiss aggro cue never has. */
+  playViperHurt(): void {
+    if (!this.ctx) return;
+    const ctx = this.ctx;
+    const noise = ctx.createBufferSource();
+    noise.buffer = makeNoiseBuffer(ctx, 0.15);
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'bandpass';
+    filter.frequency.value = 4600;
+    filter.Q.value = 1.0;
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0.09, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.15);
+    noise.connect(filter);
+    filter.connect(gain);
+    gain.connect(ctx.destination);
+    noise.start();
+
+    const thump = ctx.createOscillator();
+    thump.type = 'sine';
+    thump.frequency.setValueAtTime(120, ctx.currentTime);
+    thump.frequency.exponentialRampToValueAtTime(60, ctx.currentTime + 0.12);
+    const thumpGain = ctx.createGain();
+    thumpGain.gain.setValueAtTime(0.07, ctx.currentTime);
+    thumpGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.12);
+    thump.connect(thumpGain);
+    thumpGain.connect(ctx.destination);
+    thump.start();
+    thump.stop(ctx.currentTime + 0.14);
+  }
+
+  /** Real lion hurt-snarl: sharper and shorter than playLionRoar's big triumphant 0.55s sweep,
+   * with a hard unramped attack instead of the roar's own building swell. */
+  playLionHurt(): void {
+    if (!this.ctx) return;
+    const ctx = this.ctx;
+    const osc = ctx.createOscillator();
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(220, ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(140, ctx.currentTime + 0.18);
+    const oscFilter = ctx.createBiquadFilter();
+    oscFilter.type = 'lowpass';
+    oscFilter.frequency.value = 900;
+    const oscGain = ctx.createGain();
+    oscGain.gain.setValueAtTime(0.18, ctx.currentTime);
+    oscGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.2);
+    osc.connect(oscFilter);
+    oscFilter.connect(oscGain);
+    oscGain.connect(ctx.destination);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.22);
+
+    const noise = ctx.createBufferSource();
+    noise.buffer = makeNoiseBuffer(ctx, 0.2);
+    const noiseFilter = ctx.createBiquadFilter();
+    noiseFilter.type = 'bandpass';
+    noiseFilter.frequency.value = 600;
+    noiseFilter.Q.value = 0.8;
+    const noiseGain = ctx.createGain();
+    noiseGain.gain.setValueAtTime(0.05, ctx.currentTime);
+    noiseGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.18);
+    noise.connect(noiseFilter);
+    noiseFilter.connect(noiseGain);
+    noiseGain.connect(ctx.destination);
+    noise.start();
+  }
+
+  /** Real crocodile hurt hiss-thrash: shorter and hard-attack (vs. playCrocodileHiss's slow
+   * threat-display swell), with a low thrashing thump standing in for real body-roll weight. */
+  playCrocodileHurt(): void {
+    if (!this.ctx) return;
+    const ctx = this.ctx;
+    const noise = ctx.createBufferSource();
+    noise.buffer = makeNoiseBuffer(ctx, 0.22);
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'bandpass';
+    filter.frequency.value = 1100;
+    filter.Q.value = 1.0;
+    const noiseGain = ctx.createGain();
+    noiseGain.gain.setValueAtTime(0.13, ctx.currentTime);
+    noiseGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.22);
+    noise.connect(filter);
+    filter.connect(noiseGain);
+    noiseGain.connect(ctx.destination);
+    noise.start();
+
+    const thrash = ctx.createOscillator();
+    thrash.type = 'square';
+    thrash.frequency.setValueAtTime(80, ctx.currentTime);
+    thrash.frequency.exponentialRampToValueAtTime(35, ctx.currentTime + 0.18);
+    const thrashGain = ctx.createGain();
+    thrashGain.gain.setValueAtTime(0.09, ctx.currentTime);
+    thrashGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.2);
+    thrash.connect(thrashGain);
+    thrashGain.connect(ctx.destination);
+    thrash.start();
+    thrash.stop(ctx.currentTime + 0.22);
+  }
 }
