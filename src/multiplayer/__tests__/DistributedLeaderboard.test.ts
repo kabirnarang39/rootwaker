@@ -168,4 +168,83 @@ describe('DistributedCoronationLeaderboardClient', () => {
     expect(result.rank).toBe(1);
     expect(result.top[0].coronationSeconds).toBe(300);
   });
+
+  describe('real input validation on remote data (the world mesh is public/permissionless — any peer can send anything)', () => {
+    it('rejects an entry with a huge playerName instead of merging/re-broadcasting it (real DoS/storage-bloat guard)', async () => {
+      const { DistributedCoronationLeaderboardClient } = await import('../DistributedLeaderboard');
+      const client = new DistributedCoronationLeaderboardClient();
+      await client.getTop(1);
+      entryAction.onMessage!({
+        species: 'fox', coronationSeconds: 100, animalsDefeated: 1,
+        playerId: 'attacker', playerName: 'x'.repeat(10_000_000), seq: 1,
+      });
+      expect(await client.getTop(10)).toHaveLength(0);
+    });
+
+    it('rejects an entry with a non-finite coronationSeconds (NaN/Infinity would corrupt the sort)', async () => {
+      const { DistributedCoronationLeaderboardClient } = await import('../DistributedLeaderboard');
+      const client = new DistributedCoronationLeaderboardClient();
+      await client.getTop(1);
+      entryAction.onMessage!({
+        species: 'fox', coronationSeconds: Infinity, animalsDefeated: 1,
+        playerId: 'attacker', playerName: 'Attacker', seq: 1,
+      });
+      expect(await client.getTop(10)).toHaveLength(0);
+    });
+
+    it('rejects an entry with an invalid species (not one of the 3 real playable species)', async () => {
+      const { DistributedCoronationLeaderboardClient } = await import('../DistributedLeaderboard');
+      const client = new DistributedCoronationLeaderboardClient();
+      await client.getTop(1);
+      entryAction.onMessage!({
+        species: 'dragon', coronationSeconds: 100, animalsDefeated: 1,
+        playerId: 'attacker', playerName: 'Attacker', seq: 1,
+      });
+      expect(await client.getTop(10)).toHaveLength(0);
+    });
+
+    it('rejects a malformed/non-object entry entirely (null, a string, a number)', async () => {
+      const { DistributedCoronationLeaderboardClient } = await import('../DistributedLeaderboard');
+      const client = new DistributedCoronationLeaderboardClient();
+      await client.getTop(1);
+      entryAction.onMessage!(null);
+      entryAction.onMessage!('not an object');
+      entryAction.onMessage!(42);
+      expect(await client.getTop(10)).toHaveLength(0);
+    });
+
+    it('a real full-state sync that is not an array (malformed peer) is dropped without throwing', async () => {
+      const { DistributedCoronationLeaderboardClient } = await import('../DistributedLeaderboard');
+      const client = new DistributedCoronationLeaderboardClient();
+      await client.getTop(1);
+      expect(() => fullAction.onMessage!({ not: 'an array' })).not.toThrow();
+      expect(await client.getTop(10)).toHaveLength(0);
+    });
+
+    it('a full-state sync containing a mix of valid and garbage entries keeps only the valid one', async () => {
+      const { DistributedCoronationLeaderboardClient } = await import('../DistributedLeaderboard');
+      const client = new DistributedCoronationLeaderboardClient();
+      await client.getTop(1);
+      fullAction.onMessage!([
+        { species: 'fox', coronationSeconds: 400, animalsDefeated: 3, playerId: 'real-peer', playerName: 'Real Peer', seq: 1 },
+        { species: 'dragon', coronationSeconds: -1, animalsDefeated: NaN, playerId: 'attacker', playerName: 'x'.repeat(1000), seq: Infinity },
+      ]);
+      const top = await client.getTop(10);
+      expect(top).toHaveLength(1);
+      expect(top[0].playerId).toBe('real-peer');
+    });
+
+    it('still accepts and ranks a real, well-formed entry normally (validation does not reject legitimate data)', async () => {
+      const { DistributedCoronationLeaderboardClient } = await import('../DistributedLeaderboard');
+      const client = new DistributedCoronationLeaderboardClient();
+      await client.getTop(1);
+      entryAction.onMessage!({
+        species: 'viper', coronationSeconds: 250, animalsDefeated: 6,
+        playerId: 'real-peer', playerName: 'Hidden Cicada #2', seq: 1,
+      });
+      const top = await client.getTop(10);
+      expect(top).toHaveLength(1);
+      expect(top[0].coronationSeconds).toBe(250);
+    });
+  });
 });

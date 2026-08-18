@@ -17,6 +17,36 @@ export type WorldCoronationEntry = CoronationEntry & {
 const STORAGE_KEY = 'rootwaker.world-leaderboard.v1';
 const SEQ_KEY = 'rootwaker.world-leaderboard-seq.v1';
 
+// The world mesh is a public, permissionless network — any peer (or a modified/malicious
+// client) can send anything over `lb-entry`/`lb-full`. Nothing here cryptographically ties an
+// entry's playerId to whoever actually sent it (that would need a real identity/signature
+// system, out of scope for a hobby leaderboard), so this validates SHAPE/BOUNDS, not authenticity
+// — the real, honest goal is refusing to merge or re-broadcast garbage (a huge string bloating
+// every peer's storage, NaN/Infinity corrupting the sort, a bogus seq that could otherwise
+// permanently squat on a real player's slot with an absurd value). Same class of accepted,
+// documented limitation as this project's other P2P tradeoffs (no TURN relay, the mesh's
+// peer-count ceiling) — bounding the damage a bad actor/buggy peer can do, not preventing spoofing
+// entirely.
+const VALID_SPECIES = new Set(['fox', 'bear', 'viper']);
+const MAX_NAME_LENGTH = 40; // real UI cap is 24 (DeviceIdentity.setDisplayName) — slack for older/other clients
+const MAX_PLAYER_ID_LENGTH = 100; // real device ids are 36-char UUIDs — generous slack, never unbounded
+const MAX_CORONATION_SECONDS = 1e7; // ~115 days of real elapsed play time — well beyond any real run
+const MAX_ANIMALS_DEFEATED = 1e6;
+const MAX_SEQ = 1e15; // astronomically higher than any real per-device counter could reach
+
+function isValidWorldCoronationEntry(value: unknown): value is WorldCoronationEntry {
+  if (!value || typeof value !== 'object') return false;
+  const e = value as Record<string, unknown>;
+  return (
+    typeof e.playerId === 'string' && e.playerId.length > 0 && e.playerId.length <= MAX_PLAYER_ID_LENGTH &&
+    typeof e.playerName === 'string' && e.playerName.length > 0 && e.playerName.length <= MAX_NAME_LENGTH &&
+    typeof e.species === 'string' && VALID_SPECIES.has(e.species) &&
+    typeof e.coronationSeconds === 'number' && Number.isFinite(e.coronationSeconds) && e.coronationSeconds >= 0 && e.coronationSeconds <= MAX_CORONATION_SECONDS &&
+    typeof e.animalsDefeated === 'number' && Number.isFinite(e.animalsDefeated) && e.animalsDefeated >= 0 && e.animalsDefeated <= MAX_ANIMALS_DEFEATED &&
+    typeof e.seq === 'number' && Number.isFinite(e.seq) && e.seq >= 0 && e.seq <= MAX_SEQ
+  );
+}
+
 function nextLocalSeq(): number {
   const raw = safeGetItem(SEQ_KEY);
   const next = (raw ? parseInt(raw, 10) : 0) + 1;
@@ -46,7 +76,7 @@ export class DistributedCoronationLeaderboardClient implements CoronationLeaderb
     const raw = safeGetItem(STORAGE_KEY);
     if (raw) {
       const entries = await decryptJSON<WorldCoronationEntry[]>(raw);
-      if (entries) for (const e of entries) this.state.set(e.playerId, e);
+      if (entries) for (const e of entries) if (isValidWorldCoronationEntry(e)) this.state.set(e.playerId, e);
     }
   }
 
@@ -55,16 +85,21 @@ export class DistributedCoronationLeaderboardClient implements CoronationLeaderb
     safeSetItem(STORAGE_KEY, payload);
   }
 
-  /** Accepts an incoming entry only if it's newer than what's already known for that playerId —
-   * the actual merge rule. Returns whether anything changed (worth re-persisting/re-rendering). */
-  private mergeOne(entry: WorldCoronationEntry): boolean {
+  /** Accepts an incoming entry only if it's real (isValidWorldCoronationEntry) AND newer than
+   * what's already known for that playerId — both are "the actual merge rule": shape/bounds
+   * validity is checked here since this is the one real choke point every remote entry (single
+   * broadcast or full-state sync) and every locally-reloaded entry both pass through. Returns
+   * whether anything changed (worth re-persisting/re-rendering). */
+  private mergeOne(entry: unknown): boolean {
+    if (!isValidWorldCoronationEntry(entry)) return false;
     const known = this.state.get(entry.playerId);
     if (known && known.seq >= entry.seq) return false;
     this.state.set(entry.playerId, entry);
     return true;
   }
 
-  private async mergeMany(entries: WorldCoronationEntry[]): Promise<void> {
+  private async mergeMany(entries: unknown): Promise<void> {
+    if (!Array.isArray(entries)) return; // a real peer's full-state sync is always an array — anything else is malformed/malicious
     let changed = false;
     for (const e of entries) if (this.mergeOne(e)) changed = true;
     if (changed) await this.persist();
