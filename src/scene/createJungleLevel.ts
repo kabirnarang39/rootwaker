@@ -948,6 +948,74 @@ function buildVillager(position: THREE.Vector3): THREE.Group {
   return group;
 }
 
+const THRONE_STONE_COLOR = 0x39362f; // a real warmer stone than the cold arena floor — the seat of power, not more scenery
+const THRONE_GOLD_COLOR = 0xc9973a; // matches every playable species' own crown trim color exactly
+const THRONE_GEM_COLORS = [0x5ff7ff, 0xff6ba8, 0xd8ff4a, 0xffb15e]; // real varied gem colors, not one repeated tint
+
+/** A real carved stone throne, waiting empty at the king's own spawn point for whoever the fox
+ * defeats/becomes — the player's own crown (see PlayableCharacter.revealCrown, already shipped)
+ * completes the coronation; this is the seat itself, which never existed before. Real regalia,
+ * not just a bigger rock: a backed seat with armrests, a crown-shaped finial on the backrest,
+ * and scattered emissive "gem" accents in real varied colors along the arms/base. */
+function buildThrone(position: THREE.Vector3): THREE.Group {
+  const group = new THREE.Group();
+  const stoneMat = new THREE.MeshStandardMaterial({ color: THRONE_STONE_COLOR, roughness: 0.85, flatShading: true });
+  const goldMat = new THREE.MeshStandardMaterial({ color: THRONE_GOLD_COLOR, roughness: 0.4, metalness: 0.55, flatShading: true });
+
+  const seat = new THREE.Mesh(new THREE.BoxGeometry(1.3, 0.28, 1.1), stoneMat);
+  seat.position.set(0, 0.4, 0);
+  seat.castShadow = true;
+  seat.receiveShadow = true;
+  group.add(seat);
+
+  const backrest = new THREE.Mesh(new THREE.BoxGeometry(1.3, 1.6, 0.22), stoneMat);
+  backrest.position.set(0, 1.15, -0.5);
+  backrest.castShadow = true;
+  group.add(backrest);
+
+  const armGeo = new THREE.BoxGeometry(0.18, 0.55, 0.9);
+  const armL = new THREE.Mesh(armGeo, stoneMat);
+  armL.position.set(-0.65, 0.65, -0.05);
+  armL.castShadow = true;
+  const armR = armL.clone();
+  armR.position.x = 0.65;
+  group.add(armL, armR);
+
+  // A real crown-shaped finial atop the backrest — the same 5-spike-ring silhouette every
+  // playable species' own crown already uses, scaled up as the throne's own real regalia.
+  const finialSpikeGeo = new THREE.ConeGeometry(0.09, 0.28, 4);
+  for (let i = 0; i < 5; i++) {
+    const angle = (i / 5) * Math.PI * 2;
+    const spike = new THREE.Mesh(finialSpikeGeo, goldMat);
+    spike.position.set(Math.cos(angle) * 0.32, 2.05, -0.5 + Math.sin(angle) * 0.32 * 0.4);
+    spike.castShadow = true;
+    group.add(spike);
+  }
+
+  // Real scattered gem accents — varied colors, not one repeated tint, set into the armrests and
+  // seat-front like real inlaid jewels.
+  const gemPositions: Array<[number, number, number]> = [
+    [-0.65, 0.95, 0.35],
+    [0.65, 0.95, 0.35],
+    [-0.6, 0.55, 0.42],
+    [0.6, 0.55, 0.42],
+    [0, 0.55, 0.52],
+  ];
+  gemPositions.forEach(([gx, gy, gz], i) => {
+    const color = THRONE_GEM_COLORS[i % THRONE_GEM_COLORS.length];
+    const gemMat = new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 0.9, roughness: 0.2, metalness: 0.3 });
+    const gem = new THREE.Mesh(new THREE.OctahedronGeometry(0.055, 0), gemMat);
+    gem.position.set(gx, gy, gz);
+    group.add(gem);
+    const light = new THREE.PointLight(color, 0.15, 1.5, 2);
+    light.position.copy(gem.position);
+    group.add(light);
+  });
+
+  group.position.copy(position);
+  return group;
+}
+
 // Small bounded arena beyond the summit gate: the King's fight, then (hidden until the gate
 // opens) the village tableau — the payoff for climbing the mountain. Follows buildMountain's
 // {meshes, ...state} return shape so the call site adds meshes the same way.
@@ -981,6 +1049,11 @@ function buildThroneRoom(summitGate: THREE.Vector3): { meshes: THREE.Object3D[];
   const kingSpawn = new THREE.Vector3(summitGate.x, summitGate.y, summitGate.z + 10);
   const king = createElderBearKing();
   king.group.position.copy(kingSpawn);
+
+  // The real throne itself, set back beyond the king's own fight position so it reads as "the
+  // seat the king was defending" during combat rather than something the fight happens on top
+  // of — the fox/new-king can walk right up to it once the King falls.
+  const throne = buildThrone(new THREE.Vector3(summitGate.x, summitGate.y, kingSpawn.z + 2));
 
   // Beyond the king, only revealed once the gate opens.
   const villageMeshes: THREE.Object3D[] = [
@@ -1017,6 +1090,10 @@ function buildThroneRoom(summitGate: THREE.Vector3): { meshes: THREE.Object3D[];
     entity.group.visible = false;
     return entity.group;
   };
+  // "More and more crowd of various species" — expanded from the original 6 spectators to 10,
+  // adding every ground species that's shipped since this audience was first built (boar, lion,
+  // crocodile, monkey) so the coronation crowd actually represents the real animal roster the
+  // fox has been fighting all game, not just the 3 species that existed when this shipped.
   const animalAudience: THREE.Object3D[] = [
     perchedOwlAt(summitGate.x - AUDIENCE_HALF_WIDTH, summitGate.z + 8),
     perchedOwlAt(summitGate.x + AUDIENCE_HALF_WIDTH, summitGate.z + 13),
@@ -1024,6 +1101,10 @@ function buildThroneRoom(summitGate: THREE.Vector3): { meshes: THREE.Object3D[];
     groundAnimalAt(createGroveBear, summitGate.x + AUDIENCE_HALF_WIDTH - 1, summitGate.z + 6, -Math.PI / 2),
     groundAnimalAt(createVineViper, summitGate.x - AUDIENCE_HALF_WIDTH + 1.5, summitGate.z + 21, Math.PI / 2),
     groundAnimalAt(() => createGroveSquirrel(new THREE.Vector3()), summitGate.x + AUDIENCE_HALF_WIDTH - 1.5, summitGate.z + 20, -Math.PI / 2),
+    groundAnimalAt(createTuskBoar, summitGate.x - AUDIENCE_HALF_WIDTH + 1.2, summitGate.z + 18, Math.PI / 2),
+    groundAnimalAt(createLion, summitGate.x + AUDIENCE_HALF_WIDTH - 1.2, summitGate.z + 16, -Math.PI / 2),
+    groundAnimalAt(createCrocodile, summitGate.x - AUDIENCE_HALF_WIDTH + 1.4, summitGate.z + 9, Math.PI / 2),
+    groundAnimalAt(createMonkey, summitGate.x + AUDIENCE_HALF_WIDTH - 1.6, summitGate.z + 20, -Math.PI / 2),
   ];
 
   const throneRoom: ThroneRoom = {
@@ -1061,7 +1142,7 @@ function buildThroneRoom(summitGate: THREE.Vector3): { meshes: THREE.Object3D[];
     perimeterMeshes.push(boulder);
   }
 
-  return { meshes: [floorMesh, king.group, ...villageMeshes, ...animalAudience, ...perimeterMeshes], throneRoom };
+  return { meshes: [floorMesh, throne, king.group, ...villageMeshes, ...animalAudience, ...perimeterMeshes], throneRoom };
 }
 
 function buildWater(): { mesh: THREE.Mesh; water: WaterBody } {

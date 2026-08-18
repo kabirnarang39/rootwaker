@@ -179,6 +179,36 @@ describe('createJungleLevel', () => {
     expect(villageMeshes[0].visible).toBe(true); // both reveal together, neither replaces the other
   });
 
+  it('real coronation crowd: at least 10 real animal spectators (expanded from the original 6 to include every ground species shipped since — boar/lion/crocodile/monkey)', () => {
+    const level = createJungleLevel();
+    expect(level.throneRoom.animalAudience.length).toBeGreaterThanOrEqual(10);
+  });
+
+  it('a real throne sits in the throne room, always visible (not hidden behind openGate() like the reveal-payoff audience/village), with real jeweled regalia', () => {
+    const level = createJungleLevel();
+    let throneMesh: THREE.Object3D | undefined;
+    let gemCount = 0;
+    for (const mesh of level.group.children) {
+      // The throne group is a direct child added to the level's own scene graph; find it by its
+      // real distinguishing trait — real octahedron "gem" meshes (no species' own eye/anatomy
+      // uses this geometry type, unlike emissive intensity values which several species' own
+      // eyes also happen to share) — rather than by an exported name, since buildThroneRoom's
+      // meshes aren't individually named.
+      let localGemCount = 0;
+      mesh.traverse((obj) => {
+        const geo = (obj as THREE.Mesh).geometry;
+        if (geo?.type === 'OctahedronGeometry') localGemCount++;
+      });
+      if (localGemCount > 0) {
+        throneMesh = mesh;
+        gemCount = localGemCount;
+      }
+    }
+    expect(throneMesh).toBeDefined();
+    expect(throneMesh!.visible).toBe(true);
+    expect(gemCount).toBeGreaterThanOrEqual(5); // real varied gem accents, not one token jewel
+  });
+
   it('every real climb segment has a real (non-default) pathAt — pathAt(0) is always zero-drift, but pathAt at a real height is not', () => {
     const level = createJungleLevel();
     const segmentHeight = 6; // matches buildMountain's own segmentHeight constant
