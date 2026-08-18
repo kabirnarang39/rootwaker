@@ -54,6 +54,16 @@ describe('EnemyAI', () => {
     expect(ai.shouldDealDamageThisFrame()).toBe(true);
   });
 
+  it('a distance a few floating-point ulps above strikeRange still counts as in range (regression: chaseTowardPlayer converges distance toward strikeRange asymptotically, and once the remaining gap is below double-precision resolution the final step can round to zero — measured live: a real viper stalled forever at distance 0.5700000000000003 against strikeRange 0.57 exactly, permanently failing a strict <=)', () => {
+    const ai = new EnemyAI();
+    ai.strikeRange = 0.57;
+    const justAboveStrikeRange = 0.57 + Number.EPSILON * 2;
+    ai.update(3, 0.001); // enters telegraph, far outside strikeRange
+    ai.update(justAboveStrikeRange, TELEGRAPH_SECONDS + 0.01);
+    expect(ai.state).toBe('attacking');
+    expect(ai.shouldDealDamageThisFrame()).toBe(true);
+  });
+
   it("telegraph's wind-up clock does not advance while the enemy is still out of strikeRange (regression: it used to advance unconditionally, so an enemy that spent its whole telegraphSeconds closing distance would strike the INSTANT it arrived in range, with zero real warning — the entire point of a telegraph); once in range, a full fresh window is required no matter how long it spent approaching", () => {
     const ai = new EnemyAI();
     ai.strikeRange = 1;

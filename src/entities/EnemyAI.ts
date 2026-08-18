@@ -33,6 +33,14 @@ export class EnemyAI {
   // just triggered, chase hasn't closed the gap yet) holds in telegraph — still visibly winding
   // up and still closing distance — instead of guaranteeing a whiff.
   strikeRange = Infinity;
+  // chaseTowardPlayer() converges distance toward strikeRange asymptotically (each frame's step
+  // is min(speed*delta, gap)) — once gap shrinks below double-precision resolution at these
+  // coordinate magnitudes, the final "step" can round to zero, leaving distance a few
+  // ulps ABOVE strikeRange forever (measured live: 0.5700000000000003 vs strikeRange 0.57 exactly
+  // — a real, reproducible stall, not a hypothetical). A strict `<=` then fails on every future
+  // frame, permanently stuck in telegraph with the enemy visibly right on top of the player. This
+  // epsilon absorbs that residual without weakening the gate for any real, non-boundary distance.
+  private static readonly RANGE_EPSILON = 1e-6;
   private timeInState = 0;
   private justDealtDamage = false;
   private stunTimer = 0;
@@ -64,7 +72,7 @@ export class EnemyAI {
     // that can silently complete before the enemy is even close enough to matter defeats it. For
     // any enemy still on the default strikeRange (Infinity), distanceToPlayer <= Infinity is
     // always true, so this is a no-op — byte-identical to before.
-    if (this.state !== 'telegraph' || distanceToPlayer <= this.strikeRange) {
+    if (this.state !== 'telegraph' || distanceToPlayer <= this.strikeRange + EnemyAI.RANGE_EPSILON) {
       this.timeInState += delta;
     }
 
@@ -73,7 +81,7 @@ export class EnemyAI {
         if (distanceToPlayer <= AGGRO_RANGE) this.enter('telegraph');
         break;
       case 'telegraph':
-        if (this.timeInState >= this.telegraphSeconds && distanceToPlayer <= this.strikeRange) {
+        if (this.timeInState >= this.telegraphSeconds && distanceToPlayer <= this.strikeRange + EnemyAI.RANGE_EPSILON) {
           this.enter('attacking');
           this.justDealtDamage = true;
         }

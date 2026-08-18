@@ -159,11 +159,16 @@ const SENSE_RANGE_MULTIPLIER = 3;
 // surge, the King lumbers but hits harder.
 // A real, legitimate design consequence, not a bug: the fox's own top speed
 // (PlayerController.ts's MOVE_SPEED) is 4.5 m/s. A player who simply runs at full speed
-// permanently outruns the wraith (3.2), bear (3.4), and King (2.6) — they visibly chase but can
-// never close the gap unless the player slows, turns to fight, or gets cornered. The boar (4.5)
-// exactly matches player speed and so never gains ground either. Only the owl (5.0, horizontal)
-// and the viper (5.5) can actually run a fleeing player down. A fox genuinely outrunning a bear
-// is correct, not a balance oversight.
+// permanently outruns the wraith (3.2) and King (2.6) — they visibly chase but can never close the
+// gap unless the player slows, turns to fight, or gets cornered. The boar (4.5) exactly matches
+// player speed and so never gains ground either. The owl (5.0, horizontal) can run a fleeing
+// player down outright. The bear and viper are different again, now that both have real two-gear
+// movement (see BEAR_LUMBER_SPEED/BEAR_CHARGE_SPEED and VIPER_SLITHER_SPEED/VIPER_STRIKE_SPEED
+// below): their APPROACH speed (2.0/2.2) is slower than the fox — a player can always outrun them
+// at range and prevent the telegraph from ever starting — but their commit-phase BURST (6.0/9.0)
+// is faster than the fox, so once already within strikeRange, running away mid-telegraph does not
+// save you. This is the intended shape: distance is the real defense against a bear/viper, not
+// raw sprint speed once one has already closed in.
 const WRAITH_CHASE_SPEED = 3.2;
 // A boar's real charge has two real gears, not one constant pursuit speed: it's an all-out sprint
 // while actually committed to the charge (telegraph — this is also the phase EnemyAI keeps
@@ -173,7 +178,13 @@ const WRAITH_CHASE_SPEED = 3.2;
 // the bear's/wraith's steady, uniform pursuit.
 const BOAR_CHARGE_SPEED = 6.2;
 const BOAR_TROT_SPEED = 2.0;
-const BEAR_CHASE_SPEED = 3.4;
+// Bear: "Old Strength" reads as a slow lumber right up until it commits — same two-gear idiom as
+// the boar/lion/crocodile, since a real bear's charge is an explosive short-range burst despite its
+// normal gait being unhurried. Previously a single flat BEAR_CHASE_SPEED (3.4) the whole time,
+// which made the heaviest bruiser in the roster feel identical in movement rhythm to the wraith's
+// steady, uniform pursuit — no real "heavy" identity beyond raw numbers.
+const BEAR_LUMBER_SPEED = 2.0;
+const BEAR_CHARGE_SPEED = 6.0;
 const KING_CHASE_SPEED = 2.6;
 
 // Owl: a real aerial predator, not a ground chaser with a Y offset bolted on. OWL_STRIKE_HOVER_Y
@@ -188,7 +199,13 @@ const OWL_DIVE_SPEED = 4.0; // vertical descent, m/s, toward strike-hover height
 const OWL_CLIMB_SPEED = 2.0; // vertical climb, m/s, back to its own perch once idle
 const OWL_STRIKE_HOVER_Y = 0.5;
 const OWL_HIT_DAMAGE = 10;
-const VIPER_CHASE_SPEED = 5.5;
+// Viper: "Coiled and patient" (its own story beat) contradicted a flat 5.5 approach speed that
+// sprinted at the player the instant it noticed them — no patience visible at all. Same two-gear
+// idiom as boar/lion/crocodile: a slow, watchful slither while closing distance, then the single
+// fastest burst in the game for the strike itself, matching how explosively short a real snake
+// strike actually is relative to its normal locomotion.
+const VIPER_SLITHER_SPEED = 2.2;
+const VIPER_STRIKE_SPEED = 9.0;
 const VIPER_HIT_DAMAGE = 9;
 // Real two-gear hunting, same idiom as the boar's own BOAR_CHARGE_SPEED/BOAR_TROT_SPEED split — a
 // real lion stalks slowly while closing distance, then commits to the fastest burst in the game
@@ -1061,7 +1078,8 @@ export class Game {
       }
       this.prevBearAiState.set(bear.ai, bear.ai.state);
       if (bear.ai.state !== 'idle') {
-        chaseTowardPlayer(bear.group.position, this.playerController.body.position, BEAR_CHASE_SPEED, delta, bear.ai.strikeRange);
+        const bearSpeed = bear.ai.state === 'telegraph' ? BEAR_CHARGE_SPEED : BEAR_LUMBER_SPEED;
+        chaseTowardPlayer(bear.group.position, this.playerController.body.position, bearSpeed, delta, bear.ai.strikeRange);
       }
       bear.group.position.y = this.level.groundHeightAt(bear.group.position.x, bear.group.position.z);
       if (bear.ai.shouldDealDamageThisFrame()) {
@@ -1139,7 +1157,8 @@ export class Game {
       this.prevViperAiState.set(viper.ai, viper.ai.state);
 
       if (viper.ai.state !== 'idle') {
-        chaseTowardPlayer(viper.group.position, this.playerController.body.position, VIPER_CHASE_SPEED, delta, viper.ai.strikeRange);
+        const viperSpeed = viper.ai.state === 'telegraph' ? VIPER_STRIKE_SPEED : VIPER_SLITHER_SPEED;
+        chaseTowardPlayer(viper.group.position, this.playerController.body.position, viperSpeed, delta, viper.ai.strikeRange);
       }
       viper.group.position.y = this.level.groundHeightAt(viper.group.position.x, viper.group.position.z);
       if (viper.ai.shouldDealDamageThisFrame()) {
