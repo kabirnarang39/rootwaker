@@ -39,24 +39,29 @@ export function createGroveHare(spawnPosition: THREE.Vector3): GroveHare {
   const earMat = new THREE.MeshStandardMaterial({ color: 0xb89a78, flatShading: true, roughness: 0.85 });
 
   const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.09, 0.14, 2, 6), furMat);
+  body.name = 'hare-body';
   body.rotation.z = Math.PI / 2;
   body.castShadow = true;
   rig.getJoint('spine').add(body);
 
   const head = new THREE.Mesh(new THREE.IcosahedronGeometry(0.07, 0), furMat);
+  head.name = 'hare-head';
   rig.getJoint('head').add(head);
 
   const earGeo = new THREE.ConeGeometry(0.018, 0.12, 4);
   const earL = new THREE.Mesh(earGeo, earMat);
+  earL.name = 'hare-ear-l';
   earL.position.y = 0.06;
   rig.getJoint('earL').add(earL);
   const earR = new THREE.Mesh(earGeo, earMat);
+  earR.name = 'hare-ear-r';
   earR.position.y = 0.06;
   rig.getJoint('earR').add(earR);
 
   const legGeo = new THREE.CylinderGeometry(0.014, 0.018, 0.1, 5);
   for (const joint of ['hindpawL', 'hindpawR', 'forepawL', 'forepawR'] as const) {
     const leg = new THREE.Mesh(legGeo, furMat);
+    leg.name = `hare-leg-${joint}`;
     leg.position.y = -0.05;
     rig.getJoint(joint).add(leg);
   }
