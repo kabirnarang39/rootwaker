@@ -933,12 +933,27 @@ export class Game {
     }
 
     if (this.playerController.mode === 'grounded') {
+      // Real soft-lock, found by tracing what happens on stamina exhaustion: the phase-1 base
+      // wall (climbableWall) has NO mountain-segment ledge of its own — beginClimb() is called
+      // for it with ledgePosition=undefined, so a player who runs out of stamina on that first
+      // wall gets ejected back to their own climb-start position at the wall's base. That spot
+      // is not within LEDGE_REST_RADIUS of any mountain-segment ledge (all of which sit further
+      // up the mountain), so restStamina() would never fire again — permanently 0 stamina, unable
+      // to ever climb again. Real ordinary ground (not an elevated mountain ledge) must always be
+      // a safe place to recover, or any failed first attempt at the wall is an unrecoverable
+      // dead end. A small tolerance (matching LEDGE_SNAP_TOLERANCE's own margin) allows for the
+      // terrain's own rolling noise.
+      const onOrdinaryGround =
+        this.playerController.body.position.y <=
+        this.level.groundHeightAt(this.playerController.body.position.x, this.playerController.body.position.z) + 0.3;
+      let nearMountainLedge = false;
       for (const segment of this.level.mountain.segments) {
         if (this.playerController.body.position.distanceTo(segment.ledgePosition) <= LEDGE_REST_RADIUS) {
-          this.playerController.restStamina(delta);
+          nearMountainLedge = true;
           break;
         }
       }
+      if (onOrdinaryGround || nearMountainLedge) this.playerController.restStamina(delta);
     }
 
     if (!this.summitGateCrossed) {
