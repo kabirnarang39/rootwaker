@@ -144,6 +144,15 @@ interface TreeSpecies {
   trunkRadiusTop: number;
   canopyLobes: TreeSpeciesLobe[];
   canopyColor: number;
+  // Real distinct flora silhouettes beyond the default broadleaf trunk+lobe-cluster shape —
+  // previously every species (however differently colored/sized) shared that exact one
+  // archetype, which read as "the same tree species, palette-swapped" rather than real botanical
+  // variety. Optional/undefined means the existing default broadleaf-canopy shape, so every
+  // pre-existing species stays byte-identical.
+  archetype?: 'bamboo' | 'palm' | 'banana' | 'bush' | 'fruit';
+  // Only meaningful for 'fruit' — real small colored fruit clusters scattered among the canopy
+  // lobes, distinct from every other archetype.
+  fruitColor?: number;
 }
 
 const TREE_SPECIES: TreeSpecies[] = [
@@ -191,25 +200,214 @@ const TREE_SPECIES: TreeSpecies[] = [
     ],
     canopyColor: 0x1a4a3a,
   },
+  // Real botanical variety, directly requested: "some trees real tall... flower bushes... fruits
+  // trees... bamboo coconut" — each of the following is a genuinely distinct silhouette, not a
+  // recolor of the broadleaf trunk+lobe shape above.
+  {
+    // A real tall canopy tree — same broadleaf archetype, but a real 2.3x taller trunk and a
+    // proportionally smaller canopy relative to that height, reading as a genuinely taller
+    // specimen rather than the same silhouette scaled uniformly (uniform scaling is already
+    // handled per-instance by buildFoliage's own random scale factor).
+    trunkHeight: 4.4,
+    trunkRadiusBottom: 0.1,
+    trunkRadiusTop: 0.13,
+    canopyLobes: [
+      { radius: 0.42, offset: [0, 0.3, 0] },
+      { radius: 0.34, offset: [0.22, 0.5, 0.16] },
+      { radius: 0.3, offset: [-0.2, 0.42, -0.18] },
+    ],
+    canopyColor: 0x225a3f,
+  },
+  {
+    // Bamboo: a real multi-stalk cluster, not a single trunk — built as several thin offset
+    // stalks (see buildTreeSpeciesMeshes' own 'bamboo' branch) with a real pale yellow-green
+    // color, minimal canopy (bamboo's own real leaf clusters are sparse tufts near the top of
+    // each stalk, never a full broadleaf canopy).
+    trunkHeight: 3.2,
+    trunkRadiusBottom: 0.025,
+    trunkRadiusTop: 0.02,
+    canopyLobes: [{ radius: 0.14, offset: [0, 0.15, 0] }],
+    canopyColor: 0x8ba33d,
+    archetype: 'bamboo',
+  },
+  {
+    // Coconut palm: a single thin, real-tall trunk with the canopy replaced by fanned frond
+    // blades radiating outward/down from the crown (see the 'palm' branch) instead of round
+    // lobes — the real distinguishing palm silhouette.
+    trunkHeight: 3.6,
+    trunkRadiusBottom: 0.09,
+    trunkRadiusTop: 0.055,
+    canopyLobes: [],
+    canopyColor: 0x2f6b3a,
+    archetype: 'palm',
+  },
+  {
+    // Banana "tree" (a real giant herb, not a true tree, but reads the same at this stylized
+    // scale): a short trunk with broad, upright frond blades (fewer and wider than the palm's
+    // own thin fronds) plus a real hanging fruit bunch (see the 'banana' branch).
+    trunkHeight: 1.4,
+    trunkRadiusBottom: 0.1,
+    trunkRadiusTop: 0.09,
+    canopyLobes: [],
+    canopyColor: 0x3a7a3f,
+    archetype: 'banana',
+  },
+  {
+    // A real flower bush: no visible trunk at all (trunkHeight kept tiny rather than zero, so
+    // the shared trunk-cylinder construction doesn't degenerate), a low, colorful, low-radius
+    // blob mixing real green foliage with scattered bright "flower" spheres.
+    trunkHeight: 0.08,
+    trunkRadiusBottom: 0.05,
+    trunkRadiusTop: 0.05,
+    canopyLobes: [
+      { radius: 0.22, offset: [0, 0.14, 0] },
+      { radius: 0.16, offset: [0.14, 0.1, 0.1] },
+      { radius: 0.15, offset: [-0.13, 0.09, -0.09] },
+    ],
+    canopyColor: 0x3f6b2e,
+    archetype: 'bush',
+  },
+  {
+    // A real fruit tree: the default broadleaf canopy archetype, with small colored fruit
+    // clusters scattered among the lobes (see the 'fruit' branch) — a real distinguishing detail
+    // over every other broadleaf species above.
+    trunkHeight: 1.6,
+    trunkRadiusBottom: 0.08,
+    trunkRadiusTop: 0.1,
+    canopyLobes: [
+      { radius: 0.4, offset: [0, 0.38, 0] },
+      { radius: 0.3, offset: [0.22, 0.55, 0.15] },
+      { radius: 0.28, offset: [-0.2, 0.5, -0.15] },
+    ],
+    canopyColor: 0x2a5a2f,
+    archetype: 'fruit',
+    fruitColor: 0xd94a2b,
+  },
 ];
+
+// Real frond blade for palm/banana archetypes — a flattened, tapered cone reads as a long leaf
+// blade far better than a round icosahedron lobe ever could. `droop` tilts the blade down from
+// horizontal (palms droop more than the broader, more upright banana fronds).
+function buildFrondGeometry(length: number, width: number, angleAroundY: number, droop: number): THREE.BufferGeometry {
+  const geo = new THREE.ConeGeometry(width, length, 3);
+  geo.rotateX(Math.PI / 2 - droop); // point the cone's tip outward/downward instead of straight up
+  geo.translate(0, 0, length / 2); // pivot at the base (the crown), not the geometric center
+  geo.rotateY(angleAroundY);
+  return geo;
+}
 
 function buildTreeSpeciesMeshes(
   species: TreeSpecies,
   count: number,
   windDir: THREE.Vector2,
-): { trunkMesh: THREE.InstancedMesh; canopyMesh: THREE.InstancedMesh; uniforms: { uTime: { value: number } } } {
-  const trunkGeo = new THREE.CylinderGeometry(species.trunkRadiusTop, species.trunkRadiusBottom, species.trunkHeight, 6);
-  trunkGeo.translate(0, species.trunkHeight / 2, 0);
+): {
+  trunkMesh: THREE.InstancedMesh;
+  canopyMesh: THREE.InstancedMesh;
+  decorMesh?: THREE.InstancedMesh;
+  uniforms: { uTime: { value: number } };
+} {
+  let trunkGeo: THREE.BufferGeometry;
+  if (species.archetype === 'bamboo') {
+    // A real multi-stalk cluster, not one trunk — several thin parallel stalks at slightly
+    // different heights/offsets, the real distinguishing bamboo silhouette.
+    const stalkOffsets: Array<[number, number]> = [
+      [0, 0],
+      [0.06, 0.04],
+      [-0.05, 0.05],
+      [0.03, -0.06],
+    ];
+    const stalkGeoms = stalkOffsets.map(([sx, sz], i) => {
+      const stalkHeight = species.trunkHeight * (0.85 + i * 0.05);
+      const geo = new THREE.CylinderGeometry(species.trunkRadiusTop, species.trunkRadiusBottom, stalkHeight, 5);
+      geo.translate(sx, stalkHeight / 2, sz);
+      return geo;
+    });
+    trunkGeo = mergeGeometries(stalkGeoms, false) ?? stalkGeoms[0];
+  } else {
+    trunkGeo = new THREE.CylinderGeometry(species.trunkRadiusTop, species.trunkRadiusBottom, species.trunkHeight, 6);
+    trunkGeo.translate(0, species.trunkHeight / 2, 0);
+  }
   const trunkMat = new THREE.MeshStandardMaterial({ color: 0x3a2a1a, flatShading: true, roughness: 0.9 });
 
-  const lobeGeoms = species.canopyLobes.map((lobe) => {
-    const geo = new THREE.IcosahedronGeometry(lobe.radius, 0);
-    geo.translate(lobe.offset[0], species.trunkHeight + lobe.offset[1], lobe.offset[2]);
-    return geo;
-  });
-  const canopyGeo = mergeGeometries(lobeGeoms, false);
+  let canopyGeo: THREE.BufferGeometry | null;
+  if (species.archetype === 'palm') {
+    // Real coconut-palm crown: 7 fronds fanned evenly around the trunk top, each drooping
+    // outward/down — the real distinguishing palm silhouette, no round lobes at all.
+    const frondCount = 7;
+    const frondGeoms = Array.from({ length: frondCount }, (_, i) => {
+      const geo = buildFrondGeometry(0.55, 0.09, (i / frondCount) * Math.PI * 2, 0.5);
+      geo.translate(0, species.trunkHeight, 0);
+      return geo;
+    });
+    canopyGeo = mergeGeometries(frondGeoms, false);
+  } else if (species.archetype === 'banana') {
+    // Real banana crown: fewer, broader, more upright fronds than a palm, plus a real hanging
+    // fruit bunch (small clustered spheres) below the crown — both baked into one merged
+    // geometry/material (a stylized simplification at this game's flat-shaded palette; real
+    // bananas ARE a different color, but this project's low-poly language already treats
+    // several real two-tone details as one-tone shapes, e.g. the crocodile's own back ridges).
+    const frondCount = 5;
+    const frondGeoms = Array.from({ length: frondCount }, (_, i) => {
+      const geo = buildFrondGeometry(0.5, 0.16, (i / frondCount) * Math.PI * 2, 0.15);
+      geo.translate(0, species.trunkHeight, 0);
+      return geo;
+    });
+    const bunchGeoms = Array.from({ length: 4 }, (_, i) => {
+      const geo = new THREE.CapsuleGeometry(0.045, 0.09, 2, 5);
+      geo.rotateZ(0.3);
+      geo.translate((i - 1.5) * 0.06, species.trunkHeight - 0.15, 0.12);
+      return geo;
+    });
+    canopyGeo = mergeGeometries([...frondGeoms, ...bunchGeoms], false);
+  } else {
+    const lobeGeoms = species.canopyLobes.map((lobe) => {
+      const geo = new THREE.IcosahedronGeometry(lobe.radius, 0);
+      geo.translate(lobe.offset[0], species.trunkHeight + lobe.offset[1], lobe.offset[2]);
+      return geo;
+    });
+    canopyGeo = mergeGeometries(lobeGeoms, false);
+  }
   if (!canopyGeo) throw new Error('buildTreeSpeciesMeshes: failed to merge canopy geometry');
   const canopyMat = new THREE.MeshStandardMaterial({ color: species.canopyColor, flatShading: true, roughness: 0.9 });
+
+  // Real flower/fruit decoration — a genuinely different color from the canopy, so a
+  // "flower bush"/"fruit tree" actually reads as one rather than a plain green blob. Needs its
+  // own mesh+material (a single merged geometry can't carry two colors without vertex-color
+  // machinery this project doesn't otherwise use).
+  let decorGeo: THREE.BufferGeometry | null = null;
+  let decorColor = 0xffffff;
+  if (species.archetype === 'bush') {
+    const flowerColors: number[] = [0xd9548a, 0xe0c23a, 0xb06fd9]; // real varied bloom colors, not one flat tint
+    decorColor = flowerColors[0];
+    const flowerGeoms = [
+      { r: 0.045, o: [0.12, 0.2, 0.05] as const },
+      { r: 0.04, o: [-0.1, 0.18, 0.08] as const },
+      { r: 0.05, o: [0.02, 0.24, -0.1] as const },
+      { r: 0.038, o: [-0.14, 0.15, -0.06] as const },
+    ].map(({ r, o }) => {
+      const geo = new THREE.IcosahedronGeometry(r, 0);
+      geo.translate(o[0], species.trunkHeight + o[1], o[2]);
+      return geo;
+    });
+    decorGeo = mergeGeometries(flowerGeoms, false);
+  } else if (species.archetype === 'fruit' && species.fruitColor !== undefined) {
+    decorColor = species.fruitColor;
+    const fruitGeoms = [
+      [0.16, 0.42, 0.14] as const,
+      [-0.14, 0.48, -0.1] as const,
+      [0.05, 0.36, 0.18] as const,
+      [-0.08, 0.58, 0.08] as const,
+      [0.22, 0.52, -0.05] as const,
+    ].map((o) => {
+      const geo = new THREE.SphereGeometry(0.04, 6, 6);
+      geo.translate(o[0], species.trunkHeight + o[1], o[2]);
+      return geo;
+    });
+    decorGeo = mergeGeometries(fruitGeoms, false);
+  }
+  const decorMat = decorGeo
+    ? new THREE.MeshStandardMaterial({ color: decorColor, flatShading: true, roughness: 0.6 })
+    : null;
 
   const uniforms = { uTime: { value: 0 }, uWindDir: { value: windDir } };
   canopyMat.onBeforeCompile = (shader) => {
@@ -241,7 +439,9 @@ function buildTreeSpeciesMeshes(
   trunkMesh.castShadow = true;
   canopyMesh.castShadow = true;
 
-  return { trunkMesh, canopyMesh, uniforms };
+  const decorMesh = decorGeo && decorMat ? new THREE.InstancedMesh(decorGeo, decorMat, count) : undefined;
+
+  return { trunkMesh, canopyMesh, decorMesh, uniforms };
 }
 
 const EXCLUSION_MARGIN = 0.4; // meters — keeps foliage/wildlife clear of water and wall footprints
@@ -307,26 +507,36 @@ function buildFoliage(
     dummy.scale.setScalar(scale);
     dummy.updateMatrix();
 
-    const { trunkMesh, canopyMesh } = speciesMeshes[speciesIndex];
+    const { trunkMesh, canopyMesh, decorMesh } = speciesMeshes[speciesIndex];
     const idx = placedPerSpecies[speciesIndex];
     trunkMesh.setMatrixAt(idx, dummy.matrix);
     canopyMesh.setMatrixAt(idx, dummy.matrix);
+    decorMesh?.setMatrixAt(idx, dummy.matrix);
     placedPerSpecies[speciesIndex] = idx + 1;
     totalPlaced++;
 
     const species = TREE_SPECIES[speciesIndex];
-    treeObstacles.push({ x, z, radius: species.trunkRadiusBottom * scale, height: species.trunkHeight * scale });
+    // A bamboo cluster's real visual footprint is wider than one stalk's own radius (stalks sit
+    // offset up to ~0.08m from center) — using the bare stalk radius here would let the player
+    // visually clip through the outer stalks despite them being fully rendered.
+    const obstacleRadius = species.archetype === 'bamboo' ? species.trunkRadiusBottom + 0.08 : species.trunkRadiusBottom;
+    treeObstacles.push({ x, z, radius: obstacleRadius * scale, height: species.trunkHeight * scale });
   }
 
   const meshes: THREE.InstancedMesh[] = [];
   const trunkMeshes: THREE.InstancedMesh[] = [];
-  speciesMeshes.forEach(({ trunkMesh, canopyMesh }, i) => {
+  speciesMeshes.forEach(({ trunkMesh, canopyMesh, decorMesh }, i) => {
     trunkMesh.count = placedPerSpecies[i];
     canopyMesh.count = placedPerSpecies[i];
     trunkMesh.instanceMatrix.needsUpdate = true;
     canopyMesh.instanceMatrix.needsUpdate = true;
     meshes.push(trunkMesh, canopyMesh);
     trunkMeshes.push(trunkMesh);
+    if (decorMesh) {
+      decorMesh.count = placedPerSpecies[i];
+      decorMesh.instanceMatrix.needsUpdate = true;
+      meshes.push(decorMesh);
+    }
   });
 
   return {

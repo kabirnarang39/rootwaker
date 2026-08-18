@@ -101,6 +101,18 @@ describe('createJungleLevel', () => {
     }
   });
 
+  it('real flora variety: at least 10 distinct tree/flora species render (up from the original 4 identical-archetype broadleaf trees), and building the level throws no errors for any of the new archetypes (bamboo multi-stalk trunk, palm/banana frond canopies, bush/fruit decor meshes)', () => {
+    const level = createJungleLevel();
+    // treeTrunkMeshes.length is exactly one InstancedMesh per species (see buildFoliage's own
+    // trunkMeshes.push(trunkMesh) inside its per-species forEach) — a real proxy for "how many
+    // distinct tree species exist," since each species gets its own trunk InstancedMesh.
+    expect(level.treeTrunkMeshes.length).toBeGreaterThanOrEqual(10);
+    // foliageMeshes must include MORE than 2x the trunk count — the extra meshes are the new
+    // bush/fruit decor InstancedMeshes (flowers/fruit), on top of the standard trunk+canopy pair
+    // every species already contributes.
+    expect(level.foliageMeshes.length).toBeGreaterThan(level.treeTrunkMeshes.length * 2);
+  });
+
   it('the mountain no longer has guards (guards relocated into the jungle as Grove Bears; ledges are hazard-free rest points again)', () => {
     const level = createJungleLevel();
     expect(level.mountain).not.toHaveProperty('guards');
