@@ -24,11 +24,21 @@ describe('createTuskBoar', () => {
     }
   });
 
-  it('starts at 55 HP, idle', () => {
+  it('starts at 68 HP, idle (bumped with the real-size scale-up — a bulkier boar takes a real fight to fell)', () => {
     const boar = createTuskBoar();
-    expect(boar.combatant.hp).toBe(55);
-    expect(boar.combatant.maxHp).toBe(55);
+    expect(boar.combatant.hp).toBe(68);
+    expect(boar.combatant.maxHp).toBe(68);
     expect(boar.ai.state).toBe('idle');
+  });
+
+  it('is real-world scaled up (1.25x) from its unscaled geometry — a wild boar must read sturdier/bulkier than the fox-sized player', () => {
+    const boar = createTuskBoar();
+    expect(boar.group.scale.x).toBeCloseTo(1.25, 5);
+  });
+
+  it('hitbox radius is scaled proportionally with the visual size bump', () => {
+    const boar = createTuskBoar();
+    expect(boar.combatant.hitbox.radius).toBeCloseTo(0.5, 5);
   });
 
   it('getBoarHitbox tracks the spine joint\'s world position after update()', () => {

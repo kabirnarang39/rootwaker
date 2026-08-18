@@ -55,6 +55,11 @@ export function createGroveBear(): GroveBear {
   rig.setLocalPosition('hindpawL', 0, -0.16, 0);
   rig.setLocalPosition('hindpawR', 0, -0.16, 0);
   rig.captureBasePose();
+  // Real-world scale: a real bear reads meaningfully bigger than the fox-sized player, not
+  // nearly identical (the un-scaled body capsule was only ~7% bigger than the fox's own). A
+  // uniform scale from the root — which already sits at ground level — keeps every joint's
+  // ground contact correct; only the King (Elder Bear King) stays visually the largest creature.
+  rig.root.scale.setScalar(1.6);
 
   const furMat = new THREE.MeshStandardMaterial({ color: BEAR_FUR_COLOR, flatShading: true, roughness: 0.85 });
   const furDarkMat = new THREE.MeshStandardMaterial({ color: BEAR_FUR_DARK, flatShading: true, roughness: 0.9 });
@@ -128,9 +133,9 @@ export function createGroveBear(): GroveBear {
 
   const ai = new EnemyAI();
   const combatant: Combatant = {
-    hp: 65,
-    maxHp: 65,
-    hitbox: { start: new THREE.Vector3(), end: new THREE.Vector3(), radius: 0.45 },
+    hp: 90, // bumped with the real-size scale-up above — a visibly bigger bear should take a real fight to fell
+    maxHp: 90,
+    hitbox: { start: new THREE.Vector3(), end: new THREE.Vector3(), radius: 0.72 }, // scaled with the real-size bump above (0.45 * 1.6)
   };
 
   function syncHitbox() {

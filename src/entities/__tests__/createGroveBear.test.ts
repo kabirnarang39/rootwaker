@@ -24,11 +24,23 @@ describe('createGroveBear', () => {
     }
   });
 
-  it('starts at 65 HP (matching the old mountainGuard exactly — visual redesign, not a difficulty change)', () => {
+  it('starts at 90 HP (bumped with the real-size scale-up — a visibly bigger bear takes a real fight to fell)', () => {
     const bear = createGroveBear();
-    expect(bear.combatant.hp).toBe(65);
-    expect(bear.combatant.maxHp).toBe(65);
+    expect(bear.combatant.hp).toBe(90);
+    expect(bear.combatant.maxHp).toBe(90);
     expect(bear.ai.state).toBe('idle');
+  });
+
+  it('is real-world scaled up (1.6x) from its unscaled geometry — a bear must read meaningfully bigger than the fox-sized player, not near-identical', () => {
+    const bear = createGroveBear();
+    expect(bear.group.scale.x).toBeCloseTo(1.6, 5);
+    expect(bear.group.scale.y).toBeCloseTo(1.6, 5);
+    expect(bear.group.scale.z).toBeCloseTo(1.6, 5);
+  });
+
+  it('hitbox radius is scaled proportionally with the visual size bump — hit detection must match what the player actually sees', () => {
+    const bear = createGroveBear();
+    expect(bear.combatant.hitbox.radius).toBeCloseTo(0.72, 5);
   });
 
   it('getGroveBearHitbox tracks the spine joint\'s world position after update()', () => {

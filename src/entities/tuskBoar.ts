@@ -53,6 +53,10 @@ export function createTuskBoar(): TuskBoar {
   rig.setLocalPosition('hindpawL', 0, -0.12, 0);
   rig.setLocalPosition('hindpawR', 0, -0.12, 0);
   rig.captureBasePose();
+  // Real-world scale: a wild boar is sturdier and bulkier than the fox-sized player, though not
+  // as large as a bear or lion. Uniform scale from the root, which already sits at ground
+  // level — every joint's ground contact stays correct.
+  rig.root.scale.setScalar(1.25);
 
   const bodyMat = new THREE.MeshStandardMaterial({ color: BOAR_COLOR, flatShading: true, roughness: 0.85 });
   const darkMat = new THREE.MeshStandardMaterial({ color: BOAR_DARK, flatShading: true, roughness: 0.8 });
@@ -122,9 +126,9 @@ export function createTuskBoar(): TuskBoar {
 
   const ai = new EnemyAI();
   const combatant: Combatant = {
-    hp: 55,
-    maxHp: 55,
-    hitbox: { start: new THREE.Vector3(), end: new THREE.Vector3(), radius: 0.4 },
+    hp: 68, // bumped with the real-size scale-up above — a bulkier boar should take a real fight to fell
+    maxHp: 68,
+    hitbox: { start: new THREE.Vector3(), end: new THREE.Vector3(), radius: 0.5 }, // scaled with the real-size bump above (0.4 * 1.25)
   };
 
   function syncHitbox() {

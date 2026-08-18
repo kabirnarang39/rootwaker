@@ -62,8 +62,8 @@ const VIEW_MODE_NAMES: Record<ViewMode, string> = {
   hawkEye: 'Hawk Eye',
   foxEye: 'Fox Eyes',
 };
-const BOAR_HIT_DAMAGE = 12; // matches the root-wraith's melee hit — same claw-scale threat
-const BEAR_HIT_DAMAGE = 12; // same claw-scale threat as the wraith/boar
+const BOAR_HIT_DAMAGE = 14; // bumped with the boar's real-size scale-up in tuskBoar.ts
+const BEAR_HIT_DAMAGE = 16; // bumped with the bear's real-size scale-up in createGroveBear.ts
 const PLAYER_COLLISION_RADIUS = 0.35;
 const PLAYER_COLLISION_HEIGHT = 0.9;
 const LEDGE_REST_RADIUS = 1.5; // meters — how close to a mountain ledge counts as "resting" on it
@@ -186,7 +186,7 @@ const VIPER_HIT_DAMAGE = 9;
 // a real apex predator.
 const LION_STALK_SPEED = 1.8;
 const LION_CHARGE_SPEED = 7.5;
-const LION_HIT_DAMAGE = 14;
+const LION_HIT_DAMAGE = 18; // bumped with the lion's real-size scale-up in createLion.ts
 
 // Owl's Descent: a real forward-and-down leap (mirrors the boar-charge dash idiom — a direct
 // position override for the leap window, falling through to the same obstacle/water checks).

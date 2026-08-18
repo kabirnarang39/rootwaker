@@ -65,6 +65,11 @@ export function createLion(): Lion {
   rig.setLocalPosition('tail0', 0, 0.1, -0.28);
   rig.setLocalPosition('tail1', 0, 0, -0.22);
   rig.captureBasePose();
+  // Real-world scale: an apex predator should read meaningfully bigger than the fox-sized
+  // player, not near-identical (the un-scaled body was actually SMALLER-radius than the fox's).
+  // Uniform scale from the root, which already sits at ground level — every joint's ground
+  // contact stays correct.
+  rig.root.scale.setScalar(1.5);
 
   const coatMat = new THREE.MeshStandardMaterial({ color: LION_COAT_COLOR, flatShading: true, roughness: 0.8 });
   const coatDarkMat = new THREE.MeshStandardMaterial({ color: LION_COAT_DARK, flatShading: true, roughness: 0.85 });
@@ -161,9 +166,9 @@ export function createLion(): Lion {
 
   const ai = new EnemyAI();
   const combatant: Combatant = {
-    hp: 70,
-    maxHp: 70,
-    hitbox: { start: new THREE.Vector3(), end: new THREE.Vector3(), radius: 0.42 },
+    hp: 100, // bumped with the real-size scale-up above — a visibly bigger apex predator should take a real fight to fell
+    maxHp: 100,
+    hitbox: { start: new THREE.Vector3(), end: new THREE.Vector3(), radius: 0.63 }, // scaled with the real-size bump above (0.42 * 1.5)
   };
 
   function syncHitbox() {

@@ -27,11 +27,21 @@ describe('createLion', () => {
     }
   });
 
-  it('starts at 70 HP, idle', () => {
+  it('starts at 100 HP, idle (bumped with the real-size scale-up — a visibly bigger apex predator takes a real fight to fell)', () => {
     const lion = createLion();
-    expect(lion.combatant.hp).toBe(70);
-    expect(lion.combatant.maxHp).toBe(70);
+    expect(lion.combatant.hp).toBe(100);
+    expect(lion.combatant.maxHp).toBe(100);
     expect(lion.ai.state).toBe('idle');
+  });
+
+  it('is real-world scaled up (1.5x) from its unscaled geometry — an apex predator must read meaningfully bigger than the fox-sized player', () => {
+    const lion = createLion();
+    expect(lion.group.scale.x).toBeCloseTo(1.5, 5);
+  });
+
+  it('hitbox radius is scaled proportionally with the visual size bump', () => {
+    const lion = createLion();
+    expect(lion.combatant.hitbox.radius).toBeCloseTo(0.63, 5);
   });
 
   it('has a real mane (multiple lobes around the head), distinct from every other species — this is the trait that must read as "lion" at a glance', () => {
