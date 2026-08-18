@@ -213,6 +213,13 @@ describe('AudioFX player-fox voice', () => {
   });
 });
 
+describe('AudioFX weather', () => {
+  it('playThunder does not throw before unlock()', () => {
+    const fx = new AudioFX();
+    expect(() => fx.playThunder()).not.toThrow();
+  });
+});
+
 describe('AudioFX real per-species death cries', () => {
   it('playBoarDeath does not throw before unlock()', () => {
     const fx = new AudioFX();

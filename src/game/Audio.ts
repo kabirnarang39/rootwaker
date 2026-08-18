@@ -1429,4 +1429,49 @@ export class AudioFX {
     yip(0);
     yip(0.12);
   }
+
+  /** Real thunder — a sharp crack followed by a long, low ROLLING rumble (2.6s total), the
+   * single longest sound in this file by far (every other impact/warning cue here is under a
+   * second): a real thunderclap doesn't decay smoothly like playGroundSlamImpact's short thump,
+   * it rolls in waves as the sound reflects off terrain/cloud — modeled here with 3 overlapping
+   * low-frequency swells at staggered delays rather than one flat decay curve. Timing (when to
+   * call this relative to the lightning flash) is Lightning.ts's own job, not this method's —
+   * this is purely the sound. */
+  playThunder(): void {
+    if (!this.ctx) return;
+    const ctx = this.ctx;
+
+    const crack = ctx.createBufferSource();
+    crack.buffer = makeNoiseBuffer(ctx, 0.12);
+    const crackFilter = ctx.createBiquadFilter();
+    crackFilter.type = 'highpass';
+    crackFilter.frequency.value = 1800;
+    const crackGain = ctx.createGain();
+    crackGain.gain.setValueAtTime(0.22, ctx.currentTime);
+    crackGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.1);
+    crack.connect(crackFilter);
+    crackFilter.connect(crackGain);
+    crackGain.connect(ctx.destination);
+    crack.start();
+
+    const rollDelays = [0.05, 0.55, 1.3]; // 3 staggered rolling swells, each longer/lower than the last
+    const rollDurations = [1.0, 1.4, 1.6];
+    const rollPeakGains = [0.16, 0.13, 0.09];
+    rollDelays.forEach((delay, i) => {
+      const noise = ctx.createBufferSource();
+      noise.buffer = makeNoiseBuffer(ctx, rollDurations[i]);
+      const filter = ctx.createBiquadFilter();
+      filter.type = 'lowpass';
+      filter.frequency.value = 220 - i * 40; // each successive roll reads lower/more distant
+      const gain = ctx.createGain();
+      const t0 = ctx.currentTime + delay;
+      gain.gain.setValueAtTime(0, t0);
+      gain.gain.linearRampToValueAtTime(rollPeakGains[i], t0 + 0.15); // real rolling swell, not a hard attack
+      gain.gain.exponentialRampToValueAtTime(0.001, t0 + rollDurations[i]);
+      noise.connect(filter);
+      filter.connect(gain);
+      gain.connect(ctx.destination);
+      noise.start(t0);
+    });
+  }
 }

@@ -40,6 +40,7 @@ import { applyClipToRig } from '../scene/rig/Clip';
 import type { Rig } from '../scene/rig/Rig';
 import { eatClip } from '../scene/foxClips';
 import { WeatherSystem } from './WeatherSystem';
+import { Lightning } from './Lightning';
 import type { CoronationEntry } from '../leaderboard/CoronationLeaderboard';
 import { DistributedCoronationLeaderboardClient } from '../multiplayer/DistributedLeaderboard';
 import { getDeviceId } from '../multiplayer/DeviceIdentity';
@@ -79,6 +80,8 @@ const MAX_STAMINA = 100; // mirrors PlayerController's own (unexported) MAX_STAM
 // (which would drift/compound if read back after a previous frame's scaling).
 const BASE_HEMI_INTENSITY = 1.9;
 const BASE_MOON_INTENSITY = 2.0;
+const LIGHTNING_FLASH_SECONDS = 0.15; // matches Lightning.ts's own FLASH_SECONDS — a real flash is near-instant
+const LIGHTNING_FLASH_BOOST = 4.5; // a real strike briefly overwhelms even a storm's own dimmer lighting
 
 const MOUNTAIN_LEDGE_RADIUS = 4.5;
 const LEDGE_SNAP_TOLERANCE = 1; // meters of downward drift still counted as "on the ledge" this frame
@@ -301,6 +304,8 @@ export class Game {
   private fox: PlayableCharacter;
   private cameraRig = new CameraRig();
   private weather = new WeatherSystem();
+  private lightning = new Lightning();
+  private lightningFlashUntil = -Infinity;
   private rain: RainSystem = createRainSystem();
   // Set in setupLights() once the real lights exist — kept so weather can scale their intensity
   // live every frame without re-deriving "what was this light's original brightness."
@@ -785,8 +790,27 @@ export class Game {
 
     const weatherSnap = this.weather.update(time);
     (this.scene.fog as THREE.FogExp2).density = this.baseFogDensity * weatherSnap.params.fogMultiplier;
-    this.hemiLight.intensity = BASE_HEMI_INTENSITY * weatherSnap.params.lightMultiplier;
-    this.moonLight.intensity = BASE_MOON_INTENSITY * weatherSnap.params.lightMultiplier;
+    let lightMultiplier = weatherSnap.params.lightMultiplier;
+    // Real thunderstorm identity — the 'storm' condition already darkens/thickens fog/rain, but
+    // had no actual lightning at all until now. Gated strictly on the 'storm' condition, not
+    // just "any rain," since a real thunderstorm is its own distinct weather, not just heavy rain.
+    const { justFlashed, justThundered } = this.lightning.update(
+      delta,
+      weatherSnap.condition === 'storm' ? weatherSnap.params.rainIntensity : 0,
+    );
+    // The flash itself is silent (real lightning is light only) — playThunder() fires
+    // separately, later, once Lightning.ts's own physically-grounded delay elapses.
+    if (justFlashed) this.lightningFlashUntil = time + LIGHTNING_FLASH_SECONDS;
+    if (justThundered) this.audio.playThunder();
+    if (time < this.lightningFlashUntil) {
+      // A real flash is a brief, dramatic OVER-brightening — multiplies on top of whatever the
+      // storm's own dimmer lightMultiplier already is, not a fixed absolute value, so the flash
+      // still reads as "brighter than this storm" rather than always the same fixed brightness
+      // regardless of how dark the current weather already is.
+      lightMultiplier *= LIGHTNING_FLASH_BOOST;
+    }
+    this.hemiLight.intensity = BASE_HEMI_INTENSITY * lightMultiplier;
+    this.moonLight.intensity = BASE_MOON_INTENSITY * lightMultiplier;
     this.audio.setRainIntensity(weatherSnap.params.rainIntensity);
     this.rain.update(this.playerController.body.position, weatherSnap.params.rainIntensity, delta);
 
