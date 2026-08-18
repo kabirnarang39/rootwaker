@@ -30,8 +30,17 @@ export const SPECIES_SKINS: Record<SpeciesId, CharacterSkin[]> = {
   viper: VIPER_SKINS,
 };
 
+// These describe real identity/temperament, not mechanical stats — every playable species
+// currently shares the exact same move speed and attack damage (PlayerController.ts/Combat.ts
+// never branch on species). A real per-species stat split (fox=fastest, bear=hardest-hitting,
+// viper=fast-but-fragile) is a genuine future feature, but a risky one: this project's own enemy
+// AI chase speeds are deliberately hand-tuned against a single fixed player speed of 4.5 m/s (see
+// the WRAITH_CHASE_SPEED/BOAR_CHARGE_SPEED cluster in Game.ts) — making player speed
+// species-dependent would need every one of those balance comments re-verified, not just this
+// screen's copy. The blurbs below were previously making that exact false claim ("the fastest
+// sprint", "hits hardest") with nothing behind it — fixed to describe real character instead.
 export const SPECIES_LABELS: Record<SpeciesId, { name: string; blurb: string }> = {
-  fox: { name: 'Fox', blurb: 'Quick and light-footed — the fastest sprint, the tightest turns.' },
-  bear: { name: 'Bear', blurb: 'Slow, heavy, and hits hardest — a real pacing lumber, not a trot.' },
-  viper: { name: 'Viper', blurb: 'Low and fast across open ground — a real travelling-wave slither.' },
+  fox: { name: 'Fox', blurb: 'Quick, light-footed, and always alert — a real forest courier.' },
+  bear: { name: 'Bear', blurb: 'Heavy and imposing — a real predator\'s presence in the jungle.' },
+  viper: { name: 'Viper', blurb: 'Low, patient, and silent — built to vanish into the undergrowth.' },
 };

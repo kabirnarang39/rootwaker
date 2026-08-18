@@ -1404,4 +1404,29 @@ export class AudioFX {
     splash.start();
     splash.stop(ctx.currentTime + 0.42);
   }
+
+  /** The player fox's own voice — a real short, high-pitched double-yip, distinct from every
+   * predator sound above (all lower and longer): a fox bark is quick, bright, almost bird-like.
+   * Used as the character-select voice preview (CharacterSelect.ts) alongside playBearGrowl/
+   * playViperHiss for the other 2 playable species — previously the only playable species with
+   * no voice of its own anywhere in the game. */
+  playFoxBark(): void {
+    if (!this.ctx) return;
+    const ctx = this.ctx;
+    const yip = (delay: number) => {
+      const osc = ctx.createOscillator();
+      osc.type = 'square';
+      osc.frequency.setValueAtTime(950, ctx.currentTime + delay);
+      osc.frequency.exponentialRampToValueAtTime(600, ctx.currentTime + delay + 0.08);
+      const gain = ctx.createGain();
+      gain.gain.setValueAtTime(0.08, ctx.currentTime + delay);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + delay + 0.09);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(ctx.currentTime + delay);
+      osc.stop(ctx.currentTime + delay + 0.1);
+    };
+    yip(0);
+    yip(0.12);
+  }
 }

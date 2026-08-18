@@ -206,6 +206,13 @@ describe('AudioFX real per-species hurt reactions', () => {
   });
 });
 
+describe('AudioFX player-fox voice', () => {
+  it('playFoxBark does not throw before unlock()', () => {
+    const fx = new AudioFX();
+    expect(() => fx.playFoxBark()).not.toThrow();
+  });
+});
+
 describe('AudioFX real per-species death cries', () => {
   it('playBoarDeath does not throw before unlock()', () => {
     const fx = new AudioFX();

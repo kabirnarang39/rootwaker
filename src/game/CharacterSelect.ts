@@ -1,5 +1,6 @@
 import { SPECIES_SKINS, SPECIES_LABELS } from '../scene/createPlayableCharacter';
 import type { SpeciesId } from '../scene/PlayableCharacter';
+import { AudioFX } from './Audio';
 
 export const SPECIES_ORDER: SpeciesId[] = ['fox', 'bear', 'viper'];
 
@@ -31,6 +32,14 @@ export class CharacterSelect {
 
   private speciesIndex = 0;
   private skinIndexBySpecies: Record<SpeciesId, number> = { fox: 0, bear: 0, viper: 0 };
+  // Real voice preview on card selection — previously this screen only showed name/blurb/skin
+  // swatch, none of a real animal's own identity that the game already gives every species
+  // elsewhere (see Audio.ts's per-species hurt/death/aggro cues). AudioFX itself is always safe
+  // to construct (no AudioContext is created until .unlock()), but this project deliberately runs
+  // its tests against a bare fake-DOM with no AudioContext global at all (see
+  // CharacterSelect.test.ts's own comment) — guarding the actual unlock+play behind a real
+  // environment check keeps every existing card-click test working unchanged.
+  private audio = typeof AudioContext !== 'undefined' ? new AudioFX() : null;
 
   constructor(container: HTMLElement) {
     this.root = document.createElement('div');
@@ -132,6 +141,23 @@ export class CharacterSelect {
   private selectSpecies(species: SpeciesId): void {
     this.speciesIndex = SPECIES_ORDER.indexOf(species);
     this.render();
+    this.playVoicePreview(species);
+  }
+
+  private playVoicePreview(species: SpeciesId): void {
+    if (!this.audio) return;
+    this.audio.unlock(); // real click = a real user gesture, safe to unlock here
+    switch (species) {
+      case 'fox':
+        this.audio.playFoxBark();
+        break;
+      case 'bear':
+        this.audio.playBearGrowl();
+        break;
+      case 'viper':
+        this.audio.playViperHiss();
+        break;
+    }
   }
 
   private cycleSkin(direction: 1 | -1): void {
