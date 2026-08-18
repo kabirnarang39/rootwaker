@@ -1575,6 +1575,15 @@ export class Game {
     this.duelVoice?.stop();
     this.duelVoice = null;
     this.hud.hideDuelVoice();
+    // Real bug found via combination testing: startDuel() explicitly hides the boss bar (so a
+    // duel started mid-King-fight doesn't show a frozen health bar throughout), but nothing ever
+    // brought it back — the King fight's own trigger (`!this.summitGateCrossed`) is a one-time
+    // latch, so it would never fire again. The King fight itself keeps working correctly after
+    // the duel (its update logic just resumes, same "frozen during duel" idiom as everything
+    // else in this file), but the health bar UI would stay gone for the rest of the game.
+    if (this.summitGateCrossed && !this.kingDefeated) {
+      this.hud.showBossBar('King of the Mountain');
+    }
 
     this.hud.showDuelOutcome(won);
     if (won) {
