@@ -8,9 +8,12 @@ export interface PlayableCharacter {
   group: THREE.Group;
   rig: Rig;
   crownGroup: THREE.Group;
-  // `blocking` defaults to false for every existing caller — a real braced/lowered pose overlaid
-  // on top of the normal idle/walk blend (see Game.ts's real Block mechanic), not a separate clip.
-  update(time: number, delta: number, moveSpeed: number, blocking?: boolean): void;
+  // `blocking`/`hurt` both default to false for every existing caller — real pose overlays on
+  // top of the normal idle/walk blend (see Game.ts's Block mechanic and HIT_STAGGER_SECONDS),
+  // neither a separate authored clip. `hurt` wins over `blocking` when both are true (a real
+  // flinch always overrides a held brace visually) — every species applies hurt AFTER blocking
+  // for exactly this reason.
+  update(time: number, delta: number, moveSpeed: number, blocking?: boolean, hurt?: boolean): void;
   revealCrown(): void;
 }
 

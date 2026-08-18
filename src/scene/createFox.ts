@@ -17,6 +17,10 @@ const WALK_SPEED_FOR_FULL_BLEND = 6; // moveSpeed at/above this = fully walkClip
 // forward/down, head tucks further still (a fox lowers its head behind its own raised guard).
 const BLOCK_SPINE_PITCH = 0.35;
 const BLOCK_HEAD_PITCH = 0.25;
+// Real hurt-flinch: a sharp recoil AWAY from the hit — opposite sign from the block pose's
+// forward brace, and applied after it so a flinch always wins visually over a held block.
+const HURT_SPINE_RECOIL = -0.22;
+const HURT_HEAD_RECOIL = -0.3;
 
 /** Builds a custom stylized low-poly fox-spirit on the shared Rig/Clip system — no external model. */
 export function createFox(skin: FoxSkin = SKINS[0]): Fox {
@@ -188,7 +192,7 @@ export function createFox(skin: FoxSkin = SKINS[0]): Fox {
   const glowMaterials = [glowShellMat, glowCoreMat];
   let walkTime = 0;
 
-  function update(time: number, delta: number, moveSpeed: number, blocking = false) {
+  function update(time: number, delta: number, moveSpeed: number, blocking = false, hurt = false) {
     glowMaterials.forEach((m) => {
       (m.uniforms.uTime.value as number) = time;
     });
@@ -202,6 +206,12 @@ export function createFox(skin: FoxSkin = SKINS[0]): Fox {
     if (blocking) {
       rig.setLocalRotation('spine', BLOCK_SPINE_PITCH, 0, 0);
       rig.setLocalRotation('head', BLOCK_HEAD_PITCH, 0, 0);
+    }
+    // Real hurt-flinch (see Game.ts's HIT_STAGGER_SECONDS): applied AFTER blocking, so a real hit
+    // landing mid-block still visibly registers rather than being silently absorbed by the brace.
+    if (hurt) {
+      rig.setLocalRotation('spine', HURT_SPINE_RECOIL, 0, 0);
+      rig.setLocalRotation('head', HURT_HEAD_RECOIL, 0, 0);
     }
   }
 

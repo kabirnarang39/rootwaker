@@ -19,6 +19,7 @@ const DODGE_SPEED = 8;
 const DODGE_SECONDS = 0.35;
 const DODGE_IFRAME_SECONDS = 0.22;
 const DODGE_COOLDOWN_SECONDS = 0.9;
+const HURT_FLINCH_SECONDS = 0.22; // matches Game.ts's own HIT_STAGGER_SECONDS for single-player parity
 
 export interface DuelCombatantInfo {
   species: SpeciesId;
@@ -41,6 +42,10 @@ interface DuelFighter {
   dodgeDirection: THREE.Vector3;
   dodgeInvulnerableUntil: number;
   lastDodgeTime: number;
+  // Real visible hit-flinch, same idiom as Game.ts's single-player staggerUntil — a landed hit
+  // overlays a real recoil pose (see PlayableCharacter.update's hurt param) rather than only
+  // changing the HP number.
+  hurtUntil: number;
 }
 
 type NetMessage =
@@ -109,6 +114,7 @@ function makeFighter(info: DuelCombatantInfo, spawnX: number, spawnZ: number): D
     dodgeDirection: new THREE.Vector3(0, 0, 1),
     dodgeInvulnerableUntil: -Infinity,
     lastDodgeTime: -Infinity,
+    hurtUntil: -Infinity,
   };
 }
 
@@ -290,6 +296,7 @@ export class DuelSession {
     if (resolveMeleeHit(hitbox, defender.combatant)) {
       applyDamage(defender.combatant, move.damage);
       defender.controller.body.position.addScaledVector(forward, knockback);
+      defender.hurtUntil = this.time + HURT_FLINCH_SECONDS;
     }
   }
 
@@ -297,7 +304,10 @@ export class DuelSession {
     for (const fighter of [this.host, this.guest]) {
       fighter.character.group.position.copy(fighter.controller.body.position);
       fighter.character.group.rotation.y = fighter.facingAngle;
-      fighter.character.update(this.time, delta, fighter.controller.moveSpeed);
+      // No real Block mechanic in a duel (see Game.ts's own comment on this), so blocking is
+      // always false here — but a landed hit still gets the same real visible flinch overlay
+      // single-player already has.
+      fighter.character.update(this.time, delta, fighter.controller.moveSpeed, false, this.time < fighter.hurtUntil);
     }
   }
 

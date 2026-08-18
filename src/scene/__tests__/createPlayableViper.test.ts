@@ -39,6 +39,14 @@ describe('createPlayableViper', () => {
     expect(viper.rig.getJoint('head').rotation.x).not.toBeCloseTo(idleHeadX, 2);
   });
 
+  it('hurt=true applies a real recoil flinch (head snaps DOWN/away, opposite the block\'s own upward rear-back threat pose) and overrides a held block', () => {
+    const viper = createPlayableViper();
+    viper.update(0, 1 / 60, 0, false, true);
+    expect(viper.rig.getJoint('head').rotation.x).toBeCloseTo(0.35, 5);
+    viper.update(0, 1 / 60, 0, true, true); // hurt must still win when blocking is also true
+    expect(viper.rig.getJoint('head').rotation.x).toBeCloseTo(0.35, 5);
+  });
+
   it('blocking defaults to false when omitted', () => {
     const viperA = createPlayableViper();
     viperA.update(0, 1 / 60, 0);

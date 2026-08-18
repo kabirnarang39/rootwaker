@@ -38,6 +38,17 @@ describe('createPlayableLion', () => {
     expect(lion.rig.getJoint('spine').rotation.x).toBeGreaterThan(0);
   });
 
+  it('hurt=true applies a real recoil flinch, distinct from and overriding a held block', () => {
+    const lion = createPlayableLion();
+    lion.update(0, 1 / 60, 0, false, false);
+    const idleSpineX = lion.rig.getJoint('spine').rotation.x;
+    lion.update(0, 1 / 60, 0, false, true);
+    const hurtSpineX = lion.rig.getJoint('spine').rotation.x;
+    expect(hurtSpineX).not.toBeCloseTo(idleSpineX, 2);
+    lion.update(0, 1 / 60, 0, true, true); // hurt must still win when blocking is also true
+    expect(lion.rig.getJoint('spine').rotation.x).toBeCloseTo(hurtSpineX, 5);
+  });
+
   it('accepts a real skin and applies its glow color to the chest light', () => {
     const lion = createPlayableLion(LION_SKINS[1]);
     let light: THREE.PointLight | undefined;

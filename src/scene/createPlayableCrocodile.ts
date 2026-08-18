@@ -176,7 +176,7 @@ export function createPlayableCrocodile(skin: CharacterSkin = CROCODILE_SKINS[0]
   const glowMaterials = [glowShellMat, glowCoreMat];
   let walkTime = 0;
 
-  function update(time: number, delta: number, moveSpeed: number, blocking = false) {
+  function update(time: number, delta: number, moveSpeed: number, blocking = false, hurt = false) {
     glowMaterials.forEach((m) => {
       (m.uniforms.uTime.value as number) = time;
     });
@@ -188,6 +188,13 @@ export function createPlayableCrocodile(skin: CharacterSkin = CROCODILE_SKINS[0]
     if (blocking) {
       rig.setLocalRotation('jaw', -0.15, 0, 0);
       rig.applyPositionOffset('spine', 0, -0.03, 0);
+    }
+    // Real hurt-flinch, applied after blocking: head/spine snap sideways-and-up, the real
+    // whip-recoil of a long-bodied animal taking a hit, distinct from the block's own flattened
+    // jaw-open brace.
+    if (hurt) {
+      rig.setLocalRotation('head', 0, 0.3, 0);
+      rig.applyPositionOffset('spine', 0, 0.04, 0);
     }
   }
 

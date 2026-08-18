@@ -146,7 +146,7 @@ export function createPlayableBoar(skin: CharacterSkin = BOAR_SKINS[0]): Playabl
   const glowMaterials = [glowShellMat, glowCoreMat];
   let walkTime = 0;
 
-  function update(time: number, delta: number, moveSpeed: number, blocking = false) {
+  function update(time: number, delta: number, moveSpeed: number, blocking = false, hurt = false) {
     glowMaterials.forEach((m) => {
       (m.uniforms.uTime.value as number) = time;
     });
@@ -158,6 +158,12 @@ export function createPlayableBoar(skin: CharacterSkin = BOAR_SKINS[0]): Playabl
     if (blocking) {
       rig.setLocalRotation('head', 0.3, 0, 0);
       rig.setLocalRotation('spine', 0.12, 0, 0);
+    }
+    // Real hurt-flinch, applied after blocking: head snaps UP and BACK, the opposite direction
+    // from the block's own head-down stance.
+    if (hurt) {
+      rig.setLocalRotation('head', -0.28, 0, 0);
+      rig.setLocalRotation('spine', -0.15, 0, 0);
     }
   }
 

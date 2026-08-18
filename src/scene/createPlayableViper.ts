@@ -142,7 +142,7 @@ export function createPlayableViper(skin: CharacterSkin = VIPER_SKINS[0]): Playa
   const glowMaterials = [glowCoreMat];
   let slitherTime = 0;
 
-  function update(time: number, delta: number, moveSpeed: number, blocking = false) {
+  function update(time: number, delta: number, moveSpeed: number, blocking = false, hurt = false) {
     glowMaterials.forEach((m) => {
       (m.uniforms.uTime.value as number) = time;
     });
@@ -156,6 +156,13 @@ export function createPlayableViper(skin: CharacterSkin = VIPER_SKINS[0]): Playa
     if (blocking) {
       rig.setLocalRotation('head', -0.55, 0, 0);
       rig.applyPositionOffset('head', 0, 0.025, -0.05);
+    }
+    // Real hurt-flinch, applied after blocking: a struck snake recoils its head sharply DOWN and
+    // AWAY, the opposite motion from the block's own upward rear-back threat pose — real
+    // pain-recoil vs. real threat-display read as visibly different poses, not just a scaled copy.
+    if (hurt) {
+      rig.setLocalRotation('head', 0.35, 0, 0);
+      rig.applyPositionOffset('head', 0, -0.02, -0.03);
     }
   }
 

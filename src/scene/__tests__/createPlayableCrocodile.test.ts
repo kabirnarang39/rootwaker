@@ -37,6 +37,17 @@ describe('createPlayableCrocodile', () => {
     expect(croc.rig.getJoint('jaw').rotation.x).not.toBeCloseTo(idleJawX, 2);
   });
 
+  it('hurt=true applies a real recoil flinch, distinct from and overriding a held block', () => {
+    const croc = createPlayableCrocodile();
+    croc.update(0, 1 / 60, 0, false, false);
+    const idleHeadY = croc.rig.getJoint('head').rotation.y;
+    croc.update(0, 1 / 60, 0, false, true);
+    const hurtHeadY = croc.rig.getJoint('head').rotation.y;
+    expect(hurtHeadY).not.toBeCloseTo(idleHeadY, 2);
+    croc.update(0, 1 / 60, 0, true, true); // hurt must still win when blocking is also true
+    expect(croc.rig.getJoint('head').rotation.y).toBeCloseTo(hurtHeadY, 5);
+  });
+
   it('accepts a real skin and applies its glow color to the chest light', () => {
     const croc = createPlayableCrocodile(CROCODILE_SKINS[1]);
     let light: THREE.PointLight | undefined;

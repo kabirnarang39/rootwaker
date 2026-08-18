@@ -988,7 +988,10 @@ export class Game {
     }
 
     this.fox.group.position.copy(this.playerController.body.position);
-    this.fox.update(time, delta, this.playerController.moveSpeed, this.blocking);
+    // Real visible hit-flinch, not just a screen flash — reuses the exact same staggerUntil
+    // window hurtPlayer() already sets (HIT_STAGGER_SECONDS), so the pose and the movement-lock
+    // clear at the same moment.
+    this.fox.update(time, delta, this.playerController.moveSpeed, this.blocking, time < this.staggerUntil);
     if (!this.seaAmbienceStarted) {
       const { min, max } = this.level.chapterBounds;
       const COAST_TRIGGER_MARGIN = 5; // starts once the player is within 5m of any of the island's 4 edges

@@ -37,6 +37,17 @@ describe('createPlayableBoar', () => {
     expect(boar.rig.getJoint('head').rotation.x).not.toBeCloseTo(idleHeadX, 2);
   });
 
+  it('hurt=true applies a real recoil flinch, distinct from and overriding a held block', () => {
+    const boar = createPlayableBoar();
+    boar.update(0, 1 / 60, 0, false, false);
+    const idleHeadX = boar.rig.getJoint('head').rotation.x;
+    boar.update(0, 1 / 60, 0, false, true);
+    const hurtHeadX = boar.rig.getJoint('head').rotation.x;
+    expect(hurtHeadX).not.toBeCloseTo(idleHeadX, 2);
+    boar.update(0, 1 / 60, 0, true, true); // hurt must still win when blocking is also true
+    expect(boar.rig.getJoint('head').rotation.x).toBeCloseTo(hurtHeadX, 5);
+  });
+
   it('accepts a real skin and applies its glow color to the chest light', () => {
     const boar = createPlayableBoar(BOAR_SKINS[1]);
     let light: THREE.PointLight | undefined;

@@ -53,6 +53,18 @@ describe('createFox', () => {
     expect(fox.rig.getJoint('spine').rotation.x).toBeGreaterThan(0);
   });
 
+  it('hurt=true applies a real recoil flinch, distinct from and overriding a held block', () => {
+    const fox = createFox();
+    fox.update(0, 1 / 60, 0, false, false);
+    const idleSpineX = fox.rig.getJoint('spine').rotation.x;
+    fox.update(0, 1 / 60, 0, false, true);
+    const hurtSpineX = fox.rig.getJoint('spine').rotation.x;
+    expect(hurtSpineX).not.toBeCloseTo(idleSpineX, 2);
+    expect(hurtSpineX).toBeLessThan(0); // real recoil is a backward pitch, opposite the block's forward brace
+    fox.update(0, 1 / 60, 0, true, true); // hurt must still win when blocking is also true
+    expect(fox.rig.getJoint('spine').rotation.x).toBeCloseTo(hurtSpineX, 5);
+  });
+
   it('blocking defaults to false when omitted — every pre-Block call site stays byte-identical', () => {
     const foxA = createFox();
     foxA.update(0, 1 / 60, 0);

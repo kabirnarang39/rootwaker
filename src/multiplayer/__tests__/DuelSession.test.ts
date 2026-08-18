@@ -110,6 +110,21 @@ describe('DuelSession', () => {
     expect(h.guest.combatant.hp).toBeLessThan(hpBefore);
   });
 
+  it('as host: a real landed hit sets the defender\'s real visible hurtUntil flinch window (not just an HP change) — same idiom as single-player\'s staggerUntil', () => {
+    const { link } = fakeLink('host');
+    const duel = new DuelSession(link, fox, bear);
+    const h = duel as unknown as {
+      host: FakeFighter;
+      guest: FakeFighter & { hurtUntil: number };
+      time: number;
+    };
+    h.host.controller.body.position.set(0, 0, 0);
+    h.guest.controller.body.position.set(0, 0, 0.6);
+    expect(h.guest.hurtUntil).toBe(-Infinity);
+    duel.update(1 / 60, { x: 0, z: 0, jump: false }, true, false);
+    expect(h.guest.hurtUntil).toBeGreaterThan(h.time);
+  });
+
   it('as host: defeating the guest declares the host the winner, fires onOutcome, and broadcasts the result', () => {
     const { link, sent } = fakeLink('host');
     const duel = new DuelSession(link, fox, bear);

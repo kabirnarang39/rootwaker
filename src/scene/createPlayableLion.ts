@@ -170,7 +170,7 @@ export function createPlayableLion(skin: CharacterSkin = LION_SKINS[0]): Playabl
   const glowMaterials = [glowShellMat, glowCoreMat];
   let walkTime = 0;
 
-  function update(time: number, delta: number, moveSpeed: number, blocking = false) {
+  function update(time: number, delta: number, moveSpeed: number, blocking = false, hurt = false) {
     glowMaterials.forEach((m) => {
       (m.uniforms.uTime.value as number) = time;
     });
@@ -182,6 +182,12 @@ export function createPlayableLion(skin: CharacterSkin = LION_SKINS[0]): Playabl
     if (blocking) {
       rig.setLocalRotation('spine', 0.22, 0, 0);
       rig.setLocalRotation('head', 0.18, 0, 0);
+    }
+    // Real hurt-flinch, applied after blocking: head/spine snap back, opposite the block's own
+    // forward-crouch pitch.
+    if (hurt) {
+      rig.setLocalRotation('spine', -0.2, 0, 0);
+      rig.setLocalRotation('head', -0.26, 0, 0);
     }
   }
 

@@ -11,6 +11,8 @@ const CLAW_COLOR = 0x2a2015;
 const WALK_SPEED_FOR_FULL_BLEND = 5; // a bear's real top speed reads slower than the fox's
 const BLOCK_SPINE_PITCH = 0.35;
 const BLOCK_HEAD_PITCH = 0.25;
+const HURT_SPINE_RECOIL = -0.18; // a real bear's own bulk means a smaller recoil than the fox's, still a real flinch
+const HURT_HEAD_RECOIL = -0.24;
 
 /** Builds the player-controlled Grove Bear — same low-slung anatomy as the enemy version
  * (createGroveBear.ts) with a real quadruped pacing walk, a chest glow core matching the fox's
@@ -149,7 +151,7 @@ export function createPlayableBear(skin: CharacterSkin = BEAR_SKINS[0]): Playabl
   const glowMaterials = [glowShellMat, glowCoreMat];
   let walkTime = 0;
 
-  function update(time: number, delta: number, moveSpeed: number, blocking = false) {
+  function update(time: number, delta: number, moveSpeed: number, blocking = false, hurt = false) {
     glowMaterials.forEach((m) => {
       (m.uniforms.uTime.value as number) = time;
     });
@@ -162,6 +164,11 @@ export function createPlayableBear(skin: CharacterSkin = BEAR_SKINS[0]): Playabl
     if (blocking) {
       rig.setLocalRotation('spine', BLOCK_SPINE_PITCH, 0, 0);
       rig.setLocalRotation('head', BLOCK_HEAD_PITCH, 0, 0);
+    }
+    // Real hurt-flinch, applied after blocking so it always visibly wins — see createFox.ts.
+    if (hurt) {
+      rig.setLocalRotation('spine', HURT_SPINE_RECOIL, 0, 0);
+      rig.setLocalRotation('head', HURT_HEAD_RECOIL, 0, 0);
     }
   }
 

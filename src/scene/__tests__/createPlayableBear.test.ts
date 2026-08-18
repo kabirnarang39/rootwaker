@@ -41,6 +41,18 @@ describe('createPlayableBear', () => {
     expect(bear.rig.getJoint('spine').rotation.x).toBeGreaterThan(0);
   });
 
+  it('hurt=true applies a real recoil flinch, distinct from and overriding a held block (real hit landing mid-block still visibly registers)', () => {
+    const bear = createPlayableBear();
+    bear.update(0, 1 / 60, 0, false, false);
+    const idleSpineX = bear.rig.getJoint('spine').rotation.x;
+    bear.update(0, 1 / 60, 0, false, true);
+    const hurtSpineX = bear.rig.getJoint('spine').rotation.x;
+    expect(hurtSpineX).not.toBeCloseTo(idleSpineX, 2);
+    // hurt applied while also blocking must still win (applied after blocking in the real update())
+    bear.update(0, 1 / 60, 0, true, true);
+    expect(bear.rig.getJoint('spine').rotation.x).toBeCloseTo(hurtSpineX, 5);
+  });
+
   it('blocking defaults to false when omitted — every existing single-player-era call site stays byte-identical', () => {
     const bear = createPlayableBear();
     bear.update(0, 1 / 60, 0);
