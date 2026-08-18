@@ -38,6 +38,7 @@ import { chaseTowardPlayer, horizontalDistance } from './EnemyChase';
 import { applyClipToRig } from '../scene/rig/Clip';
 import { eatClip } from '../scene/foxClips';
 import { WeatherSystem } from './WeatherSystem';
+import { MockCoronationLeaderboardClient, type CoronationEntry } from '../leaderboard/CoronationLeaderboard';
 import { createRainSystem, type RainSystem } from '../scene/createRainSystem';
 
 // Mirrors PlayerController's own (unexported) pounce range so the hunt-prompt lights up
@@ -240,6 +241,14 @@ export class Game {
   private seaAmbienceStarted = false;
   private summitGateCrossed = false;
   private kingDefeated = false;
+  // Real local leaderboard stats — see CoronationLeaderboard.ts. animalsDefeated increments in
+  // resolveDefeat(), the single place every real kill (boar/bear/owl/viper/lion/wraith) routes
+  // through; the King itself isn't counted here (it's the boss, not "an animal defeated").
+  // coronationSeconds is just `time` itself at the moment of victory — Game's own clock starts at
+  // construction, so elapsed animate()-loop time already IS "how long this run took."
+  private animalsDefeated = 0;
+  private coronationLeaderboard = new MockCoronationLeaderboardClient();
+  private playerSpecies: SpeciesId = 'fox';
   // The root-wraith is unkillable and nothing notices (Task 6 Step 7a): nothing ever checked
   // isDefeated(wraith.combatant), so it absorbed hits and kept dealing damage forever past 0 HP.
   // A root-spirit grants no ability on kill, so its enemyEntries() onDefeat only removes it.
@@ -335,6 +344,7 @@ export class Game {
 
   constructor(container: HTMLElement, character: { species: SpeciesId; skinId: string } = { species: 'fox', skinId: FOX_SKINS[0].id }) {
     this.fox = createPlayableCharacter(character.species, character.skinId);
+    this.playerSpecies = character.species;
     this.scene.background = new THREE.Color(0x0a1420);
     this.scene.fog = new THREE.FogExp2(0x0a1420, 0.014);
 
@@ -948,6 +958,15 @@ export class Game {
         this.fox.revealCrown();
         this.hud.setObjective('You are the new King of the Mountain.');
         this.tryShowStoryBeat('coronation');
+
+        const coronationEntry: CoronationEntry = {
+          species: this.playerSpecies,
+          coronationSeconds: time,
+          animalsDefeated: this.animalsDefeated,
+        };
+        this.coronationLeaderboard.submit(coronationEntry).then(({ rank, top }) => {
+          this.hud.showCoronationResult(rank, top, coronationEntry);
+        });
       }
     }
 
@@ -1226,6 +1245,10 @@ export class Game {
       // enemyEntries() only happens inside the DEFERRED onComplete, not yet run) — without this
       // check that would push a second, duplicate ritual for the same kill.
       if (this.beingEaten.has(entry.combatant)) return;
+      // grantsAbility is exactly the field that distinguishes a real huntable animal from the
+      // wraith (a root-spirit, no power, no count) — the leaderboard's animalsDefeated stat
+      // should only count real animals, matching that same established distinction.
+      this.animalsDefeated++;
       this.beingEaten.add(entry.combatant);
       this.eatQueue.push({ combatant: entry.combatant, onComplete: entry.onDefeat });
     } else {

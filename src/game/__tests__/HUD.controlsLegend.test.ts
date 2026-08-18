@@ -170,6 +170,22 @@ describe('HUD boss bar + arc-complete toast — behavior (real HUD instance, fak
     const arcCompleteEl = (hud as unknown as { arcCompleteEl: ReturnType<typeof fakeElement> }).arcCompleteEl;
     expect(arcCompleteEl.classList.contains('rw-visible')).toBe(true);
   });
+
+  it('showCoronationResult renders rank/stats and reveals the panel without throwing', async () => {
+    const { HUD } = await import('../HUD');
+    const hud = new HUD(fakeElement() as unknown as HTMLElement);
+    const myEntry = { species: 'bear' as const, coronationSeconds: 125, animalsDefeated: 7 };
+    const top = [myEntry, { species: 'fox' as const, coronationSeconds: 400, animalsDefeated: 12 }];
+    expect(() => hud.showCoronationResult(1, top, myEntry)).not.toThrow();
+    const h = hud as unknown as {
+      coronationResultEl: ReturnType<typeof fakeElement>;
+      coronationRankEl: ReturnType<typeof fakeElement>;
+      coronationStatsEl: ReturnType<typeof fakeElement>;
+    };
+    expect(h.coronationResultEl.classList.contains('rw-visible')).toBe(true);
+    expect(h.coronationRankEl.textContent).toBe('Rank #1');
+    expect(h.coronationStatsEl.textContent).toBe('2:05 · 7 defeated');
+  });
 });
 
 describe('HUD story beat — behavior (real HUD instance, fake DOM)', () => {

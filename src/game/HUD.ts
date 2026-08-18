@@ -1,5 +1,7 @@
 import type { LeaderboardEntry } from '../leaderboard/LeaderboardClient';
+import type { CoronationEntry } from '../leaderboard/CoronationLeaderboard';
 import type { FoxSkin } from '../scene/skins';
+import { SPECIES_LABELS } from '../scene/createPlayableCharacter';
 import { ABILITIES, ABILITY_SLOTS, type Ability, type AbilityId } from './AbilityKit';
 
 export interface PowerSlotState {
@@ -43,6 +45,11 @@ export class HUD {
   private bossHealthFillEl: HTMLDivElement;
   private arcCompleteEl: HTMLDivElement;
   private arcCompleteTimer: number | null = null;
+  private coronationResultEl: HTMLDivElement;
+  private coronationRankEl: HTMLDivElement;
+  private coronationStatsEl: HTMLDivElement;
+  private coronationListEl: HTMLOListElement;
+  private coronationResultTimer: number | null = null;
   private storyBeatEl: HTMLDivElement;
   private storyEyebrowEl: HTMLDivElement;
   private storyTextEl: HTMLDivElement;
@@ -123,6 +130,13 @@ export class HUD {
       <div class="rw-arc-complete">
         <div class="rw-arc-eyebrow">Arc Complete</div>
         <div class="rw-arc-title">The summit gate swings open</div>
+      </div>
+      <div class="rw-coronation-result">
+        <div class="rw-coronation-eyebrow">Coronation Record</div>
+        <div class="rw-coronation-rank"></div>
+        <div class="rw-coronation-stats"></div>
+        <ol class="rw-coronation-list"></ol>
+        <div class="rw-coronation-note">Local to this device only — not a shared leaderboard.</div>
       </div>
       <div class="rw-controls-legend">
         <div class="rw-legend-eyebrow">Controls</div>
@@ -530,6 +544,60 @@ export class HUD {
         .rw-arc-complete.rw-visible { animation: none; opacity: 1; transform: translate(-50%, -50%); }
       }
 
+      /* The coronation-record panel: fires alongside rw-arc-complete but positioned well below it
+         (top offset, not the same 50% center) so the two never overlap even though both can be
+         visible at once — this is the real payoff of the new local leaderboard (see
+         CoronationLeaderboard.ts), shown at the exact moment the King falls. Amber-accented
+         (matches the ability/legend key-badge amber) rather than arc-complete's ember, so the two
+         climax beats read as related but distinct. Longer hold (7s) than any other toast in the
+         file — this one has real numbers to actually read, not just a title. */
+      .rw-coronation-result {
+        position: fixed; top: calc(50% + 130px); left: 50%; z-index: 15;
+        display: none; pointer-events: none; text-align: center;
+        font-family: var(--body-face); color: var(--parchment);
+        min-width: 240px; max-width: min(320px, 86vw);
+        padding: 14px 24px 12px;
+        background: linear-gradient(180deg, rgba(20,13,9,0.82), rgba(7,10,8,0.95));
+        border-top: 1px solid rgba(255,177,94,0.55);
+        box-shadow: 0 0 26px rgba(255,177,94,0.3), 0 14px 34px rgba(0,0,0,0.5);
+        clip-path: polygon(3% 0, 97% 0, 100% 100%, 0% 100%);
+      }
+      .rw-coronation-result.rw-visible {
+        display: block;
+        animation: rw-coronation-toast 7000ms cubic-bezier(0.16, 1, 0.3, 1) both;
+      }
+      .rw-coronation-eyebrow {
+        text-transform: uppercase; font-size: 9px; letter-spacing: 0.16em;
+        color: var(--spirit-amber); opacity: 0.9; margin-bottom: 4px;
+      }
+      .rw-coronation-rank {
+        font-family: var(--display-face); font-weight: 600; font-size: 17px;
+        margin-bottom: 3px;
+      }
+      .rw-coronation-stats {
+        font-family: var(--mono-face); font-size: 11px; opacity: 0.8; margin-bottom: 8px;
+      }
+      .rw-coronation-list {
+        list-style: none; margin: 0 0 8px; padding: 0;
+        font-family: var(--mono-face); font-size: 10px; text-align: left;
+        display: flex; flex-direction: column; gap: 2px;
+      }
+      .rw-coronation-list li {
+        display: flex; justify-content: space-between; opacity: 0.75;
+      }
+      .rw-coronation-list li.rw-coronation-me { opacity: 1; color: var(--spirit-amber); }
+      .rw-coronation-note {
+        font-size: 9px; opacity: 0.5; font-style: italic;
+      }
+      @keyframes rw-coronation-toast {
+        0% { opacity: 0; transform: translate(-50%, calc(-50% + 14px)) scale(0.97); }
+        8%, 90% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+        100% { opacity: 0; transform: translate(-50%, calc(-50% + 10px)) scale(0.98); }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .rw-coronation-result.rw-visible { animation: none; opacity: 1; transform: translate(-50%, -50%); }
+      }
+
       /* Controls legend: opposite corner from the vitality/stamina cluster, same carved-bark
          plaque trapezoid and idle-amber key-badge treatment as the hunt prompt (rw-hunt-key)
          rather than a new visual language. Visible by default (a fresh player needs it before
@@ -774,6 +842,10 @@ export class HUD {
     this.bossNameEl = this.root.querySelector('.rw-boss-name')!;
     this.bossHealthFillEl = this.root.querySelector('.rw-boss-fill')!;
     this.arcCompleteEl = this.root.querySelector('.rw-arc-complete')!;
+    this.coronationResultEl = this.root.querySelector('.rw-coronation-result')!;
+    this.coronationRankEl = this.root.querySelector('.rw-coronation-rank')!;
+    this.coronationStatsEl = this.root.querySelector('.rw-coronation-stats')!;
+    this.coronationListEl = this.root.querySelector('.rw-coronation-list')!;
     this.storyBeatEl = this.root.querySelector('.rw-story-beat')!;
     this.storyEyebrowEl = this.root.querySelector('.rw-story-eyebrow')!;
     this.storyTextEl = this.root.querySelector('.rw-story-text')!;
@@ -1098,6 +1170,42 @@ export class HUD {
       this.arcCompleteEl.classList.remove('rw-visible');
       this.arcCompleteTimer = null;
     }, 4000);
+  }
+
+  /** The local coronation-leaderboard payoff — fires alongside showArcComplete() at the exact
+   * moment the King falls (see Game.ts). `myEntry` is matched against `top` by reference so the
+   * player's own row can be highlighted even if another identical-looking entry exists. */
+  showCoronationResult(rank: number, top: CoronationEntry[], myEntry: CoronationEntry): void {
+    const minutes = Math.floor(myEntry.coronationSeconds / 60);
+    const seconds = Math.floor(myEntry.coronationSeconds % 60);
+    this.coronationRankEl.textContent = `Rank #${rank}`;
+    this.coronationStatsEl.textContent =
+      `${minutes}:${String(seconds).padStart(2, '0')} · ${myEntry.animalsDefeated} defeated`;
+
+    this.coronationListEl.innerHTML = '';
+    top.slice(0, 5).forEach((entry, i) => {
+      const li = document.createElement('li');
+      if (entry === myEntry) li.classList.add('rw-coronation-me');
+      const m = Math.floor(entry.coronationSeconds / 60);
+      const s = Math.floor(entry.coronationSeconds % 60);
+      const nameSpan = document.createElement('span');
+      nameSpan.textContent = `#${i + 1} ${SPECIES_LABELS[entry.species].name}`;
+      const timeSpan = document.createElement('span');
+      timeSpan.textContent = `${m}:${String(s).padStart(2, '0')}`;
+      li.appendChild(nameSpan);
+      li.appendChild(timeSpan);
+      this.coronationListEl.appendChild(li);
+    });
+
+    this.coronationResultEl.classList.remove('rw-visible');
+    void this.coronationResultEl.offsetWidth;
+    this.coronationResultEl.classList.add('rw-visible');
+
+    if (this.coronationResultTimer !== null) window.clearTimeout(this.coronationResultTimer);
+    this.coronationResultTimer = window.setTimeout(() => {
+      this.coronationResultEl.classList.remove('rw-visible');
+      this.coronationResultTimer = null;
+    }, 7000);
   }
 
   showGameOver(distance: number, motes: number, score: number) {
