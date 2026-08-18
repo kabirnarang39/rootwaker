@@ -57,8 +57,15 @@ describe('SaveGame', () => {
     const save = new SaveGame();
     await save.save(sampleState);
     const raw = localStorage.getItem('rootwaker.save.v1')!;
-    expect(raw).not.toContain('bear');
-    expect(raw).not.toContain('animalsDefeated');
+    // Checks the real JSON key:value structure, not a bare short word — a bare 3-4 char
+    // substring like "bear" has a real, non-negligible chance of appearing by pure coincidence
+    // in ~200 characters of random-looking base64 ciphertext (confirmed live: this exact class
+    // of check flaked a real CI run with a different short substring in a sibling test file).
+    // The full structural substring below is long enough that a chance collision is effectively
+    // impossible, while still proving the real thing this test cares about: the stored blob
+    // isn't naive plaintext JSON.
+    expect(raw).not.toContain(`"species":"${sampleState.species}"`);
+    expect(raw).not.toContain('"animalsDefeated"');
     // But it IS real structured payload (iv + ciphertext), not garbage.
     const payload = JSON.parse(raw);
     expect(typeof payload.iv).toBe('string');

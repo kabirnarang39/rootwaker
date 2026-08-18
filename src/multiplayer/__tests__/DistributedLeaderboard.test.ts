@@ -135,8 +135,14 @@ describe('DistributedCoronationLeaderboardClient', () => {
     const client = new DistributedCoronationLeaderboardClient();
     await client.submit({ species: 'fox', coronationSeconds: 450, animalsDefeated: 4 });
     const raw = localStorage.getItem('rootwaker.world-leaderboard.v1')!;
-    expect(raw).not.toContain('fox');
-    expect(raw).not.toContain('450');
+    // Checks the real JSON key:value structure, not a bare short word/number — a bare 3-char
+    // substring like "fox" or "450" has a real, non-negligible chance of appearing by pure
+    // coincidence in ~200+ characters of random-looking base64 ciphertext (confirmed live: this
+    // exact class of check flaked a real CI run). The full structural substrings below are long
+    // enough that a chance collision is effectively impossible, while still proving the real
+    // thing this test cares about: the stored blob isn't naive plaintext JSON.
+    expect(raw).not.toContain('"species":"fox"');
+    expect(raw).not.toContain('"coronationSeconds":450');
   });
 
   it('a second client instance loads the persisted encrypted state back (cross-session, not per-instance memory)', async () => {
