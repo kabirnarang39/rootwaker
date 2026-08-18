@@ -1581,4 +1581,89 @@ export class AudioFX {
     gain.connect(ctx.destination);
     noise.start();
   }
+
+  /** The monkey's own real ambient chatter — a real primate "oo-ah" pitched call, richer and
+   * more tonal than playSquirrelChatter's flat uniform clicks (a squirrel's alarm is percussive;
+   * a real monkey's call actually bends pitch up then down within each syllable). 3 real
+   * oo-ah syllables, staggered, each one a genuine pitch glide rather than a fixed tone. */
+  playMonkeyChatter(): void {
+    if (!this.ctx) return;
+    const ctx = this.ctx;
+    const syllableCount = 3;
+    const syllableSpacing = 0.22;
+    for (let i = 0; i < syllableCount; i++) {
+      const t0 = ctx.currentTime + i * syllableSpacing;
+      const osc = ctx.createOscillator();
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(420, t0);
+      osc.frequency.linearRampToValueAtTime(680, t0 + 0.06); // "oo" rising
+      osc.frequency.linearRampToValueAtTime(340, t0 + 0.14); // "-ah" falling
+      const gain = ctx.createGain();
+      gain.gain.setValueAtTime(0, t0);
+      gain.gain.linearRampToValueAtTime(0.07, t0 + 0.03);
+      gain.gain.linearRampToValueAtTime(0, t0 + 0.15);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(t0);
+      osc.stop(t0 + 0.16);
+    }
+  }
+
+  /** The monkey's own real hurt reaction — a sharp, high-pitched yelp, distinct from the
+   * chatter's own gentler pitch glide (pain is a hard-attack shriek, not a call). */
+  playMonkeyHurt(): void {
+    if (!this.ctx) return;
+    const ctx = this.ctx;
+    const osc = ctx.createOscillator();
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(950, ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(500, ctx.currentTime + 0.13);
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0.09, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.14);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.16);
+  }
+
+  /** The monkey's own real death cry — a falling shriek that fades over 0.5s, the troop's own
+   * alarm register but stretched into a final descending cry rather than the hurt yelp's quick
+   * snap. */
+  playMonkeyDeath(): void {
+    if (!this.ctx) return;
+    const ctx = this.ctx;
+    const osc = ctx.createOscillator();
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(900, ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(200, ctx.currentTime + 0.5);
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0.1, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.52);
+  }
+
+  /** Monkey Dash's own real activation cue — a quick double-chirp burst, matching the species'
+   * own fast/darting identity (every other activation cue in this file is a single heavier
+   * whoosh/crack; this is the lightest, fastest one, on purpose). */
+  playMonkeyDashActivate(): void {
+    if (!this.ctx) return;
+    const ctx = this.ctx;
+    for (const delay of [0, 0.07]) {
+      const osc = ctx.createOscillator();
+      osc.type = 'square';
+      osc.frequency.setValueAtTime(1100, ctx.currentTime + delay);
+      osc.frequency.exponentialRampToValueAtTime(700, ctx.currentTime + delay + 0.05);
+      const gain = ctx.createGain();
+      gain.gain.setValueAtTime(0.06, ctx.currentTime + delay);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + delay + 0.06);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(ctx.currentTime + delay);
+      osc.stop(ctx.currentTime + delay + 0.07);
+    }
+  }
 }

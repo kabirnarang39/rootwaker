@@ -179,7 +179,7 @@ export class HUD {
         <div class="rw-legend-row"><span class="rw-legend-key">L</span><span class="rw-legend-label">Pounce</span></div>
         <div class="rw-legend-row"><span class="rw-legend-key">Drag</span><span class="rw-legend-label">Look</span></div>
         <div class="rw-legend-row"><span class="rw-legend-key">C</span><span class="rw-legend-label">View</span></div>
-        <div class="rw-legend-row"><span class="rw-legend-key">1 – 9</span><span class="rw-legend-label">Powers</span></div>
+        <div class="rw-legend-row"><span class="rw-legend-key">1 – 0</span><span class="rw-legend-label">Powers</span></div>
         <div class="rw-legend-row"><span class="rw-legend-key">M</span><span class="rw-legend-label">Challenge</span></div>
         <div class="rw-legend-row"><span class="rw-legend-key">O</span><span class="rw-legend-label">Leaderboard</span></div>
         <div class="rw-legend-row"><span class="rw-legend-key">T</span><span class="rw-legend-label">Duel Chat</span></div>

@@ -14,6 +14,7 @@ import { createCrocodile, type Crocodile } from '../entities/createCrocodile';
 import { createDuskFinchFlock, type DuskFinchFlock } from '../entities/createDuskFinchFlock';
 import { createFishSchool } from '../entities/createFishSchool';
 import { createShark, type Shark } from '../entities/createShark';
+import { createMonkey, type Monkey } from '../entities/createMonkey';
 import { TreeObstacleGrid, type TreeObstacle } from './TreeObstacleGrid';
 
 export interface ClimbableWall {
@@ -66,6 +67,7 @@ export interface JungleLevel {
   lions: Lion[];
   squirrels: GroveSquirrel[];
   crocodiles: Crocodile[];
+  monkeys: Monkey[];
   finchFlock: DuskFinchFlock;
   // Not exposed by DuskFinchFlock itself (its `group` stays at local origin — each finch's own
   // rig.root carries its real world position) — Game.ts needs this to compute distanceToPlayer
@@ -1089,6 +1091,7 @@ function buildWildlife(
   lions: Lion[];
   squirrels: GroveSquirrel[];
   crocodiles: Crocodile[];
+  monkeys: Monkey[];
   finchFlock: DuskFinchFlock;
   finchFlockCenter: THREE.Vector3;
 } {
@@ -1134,9 +1137,16 @@ function buildWildlife(
     crocodile.group.position.copy(randomWaterEdgePosition(heightAt, water, wallBounds));
     return crocodile;
   });
+  // Real monkeys travel in a small troop, not scattered solo like the lion/crocodile's
+  // deliberate rarity — a real social-group count, matching the hare/squirrel's own 3-4 range.
+  const monkeys = Array.from({ length: 3 }, () => {
+    const monkey = createMonkey();
+    monkey.group.position.copy(randomPlaceablePosition(heightAt, water, wallBounds));
+    return monkey;
+  });
   const finchFlockCenter = randomPlaceablePosition(heightAt, water, wallBounds);
   const finchFlock = createDuskFinchFlock(finchFlockCenter, FINCH_FLOCK_COUNT);
-  return { hares, boars, bears, owls, vipers, lions, squirrels, crocodiles, finchFlock, finchFlockCenter };
+  return { hares, boars, bears, owls, vipers, lions, squirrels, crocodiles, monkeys, finchFlock, finchFlockCenter };
 }
 
 export function createJungleLevel(): JungleLevel {
@@ -1166,11 +1176,8 @@ export function createJungleLevel(): JungleLevel {
   const groundClutterMeshes = buildGroundClutter(heightAt, water, wall.bounds);
   group.add(...groundClutterMeshes);
 
-  const { hares, boars, bears, owls, vipers, lions, squirrels, crocodiles, finchFlock, finchFlockCenter } = buildWildlife(
-    heightAt,
-    water,
-    wall.bounds,
-  );
+  const { hares, boars, bears, owls, vipers, lions, squirrels, crocodiles, monkeys, finchFlock, finchFlockCenter } =
+    buildWildlife(heightAt, water, wall.bounds);
   group.add(...hares.map((hare) => hare.group));
   group.add(...boars.map((boar) => boar.group));
   group.add(...bears.map((bear) => bear.group));
@@ -1179,6 +1186,7 @@ export function createJungleLevel(): JungleLevel {
   group.add(...lions.map((lion) => lion.group));
   group.add(...squirrels.map((squirrel) => squirrel.group));
   group.add(...crocodiles.map((crocodile) => crocodile.group));
+  group.add(...monkeys.map((monkey) => monkey.group));
   group.add(finchFlock.group);
 
   const mountain = buildMountain(-12, 8, wall.topY);
@@ -1228,6 +1236,7 @@ export function createJungleLevel(): JungleLevel {
     lions,
     squirrels,
     crocodiles,
+    monkeys,
     finchFlock,
     finchFlockCenter,
     obstacleGrid,

@@ -235,6 +235,28 @@ describe('AudioFX shark (living sea)', () => {
   });
 });
 
+describe('AudioFX monkey', () => {
+  it('playMonkeyChatter does not throw before unlock()', () => {
+    const fx = new AudioFX();
+    expect(() => fx.playMonkeyChatter()).not.toThrow();
+  });
+
+  it('playMonkeyHurt does not throw before unlock()', () => {
+    const fx = new AudioFX();
+    expect(() => fx.playMonkeyHurt()).not.toThrow();
+  });
+
+  it('playMonkeyDeath does not throw before unlock()', () => {
+    const fx = new AudioFX();
+    expect(() => fx.playMonkeyDeath()).not.toThrow();
+  });
+
+  it('playMonkeyDashActivate does not throw before unlock()', () => {
+    const fx = new AudioFX();
+    expect(() => fx.playMonkeyDashActivate()).not.toThrow();
+  });
+});
+
 describe('AudioFX weather', () => {
   it('playThunder does not throw before unlock()', () => {
     const fx = new AudioFX();

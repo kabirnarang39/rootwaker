@@ -7,7 +7,8 @@ export type AbilityId =
   | 'viper-venom'
   | 'lion-pounce'
   | 'croc-lunge'
-  | 'shark-bite';
+  | 'shark-bite'
+  | 'monkey-dash';
 
 export interface Ability {
   id: AbilityId;
@@ -81,9 +82,16 @@ export const ABILITIES: Record<AbilityId, Ability> = {
     cooldownSeconds: 5,
     key: '9',
   },
+  'monkey-dash': {
+    id: 'monkey-dash',
+    name: 'Monkey Dash',
+    description: 'A quick, darting strike learned from the jungle monkey\'s own real quickness.',
+    cooldownSeconds: 3, // this species' own fastest real recovery — the shortest cooldown in the game, on purpose
+    key: '0',
+  },
 };
 
-// Fixed HUD/keybind order — Digit1..Digit9 map to this array by index.
+// Fixed HUD/keybind order — Digit1..Digit9, Digit0 map to this array by index.
 export const ABILITY_SLOTS: AbilityId[] = [
   'keen-ear',
   'boar-charge',
@@ -94,6 +102,7 @@ export const ABILITY_SLOTS: AbilityId[] = [
   'lion-pounce',
   'croc-lunge',
   'shark-bite',
+  'monkey-dash',
 ];
 
 export class AbilityKit {

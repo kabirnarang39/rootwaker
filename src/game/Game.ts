@@ -14,6 +14,7 @@ import { getBoarHitbox } from '../entities/tuskBoar';
 import { getGroveBearHitbox } from '../entities/createGroveBear';
 import { getCrocodileHitbox } from '../entities/createCrocodile';
 import { getSharkHitbox } from '../entities/createShark';
+import { getMonkeyHitbox } from '../entities/createMonkey';
 import { getElderBearKingHitbox } from '../entities/createElderBearKing';
 import { getCanopyOwlHitbox } from '../entities/createCanopyOwl';
 import { getVineViperHitbox } from '../entities/createVineViper';
@@ -152,6 +153,13 @@ const SHARK_BITE_DAMAGE = 22;
 const SHARK_BITE_RADIUS = 0.65;
 const SHARK_BITE_REACH = 2.2;
 const SHARK_BITE_KNOCKBACK = 1.6;
+// Monkey Dash: same dash+meleeSweep mechanism, real quick short-range darting strike — lighter
+// damage/knockback than every other lunge power, matching the species' own smaller real scale.
+const MONKEY_DASH_SECONDS = 0.18;
+const MONKEY_DASH_DAMAGE = 12;
+const MONKEY_DASH_RADIUS = 0.5;
+const MONKEY_DASH_REACH = 1.6;
+const MONKEY_DASH_KNOCKBACK = 1.0;
 const HEAVY_SWIPE_RADIUS = 0.9;
 const HEAVY_SWIPE_REACH = 1.3;
 const HEAVY_SWIPE_KNOCKBACK = 0.6;
@@ -243,6 +251,12 @@ const SHARK_HIT_DAMAGE = 16;
 // well below the surface, not skimming it; this keeps it a genuine mid-water presence.
 const SHARK_MIN_DEPTH_BELOW_SURFACE = 1;
 const SHARK_MAX_DEPTH_BELOW_SURFACE = 4;
+
+// Monkey: real quick-darting quadruped movement — same two-gear idiom as boar/lion/crocodile,
+// but both gears are faster than any of them, matching a real smaller/quicker animal's own pace.
+const MONKEY_SCAMPER_SPEED = 3.0;
+const MONKEY_DART_SPEED = 6.5;
+const MONKEY_HIT_DAMAGE = 8; // deliberately the lightest hit in the game — a real small animal's own bite, not an apex predator's
 
 // Owl's Descent: a real forward-and-down leap (mirrors the boar-charge dash idiom — a direct
 // position override for the leap window, falling through to the same obstacle/water checks).
@@ -390,6 +404,7 @@ export class Game {
   private prevBearAiState = new WeakMap<object, string>();
   private prevCrocAiState = new WeakMap<object, string>();
   private prevSharkAiState = new WeakMap<object, string>();
+  private prevMonkeyAiState = new WeakMap<object, string>();
   private prevSquirrelState = new WeakMap<object, string>();
   private prevFinchFlockState: FlockState = 'perched';
   private prevWraithAiState = 'idle'; // single instance — no WeakMap needed, unlike the arrays above
@@ -579,6 +594,15 @@ export class Game {
       if (action === 'ability5') this.tryActivateAbility(ABILITY_SLOTS[4]);
       if (action === 'ability6') this.tryActivateAbility(ABILITY_SLOTS[5]);
       if (action === 'ability7') this.tryActivateAbility(ABILITY_SLOTS[6]);
+      // ability8/9/10 (croc-lunge/shark-bite/monkey-dash) — found missing while wiring monkey-
+      // dash in: ability1-7 were wired here, but 8 and 9 (added across the crocodile and shark
+      // passes) never were, so those two abilities could never actually be activated by keypress
+      // even once unlocked, despite AbilityKit/Input both correctly supporting them in
+      // isolation. A real gap that slipped through 2 previous passes' own live verification,
+      // caught only now by re-reading this exact dispatch block while adding a 3rd new slot.
+      if (action === 'ability8') this.tryActivateAbility(ABILITY_SLOTS[7]);
+      if (action === 'ability9') this.tryActivateAbility(ABILITY_SLOTS[8]);
+      if (action === 'ability10') this.tryActivateAbility(ABILITY_SLOTS[9]);
     });
 
     this.hud = new HUD(container);
@@ -1236,6 +1260,27 @@ export class Game {
       }
     }
 
+    for (const monkey of this.level.monkeys) {
+      if (this.beingEaten.has(monkey.combatant)) continue;
+      const monkeyDistance = horizontalDistance(monkey.group.position, this.playerController.body.position);
+      const prevMonkeyAiState = this.prevMonkeyAiState.get(monkey.ai);
+      monkey.update(time, delta, monkeyDistance);
+      if (monkey.ai.state === 'telegraph' && prevMonkeyAiState !== 'telegraph') {
+        this.audio.playMonkeyChatter();
+        this.tryShowStoryBeat('monkey');
+      }
+      this.prevMonkeyAiState.set(monkey.ai, monkey.ai.state);
+      if (monkey.ai.state !== 'idle') {
+        const monkeySpeed = monkey.ai.state === 'telegraph' ? MONKEY_DART_SPEED : MONKEY_SCAMPER_SPEED;
+        chaseTowardPlayer(monkey.group.position, this.playerController.body.position, monkeySpeed, delta, monkey.ai.strikeRange);
+      }
+      monkey.group.position.y = this.level.groundHeightAt(monkey.group.position.x, monkey.group.position.z);
+      if (monkey.ai.shouldDealDamageThisFrame()) {
+        const hit = resolveMeleeHit(getMonkeyHitbox(monkey), this.playerCombatant);
+        if (hit) this.hurtPlayer(MONKEY_HIT_DAMAGE);
+      }
+    }
+
     for (const owl of this.level.owls) {
       if (this.beingEaten.has(owl.combatant)) continue;
       // horizontalDistance, not the 3D .distanceTo() this loop used before Task 6's own live
@@ -1738,6 +1783,25 @@ export class Game {
       });
     }
 
+    for (const monkey of this.level.monkeys) {
+      entries.push({
+        combatant: monkey.combatant,
+        position: monkey.group.position,
+        ai: monkey.ai,
+        rig: monkey.rig,
+        stunnable: true,
+        grantsAbility: 'monkey-dash',
+        onDefeat: () => {
+          // Deliberately NOT this.level.group.remove(monkey.group) — see the boar's own onDefeat
+          // comment above for why: a real kill leaves a real corpse behind.
+          const idx = this.level.monkeys.indexOf(monkey);
+          if (idx !== -1) this.level.monkeys.splice(idx, 1);
+          this.abilityKit.unlock('monkey-dash');
+          this.venom.clear(monkey.combatant);
+        },
+      });
+    }
+
     // A combatant mid-eat-ritual is already dead — exclude it from every consumer at the one
     // source (melee, King's Roar, Owl's Descent AOE, and the venom-tick lookup all read this
     // list), rather than teaching each of them about beingEaten individually.
@@ -1958,6 +2022,9 @@ export class Game {
       case 'shark-bite':
         this.audio.playSharkDeath();
         return;
+      case 'monkey-dash':
+        this.audio.playMonkeyDeath();
+        return;
     }
   }
 
@@ -2022,6 +2089,14 @@ export class Game {
         if (rig.hasJoint('jaw')) rig.setLocalRotation('jaw', -0.3, 0, 0);
         if (rig.hasJoint('tail0')) rig.setLocalRotation('tail0', 0, 0.4, 0);
         return;
+      case 'monkey-dash':
+        // A real small animal's collapse — the whole body curls inward, head drops, tail goes
+        // slack (a live monkey's tail is never fully limp). Distinct from every larger species'
+        // own heavier slump: this is a light, quick fold, matching its own smaller real scale.
+        rig.setLocalRotation('spine', 0.4, 0, 0.3);
+        rig.setLocalRotation('head', 0.35, 0.1, 0);
+        if (rig.hasJoint('tail0')) rig.setLocalRotation('tail0', 0.5, 0, 0);
+        return;
     }
   }
 
@@ -2053,6 +2128,9 @@ export class Game {
         return;
       case 'shark-bite':
         this.audio.playSharkHurt();
+        return;
+      case 'monkey-dash':
+        this.audio.playMonkeyHurt();
         return;
     }
     if (entry.combatant === this.wraith.combatant) {
@@ -2159,6 +2237,12 @@ export class Game {
         this.dashDirection.copy(this.facingForward());
         this.audio.playSharkBiteActivate();
         this.meleeSweep(SHARK_BITE_DAMAGE, SHARK_BITE_RADIUS, SHARK_BITE_REACH, SHARK_BITE_KNOCKBACK);
+        break;
+      case 'monkey-dash':
+        this.dashEndTime = time + MONKEY_DASH_SECONDS;
+        this.dashDirection.copy(this.facingForward());
+        this.audio.playMonkeyDashActivate();
+        this.meleeSweep(MONKEY_DASH_DAMAGE, MONKEY_DASH_RADIUS, MONKEY_DASH_REACH, MONKEY_DASH_KNOCKBACK);
         break;
     }
   }

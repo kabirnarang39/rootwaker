@@ -54,6 +54,7 @@ describe('AbilityKit', () => {
       'lion-pounce',
       'croc-lunge',
       'shark-bite',
+      'monkey-dash',
     ]);
   });
 
@@ -73,6 +74,12 @@ describe('AbilityKit', () => {
     expect(ABILITIES['shark-bite'].key).toBe('9');
     expect(ABILITIES['shark-bite'].cooldownSeconds).toBe(5);
     expect(ABILITY_SLOTS[8]).toBe('shark-bite');
+  });
+
+  it('monkey-dash is registered with the right key, cooldown, and slot order', () => {
+    expect(ABILITIES['monkey-dash'].key).toBe('0');
+    expect(ABILITIES['monkey-dash'].cooldownSeconds).toBe(3);
+    expect(ABILITY_SLOTS[9]).toBe('monkey-dash');
   });
 
   it('owl-dive and viper-venom activate/cooldown like every other ability once unlocked', () => {
