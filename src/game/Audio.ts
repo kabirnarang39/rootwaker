@@ -53,6 +53,63 @@ export class AudioFX {
     this.tone(55, 0.5, 'square', 0.08, 0.03);
   }
 
+  /** The real killing-blow cue — deliberately heavier and more final than playHit (a normal
+   * connecting hit) or any ability-activation cue: a sharp filtered-noise crack for the impact
+   * instant, a deep sub-bass boom for weight, and a low decaying rumble tail standing in for the
+   * body drop — three real layers, not one sound scaled louder. Fires from resolveDefeat(), the
+   * single funnel every real kill (melee, venom, AOE) already routes through, so it's universal
+   * across every kill source without special-casing each one. */
+  playKnockout(): void {
+    if (!this.ctx) return;
+    const ctx = this.ctx;
+
+    // Layer 1: a sharp crack — the instant of impact.
+    const crack = ctx.createBufferSource();
+    crack.buffer = makeNoiseBuffer(ctx, 0.12);
+    const crackFilter = ctx.createBiquadFilter();
+    crackFilter.type = 'bandpass';
+    crackFilter.frequency.setValueAtTime(1400, ctx.currentTime);
+    crackFilter.Q.value = 2.5;
+    const crackGain = ctx.createGain();
+    crackGain.gain.setValueAtTime(0.22, ctx.currentTime);
+    crackGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.1);
+    crack.connect(crackFilter);
+    crackFilter.connect(crackGain);
+    crackGain.connect(ctx.destination);
+    crack.start();
+
+    // Layer 2: a deep sub-bass boom — real weight behind the crack, arriving a beat after it
+    // (a fighting-game "impact frame" cue, not simultaneous with the crack).
+    const boom = ctx.createOscillator();
+    boom.type = 'sine';
+    boom.frequency.setValueAtTime(70, ctx.currentTime + 0.03);
+    boom.frequency.exponentialRampToValueAtTime(28, ctx.currentTime + 0.4);
+    const boomGain = ctx.createGain();
+    boomGain.gain.setValueAtTime(0.001, ctx.currentTime + 0.03);
+    boomGain.gain.linearRampToValueAtTime(0.24, ctx.currentTime + 0.06);
+    boomGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5);
+    boom.connect(boomGain);
+    boomGain.connect(ctx.destination);
+    boom.start(ctx.currentTime + 0.03);
+    boom.stop(ctx.currentTime + 0.52);
+
+    // Layer 3: a low decaying rumble tail — stands in for the body's real weight settling,
+    // giving the kill a sense of finality rather than ending abruptly with the boom.
+    const rumble = ctx.createBufferSource();
+    rumble.buffer = makeNoiseBuffer(ctx, 0.6);
+    const rumbleFilter = ctx.createBiquadFilter();
+    rumbleFilter.type = 'lowpass';
+    rumbleFilter.frequency.setValueAtTime(180, ctx.currentTime + 0.1);
+    const rumbleGain = ctx.createGain();
+    rumbleGain.gain.setValueAtTime(0.001, ctx.currentTime + 0.1);
+    rumbleGain.gain.linearRampToValueAtTime(0.09, ctx.currentTime + 0.15);
+    rumbleGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.65);
+    rumble.connect(rumbleFilter);
+    rumbleFilter.connect(rumbleGain);
+    rumbleGain.connect(ctx.destination);
+    rumble.start(ctx.currentTime + 0.1);
+  }
+
   playBiomeShift() {
     this.tone(220, 1.2, 'sine', 0.05);
     this.tone(330, 1.4, 'sine', 0.04, 0.15);

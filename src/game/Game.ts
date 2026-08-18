@@ -1583,6 +1583,10 @@ export class Game {
       // enemyEntries() only happens inside the DEFERRED onComplete, not yet run) — without this
       // check that would push a second, duplicate ritual for the same kill.
       if (this.beingEaten.has(entry.combatant)) return;
+      // A real, distinct killing-blow beat — fires exactly once per real kill regardless of
+      // source (melee, venom tick, AOE), since every kill funnels through this one method.
+      this.audio.playKnockout();
+      this.hud.flashKO();
       // grantsAbility is exactly the field that distinguishes a real huntable animal from the
       // wraith (a root-spirit, no power, no count) — the leaderboard's animalsDefeated stat
       // should only count real animals, matching that same established distinction.
@@ -1590,6 +1594,8 @@ export class Game {
       this.beingEaten.add(entry.combatant);
       this.eatQueue.push({ combatant: entry.combatant, onComplete: entry.onDefeat });
     } else {
+      this.audio.playKnockout();
+      this.hud.flashKO();
       entry.onDefeat?.();
     }
   }

@@ -257,6 +257,14 @@ describe('HUD boss bar + arc-complete toast — behavior (real HUD instance, fak
     expect(h.duelVoiceBadgeEl.classList.contains('rw-visible')).toBe(false);
   });
 
+  it('flashKO reveals the real KO flash element and does not throw', async () => {
+    const { HUD } = await import('../HUD');
+    const hud = new HUD(fakeElement() as unknown as HTMLElement);
+    const h = hud as unknown as { koFlashEl: ReturnType<typeof fakeElement> };
+    expect(() => hud.flashKO()).not.toThrow();
+    expect(h.koFlashEl.classList.contains('rw-flash-active')).toBe(true);
+  });
+
   it('showCoronationResult renders rank/stats and reveals the panel without throwing', async () => {
     const { HUD } = await import('../HUD');
     const hud = new HUD(fakeElement() as unknown as HTMLElement);

@@ -157,4 +157,9 @@ describe('AudioFX species sounds', () => {
     const fx = new AudioFX();
     expect(() => fx.playBlockImpact()).not.toThrow();
   });
+
+  it('playKnockout does not throw before unlock()', () => {
+    const fx = new AudioFX();
+    expect(() => fx.playKnockout()).not.toThrow();
+  });
 });

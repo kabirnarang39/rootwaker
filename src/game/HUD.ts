@@ -82,6 +82,8 @@ export class HUD {
   private skinNextBtn: HTMLButtonElement;
   private damageFlashEl: HTMLDivElement;
   private damageFlashTimer: number | null = null;
+  private koFlashEl: HTMLDivElement;
+  private koFlashTimer: number | null = null;
   private powerSlotEls: Map<AbilityId, HTMLDivElement> = new Map();
   private minimapCanvas: HTMLCanvasElement;
   private minimapCtx: CanvasRenderingContext2D;
@@ -110,6 +112,7 @@ export class HUD {
         <canvas class="rw-minimap-canvas" width="190" height="190"></canvas>
       </div>
       <div class="rw-damage-flash"></div>
+      <div class="rw-ko-flash"></div>
       <div class="rw-power-bar">
         ${ABILITY_SLOTS.map(
           (id) => `
@@ -787,6 +790,26 @@ export class HUD {
         .rw-damage-flash.rw-flash-active { animation: none; }
       }
 
+      /* KO flash: a real distinct amber/gold vignette punch — the killing-blow cue, deliberately
+         a different color and a sharper attack than the red damage-flash so a kill never reads as
+         "just another hit." Pairs with AudioFX.playKnockout(). */
+      .rw-ko-flash {
+        position: fixed; inset: 0; z-index: 18; pointer-events: none;
+        opacity: 0;
+        background: radial-gradient(ellipse at center, rgba(255,177,94,0) 35%, rgba(255,177,94,0.45) 100%);
+      }
+      .rw-ko-flash.rw-flash-active {
+        animation: rw-ko-flash 280ms ease-out;
+      }
+      @keyframes rw-ko-flash {
+        0% { opacity: 0; }
+        12% { opacity: 1; }
+        100% { opacity: 0; }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .rw-ko-flash.rw-flash-active { animation: none; }
+      }
+
       /* Power bar: the six learned-ability slots, bottom-left — same carved-plaque key-badge
          language as the controls legend (rw-legend-key), so activatable powers read as part of
          the same instrument family rather than a new UI language. Locked slots sit dim/inert;
@@ -1001,6 +1024,7 @@ export class HUD {
     this.skinPrevBtn = this.root.querySelector('.rw-skin-prev')!;
     this.skinNextBtn = this.root.querySelector('.rw-skin-next')!;
     this.damageFlashEl = this.root.querySelector('.rw-damage-flash')!;
+    this.koFlashEl = this.root.querySelector('.rw-ko-flash')!;
     for (const id of ABILITY_SLOTS) {
       this.powerSlotEls.set(id, this.root.querySelector(`[data-ability="${id}"]`)!);
     }
@@ -1282,6 +1306,20 @@ export class HUD {
       this.damageFlashEl.classList.remove('rw-flash-active');
       this.damageFlashTimer = null;
     }, 320);
+  }
+
+  /** Full-screen amber/gold pulse for "that hit just killed something" — a real distinct beat
+   * from flashDamage() (different color, sharper attack) so a kill reads as decisive, not just
+   * another hit. Same restart-mid-flight trick. Pairs with AudioFX.playKnockout(). */
+  flashKO(): void {
+    this.koFlashEl.classList.remove('rw-flash-active');
+    void this.koFlashEl.offsetWidth;
+    this.koFlashEl.classList.add('rw-flash-active');
+    if (this.koFlashTimer !== null) window.clearTimeout(this.koFlashTimer);
+    this.koFlashTimer = window.setTimeout(() => {
+      this.koFlashEl.classList.remove('rw-flash-active');
+      this.koFlashTimer = null;
+    }, 280);
   }
 
   /** Driven every frame from AbilityKit's unlocked/cooldown state — locked/cooling-down/ready. */
