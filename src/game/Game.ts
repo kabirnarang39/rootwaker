@@ -25,7 +25,7 @@ import type { GroundSlamState } from './GroundSlam';
 import type { GroveHare } from '../entities/groveHare';
 import { resolveMeleeHit, applyDamage, isDefeated, COMBO_MOVES, COMBO_WINDOW_SECONDS, COMBO_KNOCKBACK, type Combatant } from './Combat';
 import { Input, type PlayerAction } from './Input';
-import { isInsideWaterBody } from './WaterBody';
+import { isInsideWaterBody, type WaterBody } from './WaterBody';
 import { computeApproachSpeed, checkPounceRange } from './Stalking';
 import { HUD } from './HUD';
 import { AudioFX } from './Audio';
@@ -319,6 +319,10 @@ export class Game {
     hitbox: { start: new THREE.Vector3(), end: new THREE.Vector3(), radius: 0.4 },
   };
   private checkpoint = new THREE.Vector3(0, 0, 12);
+  // Which real water body updateSwim() should use for physics (surfaceY/current) — set the
+  // instant a body is actually entered, see the water-entry check below. Defaults to the jungle
+  // pond so nothing changes for a player who never reaches the sea.
+  private activeWater: WaterBody = this.level.water;
 
   private audio = new AudioFX();
   private abilityKit = new AbilityKit();
@@ -872,7 +876,7 @@ export class Game {
     if (this.playerController.mode === 'climbing') {
       this.playerController.updateClimb({ ...this.rawMoveInput, jump: false }, delta);
     } else if (this.playerController.mode === 'swimming') {
-      this.playerController.updateSwim(this.moveInput, delta, this.level.water);
+      this.playerController.updateSwim(this.moveInput, delta, this.activeWater);
     } else {
       if (time < this.dashEndTime) {
         // Boar's Charge lunge — a direct position/velocity override for the dash window only,
@@ -939,7 +943,17 @@ export class Game {
         PLAYER_COLLISION_HEIGHT,
         nearbyObstacles,
       );
-      if (isInsideWaterBody(this.playerController.body.position, this.level.water)) {
+      // Checks the jungle pond first (existing behavior, unchanged), then each of the living
+      // sea's 4 real ring slabs — previously the sea was deliberately visual-only (see
+      // createJungleLevel.ts's own JungleLevel.livingSea comment), so a player could walk
+      // straight across open ocean with no swim transition at all. this.activeWater tracks
+      // WHICH body was actually entered, since updateSwim's physics (surfaceY, current) differ
+      // between the calm pond and the real open sea.
+      const enteredWater = [this.level.water, ...this.level.livingSea].find((body) =>
+        isInsideWaterBody(this.playerController.body.position, body),
+      );
+      if (enteredWater) {
+        this.activeWater = enteredWater;
         this.playerController.beginSwim();
       }
     }

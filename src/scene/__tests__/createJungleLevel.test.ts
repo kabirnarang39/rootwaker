@@ -44,6 +44,46 @@ describe('createJungleLevel', () => {
     expect(level.chapterBounds.containsBox(level.water.bounds)).toBe(true);
   });
 
+  it('groundHeightAt returns a real deep seafloor value beyond the island\'s edge, not an extrapolated terrain-noise value (regression: without this, walking toward the sea kept landing on bogus "ground" near y=0 out over open water, so real swim-entry into the sea could never trigger — the player\'s grounded Y never dropped into any sea body\'s real Y range)', () => {
+    const level = createJungleLevel();
+    const withinIsland = level.groundHeightAt(0, 0);
+    expect(withinIsland).toBeGreaterThan(-5); // real jungle terrain, nowhere near ocean-floor depth
+    const seaFloor = level.groundHeightAt(220, 0); // matches a real living-sea slab's x range
+    expect(seaFloor).toBeLessThan(-10);
+    // must sit below every sea body's own real min.y, or a player falling toward the sea would
+    // still land on the seafloor above the water instead of ever entering it
+    for (const body of level.livingSea) {
+      expect(seaFloor).toBeLessThan(body.bounds.min.y);
+    }
+  });
+
+  it('defines 4 real swimmable living-sea water bodies, one per ring slab, entirely OUTSIDE the chapter bounds (real swim gating — previously the sea was deliberately visual-only, a player could walk straight through it)', () => {
+    const level = createJungleLevel();
+    expect(level.livingSea.length).toBe(4);
+    for (const body of level.livingSea) {
+      expect(level.chapterBounds.containsBox(body.bounds)).toBe(false);
+      // real submersion depth, not a paper-thin membership box
+      expect(body.bounds.max.y - body.bounds.min.y).toBeGreaterThan(1);
+      expect(body.surfaceY).toBe(body.bounds.max.y);
+    }
+  });
+
+  it('a point just past each of the island\'s 4 coastlines is inside exactly one living-sea body', () => {
+    const level = createJungleLevel();
+    const half = 20; // CHAPTER_SIZE / 2
+    const surfaceY = level.livingSea[0].surfaceY;
+    const points = [
+      new THREE.Vector3(half + 10, surfaceY, 0), // east
+      new THREE.Vector3(-(half + 10), surfaceY, 0), // west
+      new THREE.Vector3(0, surfaceY, half + 10), // north
+      new THREE.Vector3(0, surfaceY, -(half + 10)), // south
+    ];
+    for (const point of points) {
+      const containingBodies = level.livingSea.filter((body) => body.bounds.containsPoint(point));
+      expect(containingBodies.length).toBe(1);
+    }
+  });
+
   it('climbObstacleMeshes contains only real Meshes (no Groups), so a non-recursive raycast can actually see every entry', () => {
     const level = createJungleLevel();
     expect(level.climbObstacleMeshes.length).toBeGreaterThan(0);

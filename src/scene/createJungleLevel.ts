@@ -49,6 +49,12 @@ export interface JungleLevel {
   groundHeightAt(x: number, z: number): number;
   climbableWall: ClimbableWall;
   water: WaterBody;
+  // The living sea's own real swimmable bounds — 4 bodies, one per ring slab (see
+  // buildLivingSea's own comment on the 4-slab-ring shape), each a real WaterBody so
+  // Game.ts's existing swim-entry/updateSwim machinery works identically to the jungle pond,
+  // just against a different body. Previously the sea was deliberately visual-only (walking
+  // straight through it) — the user directly asked for real swim gating, closing that gap.
+  livingSea: WaterBody[];
   chapterBounds: THREE.Box3;
   hares: GroveHare[];
   boars: TuskBoar[];
@@ -90,13 +96,25 @@ export interface JungleLevel {
 const CHAPTER_SIZE = 40; // meters, one bounded region
 const TERRAIN_SEGMENTS = 48;
 const WIND = new THREE.Vector3(0.6, 0, 0.2).normalize(); // shared by foliage sway and water waves
+// Real, previously-missing seafloor: the rendered terrain MESH already stops exactly at the
+// island's edge (PlaneGeometry sized to CHAPTER_SIZE below), but heightAt() itself is a pure
+// formula with no boundary check — called with any x/z (Game.ts's groundHeightWithLedges calls
+// it for the player's real position everywhere, including out over the living sea). Without this
+// guard, walking off the island's edge toward the sea kept "landing" on the jungle sine-formula's
+// own extrapolated noise (near y=0) instead of ever falling — real swim-entry into the sea could
+// never trigger, since the player's grounded Y never dropped into any sea body's real Y range.
+// -20 sits safely below every sea body's own min.y (SEA_SURFACE_Y - SEA_SWIM_DEPTH = -7.2).
+const DEEP_OCEAN_FLOOR_Y = -20;
 
 function buildTerrain(): { mesh: THREE.Mesh; heightAt: (x: number, z: number) => number } {
   const geo = new THREE.PlaneGeometry(CHAPTER_SIZE, CHAPTER_SIZE, TERRAIN_SEGMENTS, TERRAIN_SEGMENTS);
   geo.rotateX(-Math.PI / 2);
   const pos = geo.attributes.position;
-  const heightAt = (x: number, z: number) =>
-    Math.sin(x * 0.15) * 0.6 + Math.cos(z * 0.12) * 0.5 - Math.max(0, 3 - Math.hypot(x - 6, z + 4)) * 0.4; // riverbank dip near the water crossing
+  const islandHalf = CHAPTER_SIZE / 2;
+  const heightAt = (x: number, z: number) => {
+    if (Math.abs(x) > islandHalf || Math.abs(z) > islandHalf) return DEEP_OCEAN_FLOOR_Y;
+    return Math.sin(x * 0.15) * 0.6 + Math.cos(z * 0.12) * 0.5 - Math.max(0, 3 - Math.hypot(x - 6, z + 4)) * 0.4; // riverbank dip near the water crossing
+  };
 
   for (let i = 0; i < pos.count; i++) {
     const x = pos.getX(i);
@@ -947,19 +965,45 @@ function buildSeaSlab(width: number, depth: number, x: number, z: number, unifor
   return mesh;
 }
 
-function buildLivingSea(): { meshes: THREE.Mesh[]; update: (time: number, tideAmplitudeMultiplier: number) => void } {
+// Real ocean depth for swim bounds — deeper than the jungle pond's own 2.5m (buildWater()),
+// matching a real open sea rather than a shallow pond.
+const SEA_SWIM_DEPTH = 6;
+
+/** One real WaterBody per ring slab, matching that slab's exact width/depth/x/z footprint —
+ * lets Game.ts's existing isInsideWaterBody/updateSwim machinery treat the sea exactly like the
+ * jungle pond, just as 4 separate real bodies instead of one. A real, slightly stronger current
+ * than the pond's (the open sea pulls harder than still pond water). */
+function seaSlabWaterBody(width: number, depth: number, x: number, z: number): WaterBody {
+  return {
+    bounds: new THREE.Box3(
+      new THREE.Vector3(x - width / 2, SEA_SURFACE_Y - SEA_SWIM_DEPTH, z - depth / 2),
+      new THREE.Vector3(x + width / 2, SEA_SURFACE_Y, z + depth / 2),
+    ),
+    surfaceY: SEA_SURFACE_Y,
+    current: WIND.clone().multiplyScalar(1.4),
+  };
+}
+
+function buildLivingSea(): {
+  meshes: THREE.Mesh[];
+  bodies: WaterBody[];
+  update: (time: number, tideAmplitudeMultiplier: number) => void;
+} {
   const uniforms = { uTime: { value: 0 }, uTide: { value: 0 } };
 
   const outerHalfWidth = ISLAND_HALF + SEA_SIZE; // north/south slabs' half-width, reaching past the corners
-  const meshes = [
-    buildSeaSlab(SEA_SIZE, CHAPTER_SIZE, ISLAND_HALF + SEA_SIZE / 2, 0, uniforms), // east
-    buildSeaSlab(SEA_SIZE, CHAPTER_SIZE, -(ISLAND_HALF + SEA_SIZE / 2), 0, uniforms), // west
-    buildSeaSlab(outerHalfWidth * 2, SEA_SIZE, 0, ISLAND_HALF + SEA_SIZE / 2, uniforms), // north (covers corners)
-    buildSeaSlab(outerHalfWidth * 2, SEA_SIZE, 0, -(ISLAND_HALF + SEA_SIZE / 2), uniforms), // south (covers corners)
+  const slabParams: Array<[number, number, number, number]> = [
+    [SEA_SIZE, CHAPTER_SIZE, ISLAND_HALF + SEA_SIZE / 2, 0], // east
+    [SEA_SIZE, CHAPTER_SIZE, -(ISLAND_HALF + SEA_SIZE / 2), 0], // west
+    [outerHalfWidth * 2, SEA_SIZE, 0, ISLAND_HALF + SEA_SIZE / 2], // north (covers corners)
+    [outerHalfWidth * 2, SEA_SIZE, 0, -(ISLAND_HALF + SEA_SIZE / 2)], // south (covers corners)
   ];
+  const meshes = slabParams.map(([width, depth, x, z]) => buildSeaSlab(width, depth, x, z, uniforms));
+  const bodies = slabParams.map(([width, depth, x, z]) => seaSlabWaterBody(width, depth, x, z));
 
   return {
     meshes,
+    bodies,
     update: (time: number, tideAmplitudeMultiplier: number) => {
       uniforms.uTime.value = time;
       uniforms.uTide.value = Math.sin((time / SEA_TIDE_PERIOD_SECONDS) * Math.PI * 2) * SEA_TIDE_AMPLITUDE * tideAmplitudeMultiplier;
@@ -1141,7 +1185,7 @@ export function createJungleLevel(): JungleLevel {
   const { meshes: throneRoomMeshes, throneRoom } = buildThroneRoom(mountain.summitGate);
   group.add(...throneRoomMeshes);
 
-  const { meshes: seaMeshes, update: updateSea } = buildLivingSea();
+  const { meshes: seaMeshes, bodies: livingSea, update: updateSea } = buildLivingSea();
   group.add(...seaMeshes);
 
   // One fish school just offshore of each of the 4 coastlines — real sea life, not an empty ring
@@ -1164,6 +1208,7 @@ export function createJungleLevel(): JungleLevel {
     groundHeightAt: heightAt,
     climbableWall: wall,
     water,
+    livingSea,
     chapterBounds,
     hares,
     boars,
