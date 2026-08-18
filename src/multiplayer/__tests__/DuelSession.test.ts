@@ -142,4 +142,11 @@ describe('DuelSession', () => {
     duel.update(1 / 60, { x: 0, z: 0, jump: false }, true, false);
     expect(h.guest.combatant.hp).toBe(hpBefore);
   });
+
+  it('close() closes the underlying link (regression: the RTCPeerConnection used to stay open forever after a duel ended)', () => {
+    const { link } = fakeLink('host');
+    const duel = new DuelSession(link, fox, bear);
+    duel.close();
+    expect(link.close).toHaveBeenCalled();
+  });
 });

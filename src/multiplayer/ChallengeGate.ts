@@ -160,9 +160,14 @@ export class ChallengeGate {
   }
 
   private pendingHostLink: P2PChallengeLink | null = null;
+  // Tracks whichever link is currently mid-handshake, host OR guest — cancel() needs this
+  // regardless of role. pendingHostLink stays separate (only the host role reads it back, to
+  // apply the answer code), this field exists purely for real cleanup on cancel.
+  private activeLink: P2PChallengeLink | null = null;
 
   private wireHandshake(link: P2PChallengeLink): void {
     if (link.role === 'host') this.pendingHostLink = link;
+    this.activeLink = link;
     link.onOpen(() => {
       this.setStatus('Connected — exchanging fighters…');
       link.send({ type: 'hello', species: this.localInfo.species, skinId: this.localInfo.skinId });
@@ -180,6 +185,10 @@ export class ChallengeGate {
   }
 
   private cancel(): void {
+    // Real cleanup — "Host a Challenge"/"Generate Answer" both create a real RTCPeerConnection
+    // immediately, before the handshake completes. Without this, canceling (or canceling and
+    // retrying repeatedly) left each of those connections open and connecting forever.
+    this.activeLink?.close();
     this.root.remove();
     this.rejectCanceled?.();
   }

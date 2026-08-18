@@ -1547,6 +1547,7 @@ export class Game {
     this.scene.remove(this.duel.group);
     this.level.group.visible = true;
     this.fox.group.visible = true;
+    this.duel.close(); // real cleanup — closes the underlying RTCPeerConnection, see DuelSession.close()
     this.duel = null;
     this.duelChat = null;
     this.hud.hideDuelChat();

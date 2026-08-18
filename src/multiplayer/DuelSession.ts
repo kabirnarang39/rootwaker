@@ -317,4 +317,13 @@ export class DuelSession {
   get localFighterPosition(): THREE.Vector3 {
     return (this.role === 'host' ? this.host : this.guest).controller.body.position;
   }
+
+  /** Real cleanup — closes the underlying RTCPeerConnection this duel was built on. Without this,
+   * the connection (and DuelVoice's mic transceiver, if a call was active) stays fully open and
+   * connected on both ends indefinitely after the duel ends, accumulating one live WebRTC
+   * connection per duel played in a session. `link` is otherwise fully private to this class — no
+   * consumer needs raw access to it, just the ability to end its lifecycle when the duel does. */
+  close(): void {
+    this.link.close();
+  }
 }
