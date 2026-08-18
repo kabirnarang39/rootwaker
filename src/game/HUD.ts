@@ -1,5 +1,7 @@
 import type { LeaderboardEntry } from '../leaderboard/LeaderboardClient';
 import type { CoronationEntry } from '../leaderboard/CoronationLeaderboard';
+import type { DuelChat, ChatMessage } from '../multiplayer/DuelChat';
+import type { DuelVoice } from '../multiplayer/DuelVoice';
 import type { FoxSkin } from '../scene/skins';
 import { SPECIES_LABELS } from '../scene/createPlayableCharacter';
 import { ABILITIES, ABILITY_SLOTS, type Ability, type AbilityId } from './AbilityKit';
@@ -45,10 +47,19 @@ export class HUD {
   private bossHealthFillEl: HTMLDivElement;
   private arcCompleteEl: HTMLDivElement;
   private arcCompleteTimer: number | null = null;
+  private leaderboardViewEl: HTMLDivElement;
+  private leaderboardViewListEl: HTMLOListElement;
   private duelOutcomeEl: HTMLDivElement;
   private duelOutcomeEyebrowEl: HTMLDivElement;
   private duelOutcomeTitleEl: HTMLDivElement;
   private duelOutcomeTimer: number | null = null;
+  private duelChatEl: HTMLDivElement;
+  private duelChatListEl: HTMLOListElement;
+  private duelChatInputEl: HTMLInputElement;
+  private duelVoiceBadgeEl: HTMLDivElement;
+  private duelVoiceStatusEl: HTMLSpanElement;
+  private duelVoiceMuteBtn: HTMLButtonElement;
+  private duelVoiceAudioEl: HTMLAudioElement;
   private coronationResultEl: HTMLDivElement;
   private coronationRankEl: HTMLDivElement;
   private coronationStatsEl: HTMLDivElement;
@@ -139,12 +150,29 @@ export class HUD {
         <div class="rw-arc-eyebrow rw-duel-eyebrow"></div>
         <div class="rw-arc-title rw-duel-title"></div>
       </div>
+      <div class="rw-duel-chat">
+        <div class="rw-duel-voice-badge">
+          <span class="rw-duel-voice-status"></span>
+          <button class="rw-duel-voice-mute" type="button">Y to mute</button>
+        </div>
+        <ol class="rw-duel-chat-list"></ol>
+        <input class="rw-duel-chat-input" type="text" maxlength="200" placeholder="T to chat, Enter to send" autocomplete="off" />
+        <audio class="rw-duel-voice-audio" autoplay></audio>
+      </div>
+      <div class="rw-leaderboard-view">
+        <div class="rw-lb-header">
+          <span class="rw-lb-title">Kings of the Mountain</span>
+          <span class="rw-lb-hint">O to close</span>
+        </div>
+        <ol class="rw-lb-list"></ol>
+        <div class="rw-lb-note">Shared peer-to-peer with everyone online now — encrypted on your device.</div>
+      </div>
       <div class="rw-coronation-result">
         <div class="rw-coronation-eyebrow">Coronation Record</div>
         <div class="rw-coronation-rank"></div>
         <div class="rw-coronation-stats"></div>
         <ol class="rw-coronation-list"></ol>
-        <div class="rw-coronation-note">Local to this device only — not a shared leaderboard.</div>
+        <div class="rw-coronation-note">Shared peer-to-peer with everyone online now — encrypted on your device.</div>
       </div>
       <div class="rw-controls-legend">
         <div class="rw-legend-eyebrow">Controls</div>
@@ -158,6 +186,9 @@ export class HUD {
         <div class="rw-legend-row"><span class="rw-legend-key">C</span><span class="rw-legend-label">View</span></div>
         <div class="rw-legend-row"><span class="rw-legend-key">1 – 7</span><span class="rw-legend-label">Powers</span></div>
         <div class="rw-legend-row"><span class="rw-legend-key">M</span><span class="rw-legend-label">Challenge</span></div>
+        <div class="rw-legend-row"><span class="rw-legend-key">O</span><span class="rw-legend-label">Leaderboard</span></div>
+        <div class="rw-legend-row"><span class="rw-legend-key">T</span><span class="rw-legend-label">Duel Chat</span></div>
+        <div class="rw-legend-row"><span class="rw-legend-key">Y</span><span class="rw-legend-label">Duel Mute</span></div>
       </div>
       <div class="rw-overlay">
         <div class="rw-panel">
@@ -639,6 +670,62 @@ export class HUD {
         .rw-coronation-result.rw-visible { animation: none; opacity: 1; transform: translate(-50%, -50%); }
       }
 
+      /* Real on-demand leaderboard view (KeyO) — deliberately NOT a timed toast like
+         coronation-result: a player checking standings mid-game needs to actually read it, not
+         watch it fade after a few seconds, so this stays open until explicitly closed. Centered,
+         same carved-bark/amber design language as every other panel in this file. */
+      .rw-leaderboard-view {
+        position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 17;
+        display: none; pointer-events: none; text-align: left;
+        font-family: var(--body-face); color: var(--parchment);
+        width: min(340px, 88vw);
+        padding: 18px 22px 16px;
+        background: linear-gradient(180deg, rgba(20,13,9,0.9), rgba(7,10,8,0.97));
+        border-top: 1px solid rgba(255,177,94,0.6);
+        box-shadow: 0 0 36px rgba(255,177,94,0.25), 0 20px 48px rgba(0,0,0,0.6);
+        clip-path: polygon(2% 0, 98% 0, 100% 100%, 0% 100%);
+      }
+      .rw-leaderboard-view.rw-visible { display: block; }
+      .rw-lb-header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 10px; }
+      .rw-lb-title { font-family: var(--display-face); font-weight: 600; font-size: 18px; }
+      .rw-lb-hint { font-size: 10px; opacity: 0.55; text-transform: uppercase; letter-spacing: 0.08em; }
+      .rw-lb-list { list-style: none; margin: 0 0 10px; padding: 0; font-family: var(--mono-face); font-size: 12px; display: flex; flex-direction: column; gap: 4px; }
+      .rw-lb-list li { display: flex; justify-content: space-between; opacity: 0.85; }
+      .rw-lb-list li:first-child { color: var(--spirit-amber); opacity: 1; }
+      .rw-lb-note { font-size: 9px; opacity: 0.5; font-style: italic; }
+
+      /* Real 1:1 duel chat (KeyT) — bottom-left, only visible during a live duel (Game.ts calls
+         showDuelChat/hideDuelChat on duel start/end). Deliberately small and unobtrusive: this
+         rides the same P2P connection as the fight itself, not a full-screen takeover. */
+      .rw-duel-chat {
+        position: fixed; left: 16px; bottom: 16px; z-index: 16;
+        display: none; flex-direction: column; gap: 6px;
+        width: min(280px, 70vw);
+        font-family: var(--body-face); color: var(--parchment);
+      }
+      .rw-duel-chat.rw-visible { display: flex; }
+      .rw-duel-voice-badge { display: none; align-items: center; justify-content: space-between; gap: 8px; font-size: 11px; opacity: 0.85; }
+      .rw-duel-voice-badge.rw-visible { display: flex; }
+      .rw-duel-voice-mute {
+        font-family: var(--body-face); font-size: 10px; padding: 3px 8px; cursor: pointer;
+        background: rgba(7,10,8,0.75); color: var(--parchment); border: 1px solid rgba(238,242,230,0.25); border-radius: 4px;
+      }
+      .rw-duel-voice-mute:hover { background: rgba(238,242,230,0.1); }
+      .rw-duel-voice-mute.rw-voice-muted { color: var(--spirit-amber); border-color: rgba(255,177,94,0.5); }
+      .rw-duel-chat-list {
+        list-style: none; margin: 0; padding: 8px 10px; max-height: 120px; overflow-y: auto;
+        display: flex; flex-direction: column; gap: 3px; font-size: 12px;
+        background: rgba(7,10,8,0.75); border-left: 2px solid rgba(255,177,94,0.4); border-radius: 4px;
+      }
+      .rw-duel-chat-list li { opacity: 0.9; word-break: break-word; }
+      .rw-duel-chat-list li.rw-chat-me { color: var(--spirit-amber); }
+      .rw-duel-chat-input {
+        font-family: var(--body-face); font-size: 12px; padding: 6px 10px;
+        background: rgba(7,10,8,0.75); color: var(--parchment);
+        border: 1px solid rgba(238,242,230,0.2); border-radius: 4px;
+      }
+      .rw-duel-chat-input:focus { outline: none; border-color: rgba(255,177,94,0.6); }
+
       /* Controls legend: opposite corner from the vitality/stamina cluster, same carved-bark
          plaque trapezoid and idle-amber key-badge treatment as the hunt prompt (rw-hunt-key)
          rather than a new visual language. Visible by default (a fresh player needs it before
@@ -883,7 +970,16 @@ export class HUD {
     this.bossNameEl = this.root.querySelector('.rw-boss-name')!;
     this.bossHealthFillEl = this.root.querySelector('.rw-boss-fill')!;
     this.arcCompleteEl = this.root.querySelector('.rw-arc-complete')!;
+    this.leaderboardViewEl = this.root.querySelector('.rw-leaderboard-view')!;
+    this.leaderboardViewListEl = this.root.querySelector('.rw-lb-list')!;
     this.duelOutcomeEl = this.root.querySelector('.rw-duel-outcome')!;
+    this.duelChatEl = this.root.querySelector('.rw-duel-chat')!;
+    this.duelChatListEl = this.root.querySelector('.rw-duel-chat-list')!;
+    this.duelChatInputEl = this.root.querySelector('.rw-duel-chat-input')!;
+    this.duelVoiceBadgeEl = this.root.querySelector('.rw-duel-voice-badge')!;
+    this.duelVoiceStatusEl = this.root.querySelector('.rw-duel-voice-status')!;
+    this.duelVoiceMuteBtn = this.root.querySelector('.rw-duel-voice-mute')!;
+    this.duelVoiceAudioEl = this.root.querySelector('.rw-duel-voice-audio')!;
     this.duelOutcomeEyebrowEl = this.root.querySelector('.rw-duel-eyebrow')!;
     this.duelOutcomeTitleEl = this.root.querySelector('.rw-duel-title')!;
     this.coronationResultEl = this.root.querySelector('.rw-coronation-result')!;
@@ -1216,6 +1312,105 @@ export class HUD {
     }, 4000);
   }
 
+  /** Real on-demand leaderboard browsing (KeyO) — unlike showCoronationResult's timed toast,
+   * this stays open until the player explicitly closes it (same key toggles it shut), since
+   * checking standings mid-game means actually reading it, not glancing at a fading toast. */
+  toggleLeaderboardView(entries: (CoronationEntry & { playerName?: string })[]): void {
+    const opening = !this.leaderboardViewEl.classList.contains('rw-visible');
+    if (!opening) {
+      this.leaderboardViewEl.classList.remove('rw-visible');
+      return;
+    }
+    this.leaderboardViewListEl.innerHTML = '';
+    entries.slice(0, 10).forEach((entry, i) => {
+      const li = document.createElement('li');
+      const m = Math.floor(entry.coronationSeconds / 60);
+      const s = Math.floor(entry.coronationSeconds % 60);
+      const nameSpan = document.createElement('span');
+      const label = entry.playerName
+        ? `${entry.playerName} · ${SPECIES_LABELS[entry.species].name}`
+        : SPECIES_LABELS[entry.species].name;
+      nameSpan.textContent = `#${i + 1} ${label}`;
+      const timeSpan = document.createElement('span');
+      timeSpan.textContent = `${m}:${String(s).padStart(2, '0')}`;
+      li.appendChild(nameSpan);
+      li.appendChild(timeSpan);
+      this.leaderboardViewListEl.appendChild(li);
+    });
+    this.leaderboardViewEl.classList.add('rw-visible');
+  }
+
+  private renderDuelChat(messages: ChatMessage[]): void {
+    this.duelChatListEl.innerHTML = '';
+    for (const msg of messages.slice(-30)) {
+      const li = document.createElement('li');
+      li.textContent = msg.from === 'me' ? `You: ${msg.text}` : `Opponent: ${msg.text}`;
+      if (msg.from === 'me') li.classList.add('rw-chat-me');
+      this.duelChatListEl.appendChild(li);
+    }
+    this.duelChatListEl.scrollTop = this.duelChatListEl.scrollHeight;
+  }
+
+  /** Wires the real duel-scoped chat panel (KeyT to focus, Enter to send) for the lifetime of one
+   * duel — see DuelChat.ts for why this is 1:1 over the fight's own connection, not a mesh chat. */
+  showDuelChat(chat: DuelChat): void {
+    this.renderDuelChat(chat.history);
+    chat.onUpdate((messages) => this.renderDuelChat(messages));
+    this.duelChatInputEl.onkeydown = (e) => {
+      if (e.key !== 'Enter') return;
+      chat.send(this.duelChatInputEl.value);
+      this.duelChatInputEl.value = '';
+      this.duelChatInputEl.blur();
+    };
+    this.duelChatEl.classList.add('rw-visible');
+  }
+
+  hideDuelChat(): void {
+    this.duelChatEl.classList.remove('rw-visible');
+    this.duelChatListEl.innerHTML = '';
+    this.duelChatInputEl.value = '';
+    this.duelChatInputEl.onkeydown = null;
+  }
+
+  // Regression: a literal "t" used to leak into the box on every open — see Input.ts's own
+  // preventDefault() on the KeyT keydown for why focusing synchronously here is now safe (the
+  // browser's default text-insertion for that keystroke is suppressed at the source, so there's
+  // no race to defer around, and subsequent real keystrokes land in the input immediately).
+  focusDuelChatInput(): void {
+    this.duelChatInputEl.focus();
+  }
+
+  private voiceMuteToggle: (() => void) | null = null;
+
+  /** Wires the real duel-scoped voice badge/mute button and attaches incoming remote audio to a
+   * real <audio> element for playback — see DuelVoice.ts for why this is 1:1 over the fight's own
+   * connection, not a mesh call. */
+  showDuelVoice(voice: DuelVoice): void {
+    const apply = (muted: boolean) => {
+      this.duelVoiceStatusEl.textContent = muted ? 'Mic muted' : 'Mic live';
+      this.duelVoiceMuteBtn.textContent = muted ? 'Y to unmute' : 'Y to mute';
+      this.duelVoiceMuteBtn.classList.toggle('rw-voice-muted', muted);
+    };
+    apply(voice.isMuted);
+    this.voiceMuteToggle = () => apply(voice.toggleMute());
+    this.duelVoiceMuteBtn.onclick = () => this.voiceMuteToggle?.();
+    voice.onRemoteStream((stream) => {
+      this.duelVoiceAudioEl.srcObject = stream;
+    });
+    this.duelVoiceBadgeEl.classList.add('rw-visible');
+  }
+
+  hideDuelVoice(): void {
+    this.duelVoiceBadgeEl.classList.remove('rw-visible');
+    this.duelVoiceMuteBtn.onclick = null;
+    this.voiceMuteToggle = null;
+    this.duelVoiceAudioEl.srcObject = null;
+  }
+
+  toggleDuelVoiceMute(): void {
+    this.voiceMuteToggle?.();
+  }
+
   /** A real distinct PvP-duel outcome beat — shown to BOTH players (winner and loser see their
    * own real framing, not a shared "arc complete" line meant for the single-player King fight).
    * A win still fires showCoronationResult() alongside this for the leaderboard payoff; a loss
@@ -1241,7 +1436,11 @@ export class HUD {
   /** The local coronation-leaderboard payoff — fires alongside showArcComplete() at the exact
    * moment the King falls (see Game.ts). `myEntry` is matched against `top` by reference so the
    * player's own row can be highlighted even if another identical-looking entry exists. */
-  showCoronationResult(rank: number, top: CoronationEntry[], myEntry: CoronationEntry): void {
+  showCoronationResult(
+    rank: number,
+    top: (CoronationEntry & { playerId?: string; playerName?: string })[],
+    myEntry: CoronationEntry & { playerId?: string },
+  ): void {
     const minutes = Math.floor(myEntry.coronationSeconds / 60);
     const seconds = Math.floor(myEntry.coronationSeconds % 60);
     this.coronationRankEl.textContent = `Rank #${rank}`;
@@ -1251,11 +1450,17 @@ export class HUD {
     this.coronationListEl.innerHTML = '';
     top.slice(0, 5).forEach((entry, i) => {
       const li = document.createElement('li');
-      if (entry === myEntry) li.classList.add('rw-coronation-me');
+      // World entries are distinct objects reconstructed from network/decrypt, so reference
+      // equality (the old single-device check) no longer reliably finds "me" — playerId does.
+      const isMe = entry === myEntry || (!!entry.playerId && entry.playerId === myEntry.playerId);
+      if (isMe) li.classList.add('rw-coronation-me');
       const m = Math.floor(entry.coronationSeconds / 60);
       const s = Math.floor(entry.coronationSeconds % 60);
       const nameSpan = document.createElement('span');
-      nameSpan.textContent = `#${i + 1} ${SPECIES_LABELS[entry.species].name}`;
+      const label = entry.playerName
+        ? `${entry.playerName} · ${SPECIES_LABELS[entry.species].name}`
+        : SPECIES_LABELS[entry.species].name;
+      nameSpan.textContent = `#${i + 1} ${label}`;
       const timeSpan = document.createElement('span');
       timeSpan.textContent = `${m}:${String(s).padStart(2, '0')}`;
       li.appendChild(nameSpan);

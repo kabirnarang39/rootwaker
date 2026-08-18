@@ -38,9 +38,13 @@ function fakeWindow() {
 class FakeKeyboardEvent {
   type: string;
   code: string;
+  defaultPrevented = false;
   constructor(type: string, init: { code: string }) {
     this.type = type;
     this.code = init.code;
+  }
+  preventDefault() {
+    this.defaultPrevented = true;
   }
 }
 
@@ -155,6 +159,60 @@ describe('Input mouse-drag look', () => {
     });
     window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyM' }));
     expect(firedAction).toBe('multiplayer');
+  });
+
+  it('KeyO emits a leaderboard action', () => {
+    const el = fakeElement();
+    const input = new Input(el as unknown as HTMLElement);
+    let firedAction: string | null = null;
+    input.onAction((action) => {
+      firedAction = action;
+    });
+    window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyO' }));
+    expect(firedAction).toBe('leaderboard');
+  });
+
+  it('KeyT emits a chatFocus action', () => {
+    const el = fakeElement();
+    const input = new Input(el as unknown as HTMLElement);
+    let firedAction: string | null = null;
+    input.onAction((action) => {
+      firedAction = action;
+    });
+    window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyT' }));
+    expect(firedAction).toBe('chatFocus');
+  });
+
+  it('KeyT prevents the browser\'s own default text-insertion (regression: chatFocus moves focus onto the chat input synchronously, so the browser would otherwise insert a literal "t" into it right after)', () => {
+    const el = fakeElement();
+    new Input(el as unknown as HTMLElement);
+    const event = new KeyboardEvent('keydown', { code: 'KeyT' });
+    window.dispatchEvent(event);
+    expect((event as unknown as InstanceType<typeof FakeKeyboardEvent>).defaultPrevented).toBe(true);
+  });
+
+  it('KeyY emits a voiceMute action', () => {
+    const el = fakeElement();
+    const input = new Input(el as unknown as HTMLElement);
+    let firedAction: string | null = null;
+    input.onAction((action) => {
+      firedAction = action;
+    });
+    window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyY' }));
+    expect(firedAction).toBe('voiceMute');
+  });
+
+  it('a keydown targeting a real INPUT/TEXTAREA element is ignored entirely — no action fires and no move key registers (typing in duel chat must not also drive the fox or attack)', () => {
+    const el = fakeElement();
+    const input = new Input(el as unknown as HTMLElement);
+    let firedAction: string | null = null;
+    input.onAction((action) => {
+      firedAction = action;
+    });
+    const fakeInputField = { tagName: 'INPUT' };
+    window.dispatchEvent(Object.assign(new KeyboardEvent('keydown', { code: 'KeyJ' }), { target: fakeInputField }));
+    expect(firedAction).toBeNull();
+    expect(input.isHeld('KeyJ')).toBe(false);
   });
 
   it('isHeld reflects real key-down/key-up state for Block (KeyH) — a HELD check, not a one-shot press event', () => {

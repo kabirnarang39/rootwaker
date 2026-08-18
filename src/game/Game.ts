@@ -38,9 +38,13 @@ import { chaseTowardPlayer, horizontalDistance } from './EnemyChase';
 import { applyClipToRig } from '../scene/rig/Clip';
 import { eatClip } from '../scene/foxClips';
 import { WeatherSystem } from './WeatherSystem';
-import { MockCoronationLeaderboardClient, type CoronationEntry } from '../leaderboard/CoronationLeaderboard';
+import type { CoronationEntry } from '../leaderboard/CoronationLeaderboard';
+import { DistributedCoronationLeaderboardClient } from '../multiplayer/DistributedLeaderboard';
+import { getDeviceId } from '../multiplayer/DeviceIdentity';
 import { SaveGame, type GameSaveState } from './SaveGame';
 import { ChallengeGate } from '../multiplayer/ChallengeGate';
+import { DuelChat } from '../multiplayer/DuelChat';
+import { DuelVoice } from '../multiplayer/DuelVoice';
 import { DuelSession, DUEL_HP, type DuelCombatantInfo } from '../multiplayer/DuelSession';
 import type { P2PChallengeLink } from '../multiplayer/P2PChallengeLink';
 import { createRainSystem, type RainSystem } from '../scene/createRainSystem';
@@ -280,7 +284,7 @@ export class Game {
   // coronationSeconds is just `time` itself at the moment of victory — Game's own clock starts at
   // construction, so elapsed animate()-loop time already IS "how long this run took."
   private animalsDefeated = 0;
-  private coronationLeaderboard = new MockCoronationLeaderboardClient();
+  private coronationLeaderboard = new DistributedCoronationLeaderboardClient();
   private playerSpecies: SpeciesId = 'fox';
   private playerSkinId: string = FOX_SKINS[0].id;
   private saveGame = new SaveGame();
@@ -291,6 +295,8 @@ export class Game {
   // null outside a duel; `duel` is the live session once two players connect and start fighting.
   private duel: DuelSession | null = null;
   private challengeGate: ChallengeGate | null = null;
+  private duelChat: DuelChat | null = null;
+  private duelVoice: DuelVoice | null = null;
   private duelAttackPressed = false;
   private duelDodgePressed = false;
   // The root-wraith is unkillable and nothing notices (Task 6 Step 7a): nothing ever checked
@@ -462,6 +468,18 @@ export class Game {
       this.dismissLegendOnce();
       if (action === 'multiplayer' && !this.duel && !this.challengeGate) {
         this.openChallengeGate();
+        return;
+      }
+      if (action === 'leaderboard' && !this.duel) {
+        this.coronationLeaderboard.getTop(10).then((entries) => this.hud.toggleLeaderboardView(entries));
+        return;
+      }
+      if (action === 'chatFocus' && this.duel) {
+        this.hud.focusDuelChatInput();
+        return;
+      }
+      if (action === 'voiceMute' && this.duel) {
+        this.hud.toggleDuelVoiceMute();
         return;
       }
       if (this.duel) {
@@ -1126,10 +1144,11 @@ export class Game {
         this.tryShowStoryBeat('coronation');
 
         this.coronationSeconds = time;
-        const coronationEntry: CoronationEntry = {
+        const coronationEntry: CoronationEntry & { playerId: string } = {
           species: this.playerSpecies,
           coronationSeconds: time,
           animalsDefeated: this.animalsDefeated,
+          playerId: getDeviceId(),
         };
         this.coronationLeaderboard.submit(coronationEntry).then(({ rank, top }) => {
           this.hud.showCoronationResult(rank, top, coronationEntry);
@@ -1470,6 +1489,11 @@ export class Game {
     this.duel = new DuelSession(link, local, remote);
     this.scene.add(this.duel.group);
     this.duel.onOutcome(() => this.finishDuel());
+    this.duelChat = new DuelChat(link);
+    this.hud.showDuelChat(this.duelChat);
+    this.duelVoice = new DuelVoice(link);
+    this.hud.showDuelVoice(this.duelVoice);
+    void this.duelVoice.start(); // real mic prompt — silently no-ops if denied, see DuelVoice.start()
   }
 
   private finishDuel(): void {
@@ -1479,6 +1503,11 @@ export class Game {
     this.level.group.visible = true;
     this.fox.group.visible = true;
     this.duel = null;
+    this.duelChat = null;
+    this.hud.hideDuelChat();
+    this.duelVoice?.stop();
+    this.duelVoice = null;
+    this.hud.hideDuelVoice();
 
     this.hud.showDuelOutcome(won);
     if (won) {
@@ -1491,6 +1520,7 @@ export class Game {
         species: this.playerSpecies,
         coronationSeconds: this.coronationSeconds,
         animalsDefeated: this.animalsDefeated,
+        playerId: getDeviceId(),
       };
       this.coronationLeaderboard.submit(entry).then(({ rank, top }) => {
         this.hud.showCoronationResult(rank, top, entry);

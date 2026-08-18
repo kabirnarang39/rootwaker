@@ -12,7 +12,10 @@ export type PlayerAction =
   | 'ability5'
   | 'ability6'
   | 'ability7'
-  | 'multiplayer';
+  | 'multiplayer'
+  | 'leaderboard'
+  | 'chatFocus'
+  | 'voiceMute';
 
 const FORWARD_KEYS = ['KeyW', 'ArrowUp'];
 const BACK_KEYS = ['KeyS', 'ArrowDown'];
@@ -20,6 +23,13 @@ const LEFT_KEYS = ['KeyA', 'ArrowLeft'];
 const RIGHT_KEYS = ['KeyD', 'ArrowRight'];
 
 const LOOK_SENSITIVITY = 0.005; // radians per pixel of drag — tuned for a readable, non-twitchy orbit
+
+// Duck-typed on tagName rather than `instanceof HTMLInputElement` so this stays safe to call in
+// the vitest node environment this file's own test suite runs in, which has no DOM globals at all.
+function isTypingIntoField(target: EventTarget | null): boolean {
+  const tag = (target as HTMLElement | null)?.tagName;
+  return tag === 'INPUT' || tag === 'TEXTAREA';
+}
 
 /** Pure: raw ±1 per axis from held keys. Diagonal normalization is the movement consumer's job. */
 export function resolveMoveVector(keysDown: Set<string>): { x: number; z: number } {
@@ -113,6 +123,10 @@ export class Input {
   };
 
   private onKeyDown = (e: KeyboardEvent) => {
+    // A player typing into a real text field (duel chat, a challenge code textarea) must not
+    // also drive WASD movement or fire J/K/etc combat actions — this listener is on `window`,
+    // so without this guard every keystroke while chatting would double as a game input.
+    if (isTypingIntoField(e.target)) return;
     this.keysDown.add(e.code);
     if (e.code === 'Space') this.emitAction('jump');
     else if (e.code === 'KeyJ') this.emitAction('attack');
@@ -128,9 +142,21 @@ export class Input {
     else if (e.code === 'Digit6') this.emitAction('ability6');
     else if (e.code === 'Digit7') this.emitAction('ability7');
     else if (e.code === 'KeyM') this.emitAction('multiplayer');
+    else if (e.code === 'KeyO') this.emitAction('leaderboard');
+    else if (e.code === 'KeyT') {
+      // This keystroke's own handler (chatFocus) moves focus onto the duel-chat text input, so
+      // the browser's default action for a printable key — inserting "t" into whatever now has
+      // focus — must be suppressed here at the source. Without this, the character insertion
+      // (which happens right after this handler returns) would land in the box that focus() just
+      // moved onto, leaking a literal "t" in front of everything the player actually types.
+      e.preventDefault();
+      this.emitAction('chatFocus');
+    }
+    else if (e.code === 'KeyY') this.emitAction('voiceMute');
   };
 
   private onKeyUp = (e: KeyboardEvent) => {
+    if (isTypingIntoField(e.target)) return;
     this.keysDown.delete(e.code);
   };
 

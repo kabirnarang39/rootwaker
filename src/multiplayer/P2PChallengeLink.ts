@@ -46,6 +46,7 @@ export class P2PChallengeLink {
   private messageHandlers: Array<(data: unknown) => void> = [];
   private openHandlers: Array<() => void> = [];
   private closeHandlers: Array<() => void> = [];
+  private remoteTrackHandlers: Array<(stream: MediaStream) => void> = [];
 
   private constructor(role: PeerRole) {
     this.role = role;
@@ -55,6 +56,54 @@ export class P2PChallengeLink {
         this.closeHandlers.forEach((h) => h());
       }
     };
+    this.pc.ontrack = (event) => {
+      const stream = event.streams[0];
+      if (stream) this.remoteTrackHandlers.forEach((h) => h(stream));
+    };
+    // Trickle any ICE candidates gathered AFTER the initial handshake (e.g. once a mic track is
+    // added mid-duel) over the now-open data channel — the initial connection can't do this
+    // (there's no channel yet, which is why it waits for full gathering instead), but once one
+    // is open, real trickle ICE is simpler and faster than another full-gathering round-trip.
+    this.pc.onicecandidate = (event) => {
+      if (event.candidate) this.send({ type: '__rtc_ice__', candidate: event.candidate.toJSON() });
+    };
+    this.pc.onnegotiationneeded = () => {
+      void this.renegotiate();
+    };
+  }
+
+  /** Real mid-duel renegotiation (e.g. adding a voice call's mic track after the fight has
+   * already started) piped over the SAME data channel the initial manual-code handshake opened —
+   * no second round of copy/paste codes. This is the honest reason a renegotiation channel can
+   * exist here but not for the very first connection: at bootstrap there is no channel yet to
+   * carry an offer over, so that one exchange has to be the manual code; every negotiation after
+   * that has a real live channel to use instead. */
+  private async renegotiate(): Promise<void> {
+    if (!this.isOpen) return; // no channel yet to carry this over — bootstrap handshake owns the first offer
+    const offer = await this.pc.createOffer();
+    await this.pc.setLocalDescription(offer);
+    this.send({ type: '__rtc_offer__', sdp: this.pc.localDescription });
+  }
+
+  /** Returns true if the message was an internal renegotiation/ICE signal and was consumed here
+   * — callers of onMessage (DuelSession, DuelChat) must never see these. */
+  private async handleInternalSignal(data: { type?: string; sdp?: RTCSessionDescriptionInit; candidate?: RTCIceCandidateInit }): Promise<boolean> {
+    if (data.type === '__rtc_offer__' && data.sdp) {
+      await this.pc.setRemoteDescription(data.sdp);
+      const answer = await this.pc.createAnswer();
+      await this.pc.setLocalDescription(answer);
+      this.send({ type: '__rtc_answer__', sdp: this.pc.localDescription });
+      return true;
+    }
+    if (data.type === '__rtc_answer__' && data.sdp) {
+      await this.pc.setRemoteDescription(data.sdp);
+      return true;
+    }
+    if (data.type === '__rtc_ice__' && data.candidate) {
+      await this.pc.addIceCandidate(data.candidate);
+      return true;
+    }
+    return false;
   }
 
   private wireChannel(channel: RTCDataChannel): void {
@@ -64,12 +113,24 @@ export class P2PChallengeLink {
     channel.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data as string);
-        this.messageHandlers.forEach((h) => h(data));
+        void this.handleInternalSignal(data).then((consumed) => {
+          if (!consumed) this.messageHandlers.forEach((h) => h(data));
+        });
       } catch {
         // malformed message from a misbehaving/tampered peer — drop it, never trust or crash on
         // network input; every real consumer of onMessage must already validate its own shape.
       }
     };
+  }
+
+  /** Adds this device's own microphone track to the live connection — triggers real
+   * renegotiation (see renegotiate() above) automatically via onnegotiationneeded. */
+  addMicTrack(stream: MediaStream): void {
+    stream.getAudioTracks().forEach((track) => this.pc.addTrack(track, stream));
+  }
+
+  onRemoteTrack(handler: (stream: MediaStream) => void): void {
+    this.remoteTrackHandlers.push(handler);
   }
 
   /** Host side, step 1: creates the data channel and a real SDP offer, waits for ICE gathering

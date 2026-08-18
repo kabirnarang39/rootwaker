@@ -50,6 +50,10 @@ function fakeElement(): any {
     addEventListener: () => {},
     querySelector: () => fakeElement(),
     getContext: () => fakeContext2D(),
+    focus: () => {},
+    blur: () => {},
+    scrollTop: 0,
+    scrollHeight: 0,
   };
   return el;
 }
@@ -99,13 +103,13 @@ describe('HUD controls legend — content (source-text check, no DOM needed)', (
   if (!legendMatch) throw new Error('rw-controls-legend markup block not found in HUD.ts — has it moved or been renamed?');
   const legendMarkup = legendMatch[1];
 
-  it('has exactly 10 control rows', () => {
+  it('has exactly 13 control rows', () => {
     const rowCount = (legendMarkup.match(/rw-legend-row/g) ?? []).length;
-    expect(rowCount).toBe(10);
+    expect(rowCount).toBe(13);
   });
 
   it('lists only real, currently-bound controls', () => {
-    for (const label of ['Move', 'Jump', 'Attack', 'Dodge', 'Block', 'Pounce', 'Look', 'View', 'Powers', 'Challenge']) {
+    for (const label of ['Move', 'Jump', 'Attack', 'Dodge', 'Block', 'Pounce', 'Look', 'View', 'Powers', 'Challenge', 'Leaderboard', 'Duel Chat', 'Duel Mute']) {
       expect(legendMarkup).toContain(`>${label}<`);
     }
   });
@@ -174,6 +178,22 @@ describe('HUD boss bar + arc-complete toast — behavior (real HUD instance, fak
     expect(arcCompleteEl.classList.contains('rw-visible')).toBe(true);
   });
 
+  it('toggleLeaderboardView opens on first call, populated with real entries, and closes on the second call (same key toggles it shut)', async () => {
+    const { HUD } = await import('../HUD');
+    const hud = new HUD(fakeElement() as unknown as HTMLElement);
+    const h = hud as unknown as { leaderboardViewEl: ReturnType<typeof fakeElement>; leaderboardViewListEl: ReturnType<typeof fakeElement> };
+    const entries = [
+      { species: 'bear' as const, coronationSeconds: 125, animalsDefeated: 7 },
+      { species: 'fox' as const, coronationSeconds: 400, animalsDefeated: 12 },
+    ];
+
+    hud.toggleLeaderboardView(entries);
+    expect(h.leaderboardViewEl.classList.contains('rw-visible')).toBe(true);
+
+    hud.toggleLeaderboardView(entries);
+    expect(h.leaderboardViewEl.classList.contains('rw-visible')).toBe(false);
+  });
+
   it('showDuelOutcome renders real distinct win/lose copy and toggles the loss color modifier', async () => {
     const { HUD } = await import('../HUD');
     const hud = new HUD(fakeElement() as unknown as HTMLElement);
@@ -192,6 +212,49 @@ describe('HUD boss bar + arc-complete toast — behavior (real HUD instance, fak
     expect(h.duelOutcomeEl.classList.contains('rw-duel-lost')).toBe(true);
     expect(h.duelOutcomeEyebrowEl.textContent).toBe('Single Combat');
     expect(h.duelOutcomeTitleEl.textContent).toContain('defeated');
+  });
+
+  it('showDuelChat reveals the panel and renders real messages; hideDuelChat clears and hides it', async () => {
+    const { HUD } = await import('../HUD');
+    const hud = new HUD(fakeElement() as unknown as HTMLElement);
+    const h = hud as unknown as { duelChatEl: ReturnType<typeof fakeElement>; duelChatListEl: ReturnType<typeof fakeElement> };
+
+    const fakeChat = {
+      history: [{ from: 'opponent' as const, text: 'ready?', at: 1 }],
+      onUpdate: (_h: unknown) => {},
+    };
+    hud.showDuelChat(fakeChat as any);
+    expect(h.duelChatEl.classList.contains('rw-visible')).toBe(true);
+
+    expect(() => hud.focusDuelChatInput()).not.toThrow();
+
+    hud.hideDuelChat();
+    expect(h.duelChatEl.classList.contains('rw-visible')).toBe(false);
+  });
+
+  it('showDuelVoice reveals the mic badge and toggleDuelVoiceMute flips real mute state via the mic; hideDuelVoice clears it', async () => {
+    const { HUD } = await import('../HUD');
+    const hud = new HUD(fakeElement() as unknown as HTMLElement);
+    const h = hud as unknown as { duelVoiceBadgeEl: ReturnType<typeof fakeElement>; duelVoiceStatusEl: ReturnType<typeof fakeElement> };
+
+    let muted = false;
+    const fakeVoice = {
+      isMuted: false,
+      toggleMute: () => {
+        muted = !muted;
+        return muted;
+      },
+      onRemoteStream: (_h: unknown) => {},
+    };
+    hud.showDuelVoice(fakeVoice as any);
+    expect(h.duelVoiceBadgeEl.classList.contains('rw-visible')).toBe(true);
+    expect(h.duelVoiceStatusEl.textContent).toBe('Mic live');
+
+    hud.toggleDuelVoiceMute();
+    expect(h.duelVoiceStatusEl.textContent).toBe('Mic muted');
+
+    hud.hideDuelVoice();
+    expect(h.duelVoiceBadgeEl.classList.contains('rw-visible')).toBe(false);
   });
 
   it('showCoronationResult renders rank/stats and reveals the panel without throwing', async () => {
