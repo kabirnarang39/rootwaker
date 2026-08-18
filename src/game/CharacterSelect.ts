@@ -2,7 +2,7 @@ import { SPECIES_SKINS, SPECIES_LABELS } from '../scene/createPlayableCharacter'
 import type { SpeciesId } from '../scene/PlayableCharacter';
 import { AudioFX } from './Audio';
 
-export const SPECIES_ORDER: SpeciesId[] = ['fox', 'bear', 'viper'];
+export const SPECIES_ORDER: SpeciesId[] = ['fox', 'bear', 'viper', 'boar', 'lion', 'crocodile'];
 
 function hex(n: number): string {
   return `#${n.toString(16).padStart(6, '0')}`;
@@ -31,7 +31,14 @@ export class CharacterSelect {
   private beginBtn: HTMLButtonElement;
 
   private speciesIndex = 0;
-  private skinIndexBySpecies: Record<SpeciesId, number> = { fox: 0, bear: 0, viper: 0 };
+  private skinIndexBySpecies: Record<SpeciesId, number> = {
+    fox: 0,
+    bear: 0,
+    viper: 0,
+    boar: 0,
+    lion: 0,
+    crocodile: 0,
+  };
   // Real voice preview on card selection — previously this screen only showed name/blurb/skin
   // swatch, none of a real animal's own identity that the game already gives every species
   // elsewhere (see Audio.ts's per-species hurt/death/aggro cues). AudioFX itself is always safe
@@ -156,6 +163,15 @@ export class CharacterSelect {
         break;
       case 'viper':
         this.audio.playViperHiss();
+        break;
+      case 'boar':
+        this.audio.playBoarSnort();
+        break;
+      case 'lion':
+        this.audio.playLionRoar();
+        break;
+      case 'crocodile':
+        this.audio.playCrocodileHiss();
         break;
     }
   }

@@ -84,6 +84,69 @@ export const VIPER_SKINS: CharacterSkin[] = [
   },
 ];
 
+export const BOAR_SKINS: CharacterSkin[] = [
+  {
+    id: 'russet',
+    name: 'Russet Boar',
+    furColor: 0x6b4a2e,
+    furDark: 0x3a2a18,
+    bellyColor: 0x9c8060,
+    glowColor: 0xffb15e,
+    glowRim: 0xffe0b0,
+  },
+  {
+    id: 'stone',
+    name: 'Stone Boar',
+    furColor: 0x5a5a54,
+    furDark: 0x2e2e2a,
+    bellyColor: 0x8a8a80,
+    glowColor: 0x9dd4ff,
+    glowRim: 0xdff0ff,
+  },
+];
+
+export const LION_SKINS: CharacterSkin[] = [
+  {
+    id: 'gold',
+    name: 'Gold-maned Lion',
+    furColor: 0xc9963c,
+    furDark: 0x8a5f22,
+    bellyColor: 0xf0dca0,
+    glowColor: 0xffd24d,
+    glowRim: 0xfff0b0,
+  },
+  {
+    id: 'shadow',
+    name: 'Shadow-maned Lion',
+    furColor: 0x8a6a3a,
+    furDark: 0x4a3418,
+    bellyColor: 0xd0b880,
+    glowColor: 0xff6ba8,
+    glowRim: 0xffd1e8,
+  },
+];
+
+export const CROCODILE_SKINS: CharacterSkin[] = [
+  {
+    id: 'river',
+    name: 'River Crocodile',
+    furColor: 0x2e4a2a,
+    furDark: 0x14200f,
+    bellyColor: 0xc9c07a,
+    glowColor: 0x5ff7ff,
+    glowRim: 0xbfffef,
+  },
+  {
+    id: 'swamp',
+    name: 'Swamp Crocodile',
+    furColor: 0x3a3a24,
+    furDark: 0x1a1a10,
+    bellyColor: 0xa0a06a,
+    glowColor: 0xd8ff4a,
+    glowRim: 0xeaffb0,
+  },
+];
+
 export function skinById(id: string): FoxSkin {
   return SKINS.find((s) => s.id === id) ?? SKINS[0];
 }

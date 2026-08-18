@@ -14,4 +14,4 @@ export interface PlayableCharacter {
   revealCrown(): void;
 }
 
-export type SpeciesId = 'fox' | 'bear' | 'viper';
+export type SpeciesId = 'fox' | 'bear' | 'viper' | 'boar' | 'lion' | 'crocodile';

@@ -85,6 +85,20 @@ describe('CharacterSelect — behavior (real instance, fake DOM)', () => {
     expect(cs.current()).toEqual({ species: 'fox', skinId: 'moonlit' }); // remembered, not reset
   });
 
+  it('all 6 species are selectable, each with its own real first skin', async () => {
+    const { CharacterSelect, SPECIES_ORDER } = await import('../CharacterSelect');
+    const cs = new CharacterSelect(fakeElement());
+    const cardEls = (cs as unknown as { cardEls: ReturnType<typeof fakeElement>[] }).cardEls;
+    expect(SPECIES_ORDER).toEqual(['fox', 'bear', 'viper', 'boar', 'lion', 'crocodile']);
+    expect(cardEls.length).toBe(6);
+    cardEls[3].__fire('click'); // boar
+    expect(cs.current()).toEqual({ species: 'boar', skinId: 'russet' });
+    cardEls[4].__fire('click'); // lion
+    expect(cs.current()).toEqual({ species: 'lion', skinId: 'gold' });
+    cardEls[5].__fire('click'); // crocodile
+    expect(cs.current()).toEqual({ species: 'crocodile', skinId: 'river' });
+  });
+
   it('whenConfirmed() resolves with the current selection and removes the panel from the document', async () => {
     const { CharacterSelect } = await import('../CharacterSelect');
     const cs = new CharacterSelect(fakeElement());

@@ -1,11 +1,32 @@
 import { createFox } from './createFox';
 import { createPlayableBear } from './createPlayableBear';
 import { createPlayableViper } from './createPlayableViper';
-import { SKINS, BEAR_SKINS, VIPER_SKINS, skinById, type CharacterSkin } from './skins';
+import { createPlayableBoar } from './createPlayableBoar';
+import { createPlayableLion } from './createPlayableLion';
+import { createPlayableCrocodile } from './createPlayableCrocodile';
+import {
+  SKINS,
+  BEAR_SKINS,
+  VIPER_SKINS,
+  BOAR_SKINS,
+  LION_SKINS,
+  CROCODILE_SKINS,
+  skinById,
+  type CharacterSkin,
+} from './skins';
 import type { PlayableCharacter, SpeciesId } from './PlayableCharacter';
 
+export const SPECIES_SKINS: Record<SpeciesId, CharacterSkin[]> = {
+  fox: SKINS,
+  bear: BEAR_SKINS,
+  viper: VIPER_SKINS,
+  boar: BOAR_SKINS,
+  lion: LION_SKINS,
+  crocodile: CROCODILE_SKINS,
+};
+
 function skinFor(species: SpeciesId, skinId: string): CharacterSkin {
-  const pool = species === 'bear' ? BEAR_SKINS : species === 'viper' ? VIPER_SKINS : SKINS;
+  const pool = SPECIES_SKINS[species];
   return pool.find((s) => s.id === skinId) ?? pool[0];
 }
 
@@ -18,17 +39,17 @@ export function createPlayableCharacter(species: SpeciesId, skinId: string): Pla
       return createPlayableBear(skinFor('bear', skinId));
     case 'viper':
       return createPlayableViper(skinFor('viper', skinId));
+    case 'boar':
+      return createPlayableBoar(skinFor('boar', skinId));
+    case 'lion':
+      return createPlayableLion(skinFor('lion', skinId));
+    case 'crocodile':
+      return createPlayableCrocodile(skinFor('crocodile', skinId));
     case 'fox':
     default:
       return createFox(skinById(skinId));
   }
 }
-
-export const SPECIES_SKINS: Record<SpeciesId, CharacterSkin[]> = {
-  fox: SKINS,
-  bear: BEAR_SKINS,
-  viper: VIPER_SKINS,
-};
 
 // These describe real identity/temperament, not mechanical stats — every playable species
 // currently shares the exact same move speed and attack damage (PlayerController.ts/Combat.ts
@@ -43,4 +64,7 @@ export const SPECIES_LABELS: Record<SpeciesId, { name: string; blurb: string }> 
   fox: { name: 'Fox', blurb: 'Quick, light-footed, and always alert — a real forest courier.' },
   bear: { name: 'Bear', blurb: 'Heavy and imposing — a real predator\'s presence in the jungle.' },
   viper: { name: 'Viper', blurb: 'Low, patient, and silent — built to vanish into the undergrowth.' },
+  boar: { name: 'Boar', blurb: 'Sturdy and stubborn — built low to the ground, tusks always ready.' },
+  lion: { name: 'Lion', blurb: 'A real apex presence — maned, muscular, and unmistakably in charge.' },
+  crocodile: { name: 'Crocodile', blurb: 'Long, low, and almost perfectly still — until it isn\'t.' },
 };

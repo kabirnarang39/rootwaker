@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { createPlayableCharacter, SPECIES_SKINS, SPECIES_LABELS } from '../createPlayableCharacter';
 import type { SpeciesId } from '../PlayableCharacter';
 
-const SPECIES: SpeciesId[] = ['fox', 'bear', 'viper'];
+const SPECIES: SpeciesId[] = ['fox', 'bear', 'viper', 'boar', 'lion', 'crocodile'];
 
 describe('createPlayableCharacter', () => {
   it('dispatches to the right builder per species and satisfies the shared PlayableCharacter contract', () => {
