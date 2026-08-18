@@ -7,20 +7,36 @@ const KEY_STORAGE_KEY = 'rootwaker.savekey.v1';
  * (no client-only scheme with no server and no passphrase can ever promise that). One key, one
  * storage slot, shared by every local encrypted store in this app. */
 
+/** Real, previously-missing guard: `localStorage.getItem` — not just `setItem` — can throw in
+ * some private-browsing/storage-restricted environments. Every `setItem` call in this project
+ * already treats storage failure as "won't persist" rather than an error; `getItem` calls were
+ * inconsistently guarded (some wrapped, some not). Shared here so every local-storage read across
+ * SaveGame/DistributedLeaderboard/DeviceIdentity gets the same real safety, not just the write side. */
+export function safeGetItem(key: string): string | null {
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+export function safeSetItem(key: string, value: string): void {
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    // storage unavailable — caller's data just won't persist across reloads
+  }
+}
+
 async function getOrCreateKey(): Promise<CryptoKey> {
-  const existing = localStorage.getItem(KEY_STORAGE_KEY);
+  const existing = safeGetItem(KEY_STORAGE_KEY);
   if (existing) {
     const raw = base64ToBytes(existing);
     return crypto.subtle.importKey('raw', raw, 'AES-GCM', false, ['encrypt', 'decrypt']);
   }
   const key = await crypto.subtle.generateKey({ name: 'AES-GCM', length: 256 }, true, ['encrypt', 'decrypt']);
   const raw = await crypto.subtle.exportKey('raw', key);
-  try {
-    localStorage.setItem(KEY_STORAGE_KEY, bytesToBase64(new Uint8Array(raw)));
-  } catch {
-    // storage unavailable — the key just won't persist across reloads; callers already treat a
-    // failed persist as "won't survive this session" rather than an error.
-  }
+  safeSetItem(KEY_STORAGE_KEY, bytesToBase64(new Uint8Array(raw)));
   return key;
 }
 

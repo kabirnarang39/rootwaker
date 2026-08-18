@@ -101,4 +101,28 @@ describe('SaveGame', () => {
     const save = new SaveGame();
     await expect(save.save(sampleState)).resolves.not.toThrow();
   });
+
+  it('load() returns null (not throws) when localStorage.getItem itself throws — a real gap the setItem-only test above didn\'t cover', async () => {
+    vi.stubGlobal('localStorage', {
+      getItem: () => {
+        throw new Error('storage access blocked');
+      },
+      setItem: () => {},
+      removeItem: () => {},
+    } as unknown as Storage);
+    const save = new SaveGame();
+    await expect(save.load()).resolves.toBeNull();
+  });
+
+  it('clear() does not throw when localStorage.removeItem throws', async () => {
+    vi.stubGlobal('localStorage', {
+      getItem: () => null,
+      setItem: () => {},
+      removeItem: () => {
+        throw new Error('storage access blocked');
+      },
+    } as unknown as Storage);
+    const save = new SaveGame();
+    expect(() => save.clear()).not.toThrow();
+  });
 });

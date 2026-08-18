@@ -2,7 +2,7 @@ import type { JsonValue } from 'trystero';
 import type { CoronationEntry, CoronationLeaderboardClient, CoronationSubmitResult } from '../leaderboard/CoronationLeaderboard';
 import { getDeviceId, getDisplayName } from './DeviceIdentity';
 import { getWorldRoom, onPeerJoin } from './DistributedRoom';
-import { encryptJSON, decryptJSON } from './crypto';
+import { encryptJSON, decryptJSON, safeGetItem, safeSetItem } from './crypto';
 
 // A plain intersection (not `interface extends`) so this structurally satisfies trystero's
 // DataPayload/JsonValue generic constraint — an interface with named-only members has no index
@@ -18,14 +18,11 @@ const STORAGE_KEY = 'rootwaker.world-leaderboard.v1';
 const SEQ_KEY = 'rootwaker.world-leaderboard-seq.v1';
 
 function nextLocalSeq(): number {
-  const raw = localStorage.getItem(SEQ_KEY);
+  const raw = safeGetItem(SEQ_KEY);
   const next = (raw ? parseInt(raw, 10) : 0) + 1;
-  try {
-    localStorage.setItem(SEQ_KEY, String(next));
-  } catch {
-    // storage unavailable — seq resets each session, which only risks a stale-looking merge
-    // conflict with this device's own prior entries, never data loss for anyone else's.
-  }
+  // storage unavailable — seq resets each session, which only risks a stale-looking merge
+  // conflict with this device's own prior entries, never data loss for anyone else's.
+  safeSetItem(SEQ_KEY, String(next));
   return next;
 }
 
@@ -46,7 +43,7 @@ export class DistributedCoronationLeaderboardClient implements CoronationLeaderb
   private async ensureLoaded(): Promise<void> {
     if (this.loaded) return;
     this.loaded = true;
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = safeGetItem(STORAGE_KEY);
     if (raw) {
       const entries = await decryptJSON<WorldCoronationEntry[]>(raw);
       if (entries) for (const e of entries) this.state.set(e.playerId, e);
@@ -55,11 +52,7 @@ export class DistributedCoronationLeaderboardClient implements CoronationLeaderb
 
   private async persist(): Promise<void> {
     const payload = await encryptJSON([...this.state.values()]);
-    try {
-      localStorage.setItem(STORAGE_KEY, payload);
-    } catch {
-      // storage unavailable — this device's local mirror just won't survive a reload
-    }
+    safeSetItem(STORAGE_KEY, payload);
   }
 
   /** Accepts an incoming entry only if it's newer than what's already known for that playerId —

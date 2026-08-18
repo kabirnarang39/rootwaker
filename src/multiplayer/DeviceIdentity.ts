@@ -1,3 +1,5 @@
+import { safeGetItem, safeSetItem } from './crypto';
+
 const DEVICE_ID_KEY = 'rootwaker.deviceId.v1';
 const DISPLAY_NAME_KEY = 'rootwaker.displayName.v1';
 
@@ -23,18 +25,14 @@ function randomDisplayName(): string {
  * local-storage-backed piece of this project already accepts. */
 export function getDeviceId(): string {
   if (cachedDeviceId) return cachedDeviceId;
-  const existing = localStorage.getItem(DEVICE_ID_KEY);
+  const existing = safeGetItem(DEVICE_ID_KEY);
   if (existing) {
     cachedDeviceId = existing;
     return existing;
   }
   const id = crypto.randomUUID();
   cachedDeviceId = id;
-  try {
-    localStorage.setItem(DEVICE_ID_KEY, id);
-  } catch {
-    // storage unavailable — id just won't survive a reload, matches every other local store here
-  }
+  safeSetItem(DEVICE_ID_KEY, id);
   return id;
 }
 
@@ -43,18 +41,14 @@ export function getDeviceId(): string {
  * user-renamable via setDisplayName. */
 export function getDisplayName(): string {
   if (cachedDisplayName) return cachedDisplayName;
-  const existing = localStorage.getItem(DISPLAY_NAME_KEY);
+  const existing = safeGetItem(DISPLAY_NAME_KEY);
   if (existing) {
     cachedDisplayName = existing;
     return existing;
   }
   const name = randomDisplayName();
   cachedDisplayName = name;
-  try {
-    localStorage.setItem(DISPLAY_NAME_KEY, name);
-  } catch {
-    // storage unavailable — name just won't survive a reload
-  }
+  safeSetItem(DISPLAY_NAME_KEY, name);
   return name;
 }
 
@@ -62,9 +56,5 @@ export function setDisplayName(name: string): void {
   const trimmed = name.trim().slice(0, 24);
   if (!trimmed) return;
   cachedDisplayName = trimmed;
-  try {
-    localStorage.setItem(DISPLAY_NAME_KEY, trimmed);
-  } catch {
-    // storage unavailable — name just won't survive a reload
-  }
+  safeSetItem(DISPLAY_NAME_KEY, trimmed);
 }

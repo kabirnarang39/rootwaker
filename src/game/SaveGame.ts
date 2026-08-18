@@ -1,5 +1,5 @@
 import type { SpeciesId } from '../scene/PlayableCharacter';
-import { encryptJSON, decryptJSON } from '../multiplayer/crypto';
+import { encryptJSON, decryptJSON, safeGetItem, safeSetItem } from '../multiplayer/crypto';
 
 export interface GameSaveState {
   species: SpeciesId;
@@ -29,20 +29,22 @@ const SAVE_STORAGE_KEY = 'rootwaker.save.v1';
 export class SaveGame {
   async save(state: GameSaveState): Promise<void> {
     const payload = await encryptJSON(state);
-    try {
-      localStorage.setItem(SAVE_STORAGE_KEY, payload);
-    } catch {
-      // storage unavailable (private browsing, quota) — save just won't persist
-    }
+    safeSetItem(SAVE_STORAGE_KEY, payload);
   }
 
+  /** Returns null on no save, a corrupt/tampered save, or storage being unavailable — never
+   * throws, matching every other local store in this project. */
   async load(): Promise<GameSaveState | null> {
-    const raw = localStorage.getItem(SAVE_STORAGE_KEY);
+    const raw = safeGetItem(SAVE_STORAGE_KEY);
     if (!raw) return null;
     return decryptJSON<GameSaveState>(raw);
   }
 
   clear(): void {
-    localStorage.removeItem(SAVE_STORAGE_KEY);
+    try {
+      localStorage.removeItem(SAVE_STORAGE_KEY);
+    } catch {
+      // storage unavailable — nothing to clear anyway
+    }
   }
 }
