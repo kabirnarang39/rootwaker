@@ -86,22 +86,36 @@ export class P2PChallengeLink {
   }
 
   /** Returns true if the message was an internal renegotiation/ICE signal and was consumed here
-   * — callers of onMessage (DuelSession, DuelChat) must never see these. */
+   * — callers of onMessage (DuelSession, DuelChat) must never see these. A peer past the initial
+   * handshake can send anything over the now-open channel (same "never trust network input"
+   * reasoning as wireChannel's own JSON.parse guard below) — `data.sdp`/`data.candidate` being
+   * present and truthy only means the message LOOKS like a renegotiation signal; the actual
+   * content could still be malformed/malicious SDP or ICE data the browser's own WebRTC stack
+   * rejects. Without this try/catch, that rejection had nowhere to go (this was only ever called
+   * from a bare `.then()`, no `.catch()`) — a real unhandled-promise-rejection gap, not a crash,
+   * but inconsistent with every other network-input path in this file. */
   private async handleInternalSignal(data: { type?: string; sdp?: RTCSessionDescriptionInit; candidate?: RTCIceCandidateInit }): Promise<boolean> {
-    if (data.type === '__rtc_offer__' && data.sdp) {
-      await this.pc.setRemoteDescription(data.sdp);
-      const answer = await this.pc.createAnswer();
-      await this.pc.setLocalDescription(answer);
-      this.send({ type: '__rtc_answer__', sdp: this.pc.localDescription });
-      return true;
-    }
-    if (data.type === '__rtc_answer__' && data.sdp) {
-      await this.pc.setRemoteDescription(data.sdp);
-      return true;
-    }
-    if (data.type === '__rtc_ice__' && data.candidate) {
-      await this.pc.addIceCandidate(data.candidate);
-      return true;
+    try {
+      if (data.type === '__rtc_offer__' && data.sdp) {
+        await this.pc.setRemoteDescription(data.sdp);
+        const answer = await this.pc.createAnswer();
+        await this.pc.setLocalDescription(answer);
+        this.send({ type: '__rtc_answer__', sdp: this.pc.localDescription });
+        return true;
+      }
+      if (data.type === '__rtc_answer__' && data.sdp) {
+        await this.pc.setRemoteDescription(data.sdp);
+        return true;
+      }
+      if (data.type === '__rtc_ice__' && data.candidate) {
+        await this.pc.addIceCandidate(data.candidate);
+        return true;
+      }
+    } catch {
+      // malformed/malicious renegotiation signal from a misbehaving peer — drop it. Still real
+      // renegotiation state (a mic track, say) may end up not connecting for that peer, but the
+      // duel's own data channel (already open, unaffected by a failed SDP renegotiation) keeps
+      // working — never let this propagate into an unhandled rejection or crash anything else.
     }
     return false;
   }
