@@ -2,6 +2,13 @@
   "name": "rootwaker",
   "private": true,
   "version": "0.0.0",
+  "description": "A browser 3D action-adventure game — hunt real animals through a jungle, climb a real mountain, become King, then duel other players in real peer-to-peer combat. Three.js + TypeScript, zero backend.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kabirnarang39/rootwaker.git"
+  },
+  "homepage": "https://kabirnarang39.github.io/rootwaker/",
   "type": "module",
   "scripts": {
     "dev": "vite",

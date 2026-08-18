@@ -299,6 +299,15 @@ export class DuelSession {
     return (this.role === 'host' ? this.host : this.guest).combatant.hp;
   }
 
+  // Real instance accessor for DUEL_HP — lets Game.ts read the duel max-HP constant off an
+  // already-loaded DuelSession instance instead of needing its own static import of this module's
+  // value export, since this module is lazy-loaded only once a duel actually starts (see
+  // Game.ts's startDuel() dynamic import — keeps the multiplayer duel code out of the main bundle
+  // for the common case where a session never touches multiplayer at all).
+  get maxHp(): number {
+    return DUEL_HP;
+  }
+
   get iAmWinner(): boolean {
     return this.winner === this.role;
   }

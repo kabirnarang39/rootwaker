@@ -42,10 +42,14 @@ import type { CoronationEntry } from '../leaderboard/CoronationLeaderboard';
 import { DistributedCoronationLeaderboardClient } from '../multiplayer/DistributedLeaderboard';
 import { getDeviceId } from '../multiplayer/DeviceIdentity';
 import { SaveGame, type GameSaveState } from './SaveGame';
-import { ChallengeGate } from '../multiplayer/ChallengeGate';
-import { DuelChat } from '../multiplayer/DuelChat';
-import { DuelVoice } from '../multiplayer/DuelVoice';
-import { DuelSession, DUEL_HP, type DuelCombatantInfo } from '../multiplayer/DuelSession';
+// The duel system (challenge gate, WebRTC session, chat, voice) is dynamically imported inside
+// openChallengeGate()/startDuel() below rather than statically here — most sessions never press M,
+// so this keeps that whole subsystem out of the main bundle for the common case. Only types are
+// imported statically (erased at build, zero runtime cost).
+import type { ChallengeGate } from '../multiplayer/ChallengeGate';
+import type { DuelChat } from '../multiplayer/DuelChat';
+import type { DuelVoice } from '../multiplayer/DuelVoice';
+import type { DuelSession, DuelCombatantInfo } from '../multiplayer/DuelSession';
 import type { P2PChallengeLink } from '../multiplayer/P2PChallengeLink';
 import { createRainSystem, type RainSystem } from '../scene/createRainSystem';
 
@@ -241,6 +245,7 @@ interface EnemyEntry {
 export class Game {
   private scene = new THREE.Scene();
   private renderer: THREE.WebGLRenderer;
+  private contextLost = false;
   private composer: EffectComposer;
   private clock = new THREE.Clock();
 
@@ -429,6 +434,7 @@ export class Game {
     this.renderer.toneMappingExposure = 1.15;
     this.renderer.shadowMap.enabled = true;
     container.appendChild(this.renderer.domElement);
+    this.setupContextLossRecovery(container);
 
     this.setupLights(isTouchPrimary);
 
@@ -594,6 +600,34 @@ export class Game {
     this.hud.dismissLegend();
   }
 
+  /** A real, previously-missing gap: a lost WebGL context (GPU driver reset, too many WebGL
+   * contexts open across other tabs) used to leave the game silently frozen on a black canvas
+   * with zero explanation. `webglcontextlost` MUST call preventDefault() to even leave restoration
+   * possible, but three.js's own renderer state (textures/geometries/programs uploaded to the old
+   * context) doesn't survive a real context swap without a full re-initialization this project
+   * doesn't attempt — so the honest fix here is stopping the dead render loop and telling the
+   * player plainly what happened and what to do, not pretending to silently recover. */
+  private setupContextLossRecovery(container: HTMLElement): void {
+    const overlay = document.createElement('div');
+    overlay.style.cssText =
+      'position:fixed;inset:0;z-index:9999;display:none;align-items:center;justify-content:center;' +
+      'flex-direction:column;gap:16px;background:rgba(5,8,6,0.95);color:#eef2e6;' +
+      'font-family:ui-sans-serif,system-ui,sans-serif;text-align:center;padding:24px;';
+    overlay.innerHTML = `
+      <div style="font-size:20px;font-weight:600;">Graphics connection lost</div>
+      <div style="font-size:14px;opacity:0.8;max-width:420px;">Your browser's WebGL context was lost — this can happen after a GPU driver reset or too many 3D tabs open at once. Reload to continue.</div>
+      <button type="button" style="padding:10px 20px;border-radius:6px;cursor:pointer;border:none;background:#ffb15e;color:#14100a;font-size:14px;">Reload</button>
+    `;
+    overlay.querySelector('button')!.addEventListener('click', () => window.location.reload());
+    container.appendChild(overlay);
+
+    this.renderer.domElement.addEventListener('webglcontextlost', (event) => {
+      event.preventDefault(); // required for the browser to even consider restoring the context
+      this.contextLost = true;
+      overlay.style.display = 'flex';
+    });
+  }
+
   private setupLights(isTouchPrimary: boolean) {
     const hemi = new THREE.HemisphereLight(0x4a7a8a, 0x1c3226, 1.9);
     this.scene.add(hemi);
@@ -640,6 +674,11 @@ export class Game {
   }
 
   private animate = () => {
+    // A lost WebGL context (GPU driver reset, too many contexts open elsewhere) makes every
+    // further render call either throw or silently no-op into a black canvas — stop scheduling
+    // frames entirely rather than spinning a loop that can't produce anything real. See
+    // setupContextLossRecovery() for the real user-facing message this pairs with.
+    if (this.contextLost) return;
     const delta = Math.min(this.clock.getDelta(), 0.05);
     const time = this.clock.elapsedTime;
 
@@ -671,7 +710,7 @@ export class Game {
         p.z + pitchedDistance * Math.cos(yaw),
       );
       this.cameraRig.camera.lookAt(p.x, p.y + 0.6, p.z);
-      this.hud.updateHealth(this.duel.myHp, DUEL_HP);
+      this.hud.updateHealth(this.duel.myHp, this.duel.maxHp);
       this.composer.render();
       requestAnimationFrame(this.animate);
       return;
@@ -1466,6 +1505,7 @@ export class Game {
    * comment for why "current king" is inherently a local, per-player fact rather than a globally
    * synchronized one in a backend-free P2P design. */
   private async openChallengeGate(): Promise<void> {
+    const { ChallengeGate } = await import('../multiplayer/ChallengeGate');
     const gate = new ChallengeGate(this.container, {
       species: this.playerSpecies,
       skinId: this.playerSkinId,
@@ -1473,7 +1513,7 @@ export class Game {
     this.challengeGate = gate;
     try {
       const { link, remote } = await gate.whenConnected();
-      this.startDuel(link, remote);
+      await this.startDuel(link, remote);
     } catch {
       // canceled — no real state change, the player just returns to normal play
     } finally {
@@ -1481,7 +1521,12 @@ export class Game {
     }
   }
 
-  private startDuel(link: P2PChallengeLink, remote: DuelCombatantInfo): void {
+  private async startDuel(link: P2PChallengeLink, remote: DuelCombatantInfo): Promise<void> {
+    const [{ DuelSession }, { DuelChat }, { DuelVoice }] = await Promise.all([
+      import('../multiplayer/DuelSession'),
+      import('../multiplayer/DuelChat'),
+      import('../multiplayer/DuelVoice'),
+    ]);
     this.level.group.visible = false;
     this.fox.group.visible = false;
     this.hud.hideBossBar();
