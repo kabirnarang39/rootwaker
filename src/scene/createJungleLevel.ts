@@ -65,6 +65,14 @@ export interface JungleLevel {
   finchFlockCenter: THREE.Vector3;
   obstacleGrid: TreeObstacleGrid;
   foliageMeshes: THREE.InstancedMesh[];
+  // Trunk-only subset of foliageMeshes for camera obstacle-avoidance raycasting. A tree trunk is
+  // a real hard blocker worth pulling the camera in for; a leafy canopy lobe is decoration — camera
+  // avoidance treating canopy as a solid obstacle was pulling the camera in (or triggering the
+  // player's own render-layer self-hide) at ~36%/~5% of random jungle positions respectively, since
+  // 1300 densely-placed trees' canopy lobes routinely overlap the sightline even when nothing solid
+  // actually blocks it. Rendering (`foliageMeshes`, unchanged) still includes canopy; only the
+  // camera obstacle list is narrowed.
+  treeTrunkMeshes: THREE.InstancedMesh[];
   // Static wall/ledge/gate meshes (real Meshes, Groups pre-flattened) the camera should also
   // raycast against — e.g. the hawk-eye view being blocked by an overhanging mountain ledge.
   climbObstacleMeshes: THREE.Object3D[];
@@ -234,7 +242,12 @@ function buildFoliage(
   heightAt: (x: number, z: number) => number,
   water: WaterBody,
   wallBounds: THREE.Box2,
-): { meshes: THREE.InstancedMesh[]; update: (time: number) => void; obstacles: TreeObstacle[] } {
+): {
+  meshes: THREE.InstancedMesh[];
+  trunkMeshes: THREE.InstancedMesh[];
+  update: (time: number) => void;
+  obstacles: TreeObstacle[];
+} {
   const COUNT = 1300;
   const windDir2 = new THREE.Vector2(WIND.x, WIND.z).normalize();
 
@@ -247,11 +260,21 @@ function buildFoliage(
   let totalPlaced = 0;
   let attempts = 0;
 
-  while (totalPlaced < COUNT && attempts < COUNT * 4) {
+  // Real forests keep a minimum crown-to-crown spacing between trunks (that's WHY canopies don't
+  // permanently overlap each other) — the old placement loop had zero such check, so trunks could
+  // land arbitrarily close by pure chance. That was the real root cause of the camera's obstacle
+  // avoidance frequently pulling in/self-hiding the player (measured live: ~12% of random jungle
+  // positions triggered the fox's own render-layer self-hide before this fix) — not just canopy
+  // being treated as a hard obstacle (fixed separately, see treeTrunkMeshes above). MIN_TREE_SPACING
+  // is checked against every already-placed tree's own (unscaled-worst-case) trunk radius.
+  const MIN_TREE_SPACING = 0.7;
+
+  while (totalPlaced < COUNT && attempts < COUNT * 6) {
     attempts++;
     const x = (Math.random() - 0.5) * CHAPTER_SIZE;
     const z = (Math.random() - 0.5) * CHAPTER_SIZE;
     if (!isPlaceable(x, z, water, wallBounds)) continue;
+    if (treeObstacles.some((tree) => (tree.x - x) ** 2 + (tree.z - z) ** 2 < MIN_TREE_SPACING ** 2)) continue;
 
     const speciesIndex = Math.floor(Math.random() * TREE_SPECIES.length);
     if (placedPerSpecies[speciesIndex] >= perSpeciesCount) continue;
@@ -274,16 +297,19 @@ function buildFoliage(
   }
 
   const meshes: THREE.InstancedMesh[] = [];
+  const trunkMeshes: THREE.InstancedMesh[] = [];
   speciesMeshes.forEach(({ trunkMesh, canopyMesh }, i) => {
     trunkMesh.count = placedPerSpecies[i];
     canopyMesh.count = placedPerSpecies[i];
     trunkMesh.instanceMatrix.needsUpdate = true;
     canopyMesh.instanceMatrix.needsUpdate = true;
     meshes.push(trunkMesh, canopyMesh);
+    trunkMeshes.push(trunkMesh);
   });
 
   return {
     meshes,
+    trunkMeshes,
     update: (time: number) => {
       speciesMeshes.forEach(({ uniforms }) => {
         uniforms.uTime.value = time;
@@ -1082,7 +1108,12 @@ export function createJungleLevel(): JungleLevel {
   const { mesh: waterMesh, water } = buildWater();
   group.add(waterMesh);
 
-  const { meshes: foliageMeshes, update: updateFoliage, obstacles } = buildFoliage(heightAt, water, wall.bounds);
+  const {
+    meshes: foliageMeshes,
+    trunkMeshes: treeTrunkMeshes,
+    update: updateFoliage,
+    obstacles,
+  } = buildFoliage(heightAt, water, wall.bounds);
   group.add(...foliageMeshes);
   const obstacleGrid = new TreeObstacleGrid(obstacles);
 
@@ -1146,6 +1177,7 @@ export function createJungleLevel(): JungleLevel {
     finchFlockCenter,
     obstacleGrid,
     foliageMeshes,
+    treeTrunkMeshes,
     climbObstacleMeshes: [wallMesh, ...mountain.climbMeshes],
     mountain: { segments: mountain.segments, summitGate: mountain.summitGate },
     throneRoom,

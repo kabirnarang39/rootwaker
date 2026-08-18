@@ -52,6 +52,15 @@ describe('createJungleLevel', () => {
     }
   });
 
+  it('treeTrunkMeshes is a strict subset of foliageMeshes, excluding canopy — camera obstacle avoidance must not treat leafy canopy as a hard blocker (that caused frequent unwanted camera pull-in/self-hide in dense jungle)', () => {
+    const level = createJungleLevel();
+    expect(level.treeTrunkMeshes.length).toBeGreaterThan(0);
+    expect(level.treeTrunkMeshes.length).toBeLessThan(level.foliageMeshes.length);
+    for (const trunk of level.treeTrunkMeshes) {
+      expect(level.foliageMeshes).toContain(trunk);
+    }
+  });
+
   it('the mountain no longer has guards (guards relocated into the jungle as Grove Bears; ledges are hazard-free rest points again)', () => {
     const level = createJungleLevel();
     expect(level.mountain).not.toHaveProperty('guards');

@@ -270,7 +270,7 @@ export class Game {
   // Static after level creation — computed once rather than re-spread every animate() frame.
   // Includes mountain wall/ledge/gate geometry so hawkEye's overhead sightline is checked
   // against overhanging rock the same way follow/closeUp already check against tree trunks.
-  private cameraObstacles = [...this.level.foliageMeshes, ...this.level.climbObstacleMeshes];
+  private cameraObstacles = [...this.level.treeTrunkMeshes, ...this.level.climbObstacleMeshes];
   private playerController = new PlayerController(new THREE.Vector3(0, 0, 12));
   // Assigned in the constructor (needs the character-choice param), not here — every other
   // usage below (`this.fox.group`/`.rig`/`.update()`/`.revealCrown()`) is the shared
