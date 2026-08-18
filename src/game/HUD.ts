@@ -143,6 +143,7 @@ export class HUD {
         <div class="rw-legend-row"><span class="rw-legend-key">W A S D</span><span class="rw-legend-label">Move</span></div>
         <div class="rw-legend-row"><span class="rw-legend-key">Space</span><span class="rw-legend-label">Jump</span></div>
         <div class="rw-legend-row"><span class="rw-legend-key">J</span><span class="rw-legend-label">Attack</span></div>
+        <div class="rw-legend-row"><span class="rw-legend-key">K</span><span class="rw-legend-label">Dodge</span></div>
         <div class="rw-legend-row"><span class="rw-legend-key">L</span><span class="rw-legend-label">Pounce</span></div>
         <div class="rw-legend-row"><span class="rw-legend-key">Drag</span><span class="rw-legend-label">Look</span></div>
         <div class="rw-legend-row"><span class="rw-legend-key">C</span><span class="rw-legend-label">View</span></div>

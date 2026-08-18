@@ -95,19 +95,18 @@ describe('HUD controls legend — content (source-text check, no DOM needed)', (
   if (!legendMatch) throw new Error('rw-controls-legend markup block not found in HUD.ts — has it moved or been renamed?');
   const legendMarkup = legendMatch[1];
 
-  it('has exactly 8 control rows', () => {
+  it('has exactly 9 control rows', () => {
     const rowCount = (legendMarkup.match(/rw-legend-row/g) ?? []).length;
-    expect(rowCount).toBe(8);
+    expect(rowCount).toBe(9);
   });
 
   it('lists only real, currently-bound controls', () => {
-    for (const label of ['Move', 'Jump', 'Attack', 'Pounce', 'Look', 'View', 'Powers', 'Challenge']) {
+    for (const label of ['Move', 'Jump', 'Attack', 'Dodge', 'Pounce', 'Look', 'View', 'Powers', 'Challenge']) {
       expect(legendMarkup).toContain(`>${label}<`);
     }
   });
 
-  it('does NOT list Dodge or Interact — both keys are bound in Input.ts but Game.ts\'s onAction ignores both, so listing them would be a control that does nothing', () => {
-    expect(legendMarkup).not.toMatch(/>Dodge</i);
+  it('does NOT list Interact — the key is bound in Input.ts but Game.ts\'s onAction ignores it, so listing it would be a control that does nothing (Dodge, unlike Interact, is now real — see combat-depth-round-2)', () => {
     expect(legendMarkup).not.toMatch(/>Interact</i);
   });
 });

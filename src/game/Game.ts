@@ -22,7 +22,7 @@ import { VenomTracker, VENOM_DAMAGE_PER_TICK } from './Venom';
 import { StoryBeatTracker, type StoryBeatId } from './StoryBeats';
 import type { GroundSlamState } from './GroundSlam';
 import type { GroveHare } from '../entities/groveHare';
-import { resolveMeleeHit, applyDamage, isDefeated, CLAW_SWIPE, type Combatant } from './Combat';
+import { resolveMeleeHit, applyDamage, isDefeated, COMBO_MOVES, COMBO_WINDOW_SECONDS, COMBO_KNOCKBACK, type Combatant } from './Combat';
 import { Input, type PlayerAction } from './Input';
 import { isInsideWaterBody } from './WaterBody';
 import { computeApproachSpeed, checkPounceRange } from './Stalking';
@@ -78,9 +78,24 @@ const GROUND_SLAM_RANGE = 3; // meters — how close to the King the ground-slam
 
 // Usable-powers tuning. Base attack stays CLAW_SWIPE-driven (Combat.ts); every power below is a
 // distinct real effect, not a stat reskin of the base attack.
-const ATTACK_KNOCKBACK = 0.3; // meters an enemy is pushed back on a normal hit
 const DASH_SPEED = 14; // m/s during boar-charge's forward lunge
 const DASH_SECONDS = 0.3; // duration of the lunge itself
+
+// Real evasive roll (KeyK, already bound in Input.ts but never wired up until now): a short
+// position burst plus a real invulnerability window that covers only PART of the roll's own
+// duration — a real dodge has a committed recovery tail where you're still vulnerable, not
+// invulnerable literally the whole time you're moving. A slower burst than DASH_SPEED (this is
+// defensive positioning, not an attack) but still a real, decisive escape.
+const DODGE_SPEED = 8;
+const DODGE_SECONDS = 0.35;
+const DODGE_IFRAME_SECONDS = 0.22;
+const DODGE_COOLDOWN_SECONDS = 0.9;
+
+// Real hit-stagger: taking a real hit briefly locks out movement input — the player visibly
+// reacts to being struck instead of shrugging it off mid-stride. Short enough to never feel like
+// a stunlock chain (every enemy's own recoverSeconds is comfortably longer than this), long
+// enough to read as a real flinch.
+const HIT_STAGGER_SECONDS = 0.22;
 const DASH_DAMAGE = 16;
 const DASH_RADIUS = 0.7;
 const DASH_REACH = 3.2; // meters — the charge's forward hit capsule, well past the base attack's 1m reach
@@ -263,6 +278,7 @@ export class Game {
   private duel: DuelSession | null = null;
   private challengeGate: ChallengeGate | null = null;
   private duelAttackPressed = false;
+  private duelDodgePressed = false;
   // The root-wraith is unkillable and nothing notices (Task 6 Step 7a): nothing ever checked
   // isDefeated(wraith.combatant), so it absorbed hits and kept dealing damage forever past 0 HP.
   // A root-spirit grants no ability on kill, so its enemyEntries() onDefeat only removes it.
@@ -319,6 +335,17 @@ export class Game {
   private dashEndTime = -Infinity;
   private dashDirection = new THREE.Vector3(0, 0, 1);
   private senseActiveUntil = -Infinity;
+
+  // Real evasive roll (KeyK) — see DODGE_* constants above for the real timing reasoning.
+  private dodgeEndTime = -Infinity;
+  private dodgeDirection = new THREE.Vector3(0, 0, 1);
+  private dodgeInvulnerableUntil = -Infinity;
+  private lastDodgeTime = -Infinity;
+  // Real 3-hit combo chain on the base attack — see COMBO_MOVES in Combat.ts.
+  private comboStage = 0;
+  private lastComboAttackTime = -Infinity;
+  // Real hit-stagger — see HIT_STAGGER_SECONDS above.
+  private staggerUntil = -Infinity;
 
   // Base terrain heightAt() has no notion of the mountain's elevated ledges, so a player
   // topping out a climb segment would otherwise free-fall straight back down to jungle-floor
@@ -421,13 +448,15 @@ export class Game {
         return;
       }
       if (this.duel) {
-        // A duel in progress owns 'attack' entirely — no abilities, jump, pounce, or view-cycle
-        // mid-duel (see DuelSession's own deliberately-minimal move set).
+        // A duel owns 'attack'/'dodge' entirely — same real combo/dodge depth as single-player
+        // combat (see DuelSession.ts), but no abilities, jump, pounce, or view-cycle mid-duel.
         if (action === 'attack') this.duelAttackPressed = true;
+        if (action === 'dodge') this.duelDodgePressed = true;
         return;
       }
       if (action === 'jump') this.jumpPressed = true;
       if (action === 'attack') this.tryAttack();
+      if (action === 'dodge') this.tryDodge();
       if (action === 'pounce') this.tryPounce();
       if (action === 'cycleView') {
         this.cameraRig.cycleViewMode();
@@ -588,7 +617,9 @@ export class Game {
       // the actual host-authoritative simulation this drives.
       const attackPressed = this.duelAttackPressed;
       this.duelAttackPressed = false;
-      this.duel.update(delta, { x: this.rawMoveInput.x, z: this.rawMoveInput.z, jump: false }, attackPressed);
+      const dodgePressed = this.duelDodgePressed;
+      this.duelDodgePressed = false;
+      this.duel.update(delta, { x: this.rawMoveInput.x, z: this.rawMoveInput.z, jump: false }, attackPressed, dodgePressed);
       const p = this.duel.localFighterPosition;
       this.cameraRig.camera.position.set(p.x, p.y + 3, p.z + 6);
       this.cameraRig.camera.lookAt(p.x, p.y + 0.5, p.z);
@@ -667,6 +698,17 @@ export class Game {
           this.playerController.body.position.z,
         );
         this.playerController.body.velocity.set(this.dashDirection.x * DASH_SPEED, 0, this.dashDirection.z * DASH_SPEED);
+      } else if (time < this.dodgeEndTime) {
+        // Real evasive roll — same "bypass the normal input->velocity mapping" idiom as the dash
+        // branch above, deliberately kept as its own separate field/branch rather than reusing
+        // dashEndTime: a defensive roll and an offensive charge-ability are semantically
+        // different actions that happen to share a mechanism, not the same action.
+        this.playerController.body.position.addScaledVector(this.dodgeDirection, DODGE_SPEED * delta);
+        this.playerController.body.position.y = this.groundHeightWithLedges(
+          this.playerController.body.position.x,
+          this.playerController.body.position.z,
+        );
+        this.playerController.body.velocity.set(this.dodgeDirection.x * DODGE_SPEED, 0, this.dodgeDirection.z * DODGE_SPEED);
       } else if (time < this.owlDiveEndTime) {
         // Owl's Descent — the same "bypass the normal input->velocity mapping" idiom as the dash
         // above, but with a real parabolic arc: forward at OWL_DIVE_FORWARD_SPEED, vertical
@@ -686,7 +728,14 @@ export class Game {
           this.owlDiveDirection.z * OWL_DIVE_FORWARD_SPEED,
         );
       } else {
-        this.playerController.update(this.moveInput, delta, this.groundHeightWithLedges);
+        // Real hit-stagger: a fresh hit briefly locks out normal movement input — the player
+        // visibly reacts instead of shrugging a hit off mid-stride. jump is deliberately still
+        // allowed through (a real player can still leap away while staggered; only x/z drive is
+        // locked), and a dodge is a direct position override that bypasses this branch entirely,
+        // so a skilled player can always roll OUT of stagger — never a true lockout.
+        const staggered = time < this.staggerUntil;
+        const effectiveMoveInput = staggered ? { x: 0, z: 0, jump: this.moveInput.jump } : this.moveInput;
+        this.playerController.update(effectiveMoveInput, delta, this.groundHeightWithLedges);
       }
       // PLAYER_COLLISION_RADIUS (0.35m) must stay well under TreeObstacleGrid's cell size
       // (3m default) — nearby() ignores its radius arg and always does a fixed 3x3-cell
@@ -1172,8 +1221,14 @@ export class Game {
 
   /** Applies damage to the player plus the real feedback that was previously missing entirely
    * (no sound, no screen cue — only the health-bar width eventually changed). */
+  /** The single choke point every enemy attack (8 call sites: boar/bear/owl/viper/lion/wraith/
+   * King calm/King enraged) already routes through — the real i-frame check lives here once,
+   * not duplicated at each call site. A dodge's invulnerability window makes a real hit whiff
+   * entirely: no damage, no flash, no hurt sound, the same as if the attack simply missed. */
   private hurtPlayer(amount: number): void {
+    if (this.clock.elapsedTime < this.dodgeInvulnerableUntil) return;
     applyDamage(this.playerCombatant, amount);
+    this.staggerUntil = this.clock.elapsedTime + HIT_STAGGER_SECONDS;
     this.audio.playPlayerHurt();
     this.hud.flashDamage();
   }
@@ -1514,10 +1569,44 @@ export class Game {
     }
   }
 
+  /** Real 3-hit combo: J,J,J within COMBO_WINDOW_SECONDS of each other advances through
+   * COMBO_MOVES (light -> light -> heavy finisher), each stage with real escalating damage,
+   * knockback, AND recovery cost — not a free damage upgrade, a real risk/reward chain. Waiting
+   * too long between presses (or simply not attacking again in time) resets back to stage 0, so
+   * this stays a real rhythm-based chain rather than a state that lingers forever. */
   private tryAttack() {
     const time = this.clock.elapsedTime;
-    if (time - this.lastAttackTime < CLAW_SWIPE.recoverySeconds) return;
+    if (time - this.lastComboAttackTime > COMBO_WINDOW_SECONDS) this.comboStage = 0;
+
+    const move = COMBO_MOVES[this.comboStage];
+    if (time - this.lastAttackTime < move.recoverySeconds) return;
+
     this.lastAttackTime = time;
-    this.meleeSweep(CLAW_SWIPE.damage, 0.6, 1, ATTACK_KNOCKBACK);
+    this.lastComboAttackTime = time;
+    this.meleeSweep(move.damage, 0.6, 1, COMBO_KNOCKBACK[this.comboStage]);
+    if (this.comboStage === COMBO_MOVES.length - 1) this.audio.playBearSwipeActivate(); // a real distinct heavier cue on the finisher
+    this.comboStage = (this.comboStage + 1) % COMBO_MOVES.length;
+  }
+
+  /** Real evasive roll: a decisive position burst plus a real invulnerability WINDOW that covers
+   * only the early part of the roll (DODGE_IFRAME_SECONDS < DODGE_SECONDS) — the tail end of a
+   * dodge is a real committed recovery beat, not free invulnerability for its whole duration. */
+  private tryDodge(): void {
+    const time = this.clock.elapsedTime;
+    if (time - this.lastDodgeTime < DODGE_COOLDOWN_SECONDS) return;
+    this.lastDodgeTime = time;
+    this.dodgeEndTime = time + DODGE_SECONDS;
+    this.dodgeInvulnerableUntil = time + DODGE_IFRAME_SECONDS;
+    // Dodges toward wherever the player is actually moving (a real evasive roll goes somewhere
+    // deliberate); with no move input held, rolls straight back along the fox's own facing —
+    // a real backstep, not a random direction.
+    const rawSpeed = Math.hypot(this.rawMoveInput.x, this.rawMoveInput.z);
+    if (rawSpeed > 0.1) {
+      const relative = toCameraRelative(this.rawMoveInput.x, this.rawMoveInput.z, this.cameraRig.orbitYaw);
+      this.dodgeDirection.set(relative.x, 0, relative.z).normalize();
+    } else {
+      this.dodgeDirection.copy(this.facingForward()).negate();
+    }
+    this.audio.playDodgeRoll();
   }
 }

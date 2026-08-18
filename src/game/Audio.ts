@@ -822,6 +822,28 @@ export class AudioFX {
     noise.start();
   }
 
+  /** Real evasive-roll cue — a quick rising whoosh, distinct from playChargeDash's driving
+   * sawtooth ramp (an offensive charge) and playLionPounceActivate's short explosive burst (an
+   * attack) — this one reads as movement AWAY from danger, a rising pitch rather than either of
+   * those attacks' own shapes. */
+  playDodgeRoll(): void {
+    if (!this.ctx) return;
+    const ctx = this.ctx;
+    const noise = ctx.createBufferSource();
+    noise.buffer = makeNoiseBuffer(ctx, 0.25);
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'bandpass';
+    filter.frequency.setValueAtTime(500, ctx.currentTime);
+    filter.frequency.exponentialRampToValueAtTime(1800, ctx.currentTime + 0.22);
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0.12, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.25);
+    noise.connect(filter);
+    filter.connect(gain);
+    gain.connect(ctx.destination);
+    noise.start();
+  }
+
   startVillageAmbience(): void {
     // A single warm, sustained drone — deliberately sparser than startJungleAmbience's
     // multi-layer canopy/floor/bird/water soundscape or startMountainWind's noise gusts: this is

@@ -147,4 +147,9 @@ describe('AudioFX species sounds', () => {
     const fx = new AudioFX();
     expect(() => fx.playLionPounceActivate()).not.toThrow();
   });
+
+  it('playDodgeRoll does not throw before unlock()', () => {
+    const fx = new AudioFX();
+    expect(() => fx.playDodgeRoll()).not.toThrow();
+  });
 });

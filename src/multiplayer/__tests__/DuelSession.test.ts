@@ -45,7 +45,7 @@ describe('DuelSession', () => {
     const duel = new DuelSession(link, fox, bear);
     const h = duel as unknown as { host: { controller: { body: { position: { x: number } } } } };
     const before = h.host.controller.body.position.x;
-    for (let i = 0; i < 30; i++) duel.update(1 / 60, { x: 1, z: 0, jump: false }, false);
+    for (let i = 0; i < 30; i++) duel.update(1 / 60, { x: 1, z: 0, jump: false }, false, false);
     expect(h.host.controller.body.position.x).toBeGreaterThan(before);
   });
 
@@ -54,8 +54,8 @@ describe('DuelSession', () => {
     const duel = new DuelSession(link, fox, bear);
     const h = duel as unknown as { guest: { controller: { body: { position: { x: number } } } } };
     const before = h.guest.controller.body.position.x;
-    duel.update(1 / 60, { x: 1, z: 0, jump: false }, false);
-    expect(sent).toContainEqual({ type: 'input', x: 1, z: 0, jump: false, attack: false });
+    duel.update(1 / 60, { x: 1, z: 0, jump: false }, false, false);
+    expect(sent).toContainEqual({ type: 'input', x: 1, z: 0, jump: false, attack: false, dodge: false });
     // Guest's own fighter position is untouched by its own input — only the host's authoritative
     // state broadcast (a 'state' message) is allowed to move it.
     expect(h.guest.controller.body.position.x).toBe(before);
@@ -82,7 +82,7 @@ describe('DuelSession', () => {
     h.host.controller.body.position.set(0, 0, 0);
     h.guest.controller.body.position.set(0, 0, 0.6);
     const hpBefore = h.guest.combatant.hp;
-    duel.update(1 / 60, { x: 0, z: 0, jump: false }, true);
+    duel.update(1 / 60, { x: 0, z: 0, jump: false }, true, false);
     expect(h.guest.combatant.hp).toBeLessThan(hpBefore);
   });
 
@@ -98,10 +98,48 @@ describe('DuelSession', () => {
     duel.onOutcome((o) => {
       outcome = o;
     });
-    duel.update(1 / 60, { x: 0, z: 0, jump: false }, true);
+    duel.update(1 / 60, { x: 0, z: 0, jump: false }, true, false);
 
     expect(outcome).toEqual({ winner: 'host' });
     expect(duel.iAmWinner).toBe(true);
     expect(sent.some((m) => (m as { type: string; winner?: string }).type === 'state' && (m as { winner?: string }).winner === 'host')).toBe(true);
+  });
+
+  it('as host: a real 3-hit combo escalates damage per stage, same as single-player combat', () => {
+    const { link } = fakeLink('host');
+    const duel = new DuelSession(link, fox, bear);
+    const h = duel as unknown as { host: FakeFighter; guest: FakeFighter };
+    h.host.controller.body.position.set(0, 0, 0);
+    h.guest.controller.body.position.set(0, 0, 0.6);
+
+    const hpAfterHit = (): number => {
+      const before = h.guest.combatant.hp;
+      // 0.6s between presses: past every real stage's own recoverySeconds (the finisher's own
+      // 0.55 is the longest gate in the chain), but comfortably inside COMBO_WINDOW_SECONDS(0.9)
+      // so the chain doesn't reset between hits.
+      duel.update(0.6, { x: 0, z: 0, jump: false }, true, false);
+      return before - h.guest.combatant.hp;
+    };
+    const firstHitDamage = hpAfterHit();
+    const secondHitDamage = hpAfterHit();
+    const thirdHitDamage = hpAfterHit();
+    expect(secondHitDamage).toBeGreaterThan(firstHitDamage);
+    expect(thirdHitDamage).toBeGreaterThan(secondHitDamage);
+  });
+
+  it('as host: a real dodge grants i-frames — a hit that lands during the defender\'s invulnerability window deals zero damage', () => {
+    const { link } = fakeLink('host');
+    const duel = new DuelSession(link, fox, bear);
+    const h = duel as unknown as { host: FakeFighter; guest: FakeFighter & { dodgeInvulnerableUntil: number } };
+    h.host.controller.body.position.set(0, 0, 0);
+    h.guest.controller.body.position.set(0, 0, 0.6);
+    // Directly arm the guest's own i-frame window far enough into the future that the host's
+    // upcoming attack (fired on the very next update()) is guaranteed to land inside it — the
+    // same real effect a just-pressed dodge produces, isolated from dodge's own movement burst
+    // so this test proves the i-frame gate specifically, not the roll itself.
+    h.guest.dodgeInvulnerableUntil = Number.MAX_SAFE_INTEGER;
+    const hpBefore = h.guest.combatant.hp;
+    duel.update(1 / 60, { x: 0, z: 0, jump: false }, true, false);
+    expect(h.guest.combatant.hp).toBe(hpBefore);
   });
 });

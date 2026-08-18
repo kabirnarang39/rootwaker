@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { PlayerController, type MoveInput } from '../game/PlayerController';
 import { computeFacingAngle } from '../game/FoxFacing';
-import { CLAW_SWIPE, resolveMeleeHit, applyDamage, isDefeated, type Combatant } from '../game/Combat';
+import { resolveMeleeHit, applyDamage, isDefeated, COMBO_MOVES, COMBO_WINDOW_SECONDS, COMBO_KNOCKBACK, type Combatant } from '../game/Combat';
 import { createPlayableCharacter } from '../scene/createPlayableCharacter';
 import type { PlayableCharacter, SpeciesId } from '../scene/PlayableCharacter';
 import type { P2PChallengeLink, PeerRole } from './P2PChallengeLink';
@@ -10,8 +10,15 @@ const ARENA_RADIUS = 6;
 export const DUEL_HP = 100;
 const ATTACK_REACH = 1;
 const ATTACK_RADIUS = 0.6;
-const ATTACK_KNOCKBACK = 0.4;
 const SPAWN_OFFSET = 3; // meters from center, on opposite sides
+
+// Same real dodge feel as the single-player game (Game.ts's DODGE_* constants) — a decisive
+// position burst with a real invulnerability WINDOW that covers only part of the roll's own
+// duration, not the whole thing.
+const DODGE_SPEED = 8;
+const DODGE_SECONDS = 0.35;
+const DODGE_IFRAME_SECONDS = 0.22;
+const DODGE_COOLDOWN_SECONDS = 0.9;
 
 export interface DuelCombatantInfo {
   species: SpeciesId;
@@ -28,11 +35,17 @@ interface DuelFighter {
   combatant: Combatant;
   facingAngle: number;
   lastAttackTime: number;
+  comboStage: number;
+  lastComboAttackTime: number;
+  dodgeEndTime: number;
+  dodgeDirection: THREE.Vector3;
+  dodgeInvulnerableUntil: number;
+  lastDodgeTime: number;
 }
 
 type NetMessage =
   | { type: 'hello'; species: SpeciesId; skinId: string }
-  | { type: 'input'; x: number; z: number; jump: boolean; attack: boolean }
+  | { type: 'input'; x: number; z: number; jump: boolean; attack: boolean; dodge: boolean }
   | { type: 'state'; host: FighterSnapshot; guest: FighterSnapshot; winner: PeerRole | null };
 
 interface FighterSnapshot {
@@ -69,7 +82,19 @@ function makeFighter(info: DuelCombatantInfo, spawnX: number, spawnZ: number): D
     hitbox: { start: new THREE.Vector3(), end: new THREE.Vector3(), radius: 0.4 },
   };
   character.group.position.copy(controller.body.position);
-  return { character, controller, combatant, facingAngle: Math.atan2(-spawnX, -spawnZ), lastAttackTime: -Infinity };
+  return {
+    character,
+    controller,
+    combatant,
+    facingAngle: Math.atan2(-spawnX, -spawnZ),
+    lastAttackTime: -Infinity,
+    comboStage: 0,
+    lastComboAttackTime: -Infinity,
+    dodgeEndTime: -Infinity,
+    dodgeDirection: new THREE.Vector3(0, 0, 1),
+    dodgeInvulnerableUntil: -Infinity,
+    lastDodgeTime: -Infinity,
+  };
 }
 
 function syncHitbox(fighter: DuelFighter): void {
@@ -87,7 +112,9 @@ function syncHitbox(fighter: DuelFighter): void {
  * network-round-trip late), acceptable for a cosmetic throne-claim duel, not appropriate for a
  * competitive-integrity game. Reuses the exact same PlayerController/Combat/createPlayableCharacter
  * machinery the single-player game already uses — a duel fighter IS a normal player, just driven
- * by network input instead of local Input.ts on one side. */
+ * by network input instead of local Input.ts on one side. Same real 3-hit combo chain and real
+ * evasive dodge-with-i-frames as single-player combat (see Combat.ts's COMBO_MOVES) — a duel is
+ * not a simpler, flatter fight than fighting the jungle's own animals. */
 export class DuelSession {
   readonly group = new THREE.Group();
   private link: P2PChallengeLink;
@@ -96,6 +123,7 @@ export class DuelSession {
   private guest: DuelFighter;
   private remoteInput: MoveInput = { x: 0, z: 0, jump: false };
   private remoteAttackPressed = false;
+  private remoteDodgePressed = false;
   private outcomeHandlers: Array<(outcome: DuelOutcome) => void> = [];
   private winner: PeerRole | null = null;
   private time = 0;
@@ -129,6 +157,7 @@ export class DuelSession {
     if (msg.type === 'input' && this.role === 'host') {
       this.remoteInput = { x: msg.x, z: msg.z, jump: msg.jump };
       if (msg.attack) this.remoteAttackPressed = true;
+      if (msg.dodge) this.remoteDodgePressed = true;
     } else if (msg.type === 'state' && this.role === 'guest') {
       applySnapshot(this.host, msg.host);
       applySnapshot(this.guest, msg.guest);
@@ -148,9 +177,9 @@ export class DuelSession {
 
   private groundHeightAt = () => 0; // a flat arena — every real level height query is just 0
 
-  /** Called every frame with the LOCAL player's own move input and whether attack was just
-   * pressed this frame (edge-triggered, not held). */
-  update(delta: number, localInput: MoveInput, localAttackPressed: boolean): void {
+  /** Called every frame with the LOCAL player's own move input and whether attack/dodge were
+   * just pressed this frame (edge-triggered, not held). */
+  update(delta: number, localInput: MoveInput, localAttackPressed: boolean, localDodgePressed: boolean): void {
     if (this.winner) return;
     this.time += delta;
 
@@ -158,16 +187,18 @@ export class DuelSession {
       // Guest sends input, applies whatever state the host last broadcast, and does nothing else
       // — see the class doc comment for why running its own physics here would be a real bug
       // (silent desync from the host's authoritative outcome).
-      this.link.send({ type: 'input', x: localInput.x, z: localInput.z, jump: localInput.jump, attack: localAttackPressed });
+      this.link.send({ type: 'input', x: localInput.x, z: localInput.z, jump: localInput.jump, attack: localAttackPressed, dodge: localDodgePressed });
       this.updateVisuals(delta);
       return;
     }
 
     // Host: simulate both fighters for real.
-    this.host.controller.update(localInput, delta, this.groundHeightAt);
-    this.guest.controller.update(this.remoteInput, delta, this.groundHeightAt);
-    this.host.facingAngle = computeFacingAngle(this.host.controller.body.velocity.x, this.host.controller.body.velocity.z, this.host.facingAngle, delta);
-    this.guest.facingAngle = computeFacingAngle(this.guest.controller.body.velocity.x, this.guest.controller.body.velocity.z, this.guest.facingAngle, delta);
+    this.tryStartDodge(this.host, localInput, localDodgePressed);
+    this.tryStartDodge(this.guest, this.remoteInput, this.remoteDodgePressed);
+    this.remoteDodgePressed = false;
+
+    this.advanceFighter(this.host, localInput, delta);
+    this.advanceFighter(this.guest, this.remoteInput, delta);
     syncHitbox(this.host);
     syncHitbox(this.guest);
 
@@ -185,10 +216,55 @@ export class DuelSession {
     this.updateVisuals(delta);
   }
 
+  /** Real evasive roll: a decisive position burst plus a real invulnerability WINDOW covering
+   * only part of the roll's own duration — mirrors Game.ts's tryDodge exactly, so single-player
+   * and duel dodging feel identical. Dodges toward whatever direction is currently held (this
+   * class's own input is already raw/un-camera-relative, so x/z map directly to world offset);
+   * with no input held, rolls straight back along the fighter's own facing. */
+  private tryStartDodge(fighter: DuelFighter, input: MoveInput, pressed: boolean): void {
+    if (!pressed) return;
+    if (this.time - fighter.lastDodgeTime < DODGE_COOLDOWN_SECONDS) return;
+    fighter.lastDodgeTime = this.time;
+    fighter.dodgeEndTime = this.time + DODGE_SECONDS;
+    fighter.dodgeInvulnerableUntil = this.time + DODGE_IFRAME_SECONDS;
+    const rawSpeed = Math.hypot(input.x, input.z);
+    if (rawSpeed > 0.1) {
+      fighter.dodgeDirection.set(input.x, 0, input.z).normalize();
+    } else {
+      fighter.dodgeDirection.set(Math.sin(fighter.facingAngle), 0, Math.cos(fighter.facingAngle)).negate();
+    }
+  }
+
+  private advanceFighter(fighter: DuelFighter, input: MoveInput, delta: number): void {
+    if (this.time < fighter.dodgeEndTime) {
+      // Direct position/velocity override for the dodge window — same "bypass the normal
+      // input->velocity mapping" idiom Game.ts's own dash/dodge branches use.
+      fighter.controller.body.position.addScaledVector(fighter.dodgeDirection, DODGE_SPEED * delta);
+      fighter.controller.body.position.y = this.groundHeightAt();
+      fighter.controller.body.velocity.set(fighter.dodgeDirection.x * DODGE_SPEED, 0, fighter.dodgeDirection.z * DODGE_SPEED);
+    } else {
+      fighter.controller.update(input, delta, this.groundHeightAt);
+    }
+    fighter.facingAngle = computeFacingAngle(fighter.controller.body.velocity.x, fighter.controller.body.velocity.z, fighter.facingAngle, delta);
+  }
+
+  /** Real 3-hit combo, identical shape to Game.ts's own tryAttack: J,J,J within
+   * COMBO_WINDOW_SECONDS advances through COMBO_MOVES with real escalating damage/knockback/
+   * recovery; waiting too long resets to stage 0. A defender mid-dodge (its own i-frame window)
+   * takes zero damage and zero knockback — the hit whiffs entirely, same as a real miss. */
   private resolveAttack(attacker: DuelFighter, defender: DuelFighter, pressed: boolean): void {
     if (!pressed) return;
-    if (this.time - attacker.lastAttackTime < CLAW_SWIPE.recoverySeconds) return;
+    if (this.time - attacker.lastComboAttackTime > COMBO_WINDOW_SECONDS) attacker.comboStage = 0;
+    const move = COMBO_MOVES[attacker.comboStage];
+    if (this.time - attacker.lastAttackTime < move.recoverySeconds) return;
+
     attacker.lastAttackTime = this.time;
+    attacker.lastComboAttackTime = this.time;
+    const knockback = COMBO_KNOCKBACK[attacker.comboStage];
+    attacker.comboStage = (attacker.comboStage + 1) % COMBO_MOVES.length;
+
+    if (this.time < defender.dodgeInvulnerableUntil) return; // real dodge-through, no hit at all
+
     const forward = new THREE.Vector3(Math.sin(attacker.facingAngle), 0, Math.cos(attacker.facingAngle));
     const p = attacker.controller.body.position;
     const hitbox = {
@@ -197,8 +273,8 @@ export class DuelSession {
       radius: ATTACK_RADIUS,
     };
     if (resolveMeleeHit(hitbox, defender.combatant)) {
-      applyDamage(defender.combatant, CLAW_SWIPE.damage);
-      defender.controller.body.position.addScaledVector(forward, ATTACK_KNOCKBACK);
+      applyDamage(defender.combatant, move.damage);
+      defender.controller.body.position.addScaledVector(forward, knockback);
     }
   }
 
