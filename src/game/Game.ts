@@ -1545,6 +1545,12 @@ export class Game {
     this.level.group.visible = false;
     this.fox.group.visible = false;
     this.hud.hideBossBar();
+    // Real bug found via combination testing: the single-player hunt/climb prompts are only
+    // ever hidden by code paths inside animate()'s non-duel branch, which stops running entirely
+    // once a duel starts (see the class doc comment on DuelSession). A prompt visible at the exact
+    // moment a duel begins would otherwise stay stuck on screen for the whole duel.
+    this.hud.hideHuntPrompt();
+    this.hud.hideClimbPrompt();
     const local: DuelCombatantInfo = { species: this.playerSpecies, skinId: this.playerSkinId };
     this.duel = new DuelSession(link, local, remote);
     this.scene.add(this.duel.group);
