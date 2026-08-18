@@ -73,11 +73,13 @@ export function createLion(): Lion {
   const eyeMat = new THREE.MeshStandardMaterial({ color: LION_EYE_COLOR, emissive: LION_EYE_COLOR, emissiveIntensity: 1.0, flatShading: true });
 
   const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.24, 0.58, 2, 6), coatMat);
+  body.name = 'lion-body';
   body.rotation.z = Math.PI / 2;
   body.castShadow = true;
   rig.getJoint('spine').add(body);
 
   const head = new THREE.Mesh(new THREE.IcosahedronGeometry(0.19, 0), coatMat);
+  head.name = 'lion-head';
   head.scale.set(1, 0.92, 1.05);
   head.castShadow = true;
   rig.getJoint('head').add(head);
@@ -94,53 +96,66 @@ export function createLion(): Lion {
     { radius: 0.11, offset: [0, -0.18, -0.1], mat: maneTipMat },
     { radius: 0.1, offset: [0, 0.16, -0.08], mat: maneTipMat },
   ];
-  for (const lobe of maneLobes) {
+  maneLobes.forEach((lobe, i) => {
     const mesh = new THREE.Mesh(new THREE.IcosahedronGeometry(lobe.radius, 0), lobe.mat);
+    mesh.name = `lion-mane-${i}`;
     mesh.position.set(...lobe.offset);
     mesh.castShadow = true;
     rig.getJoint('head').add(mesh);
-  }
+  });
 
   const snout = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.11, 0.16, 6), coatDarkMat);
+  snout.name = 'lion-snout';
   snout.rotation.x = Math.PI / 2;
   rig.getJoint('jaw').add(snout);
 
   const nose = new THREE.Mesh(new THREE.SphereGeometry(0.03, 6, 6), maneTipMat);
+  nose.name = 'lion-nose';
   nose.position.set(0, 0.02, 0.1);
   rig.getJoint('jaw').add(nose);
 
   const eyeGeo = new THREE.SphereGeometry(0.026, 6, 6);
   const eyeL = new THREE.Mesh(eyeGeo, eyeMat);
+  eyeL.name = 'lion-eye-l';
   eyeL.position.set(-0.09, 0.03, 0.14);
   const eyeR = eyeL.clone();
+  eyeR.name = 'lion-eye-r';
   eyeR.position.x = 0.09;
   rig.getJoint('head').add(eyeL, eyeR);
 
   const earGeo = new THREE.ConeGeometry(0.055, 0.1, 4);
   const earL = new THREE.Mesh(earGeo, coatDarkMat);
+  earL.name = 'lion-ear-l';
   earL.rotation.z = 0.3;
   const earR = earL.clone();
+  earR.name = 'lion-ear-r';
   earR.rotation.z = -0.3;
   rig.getJoint('earL').add(earL);
   rig.getJoint('earR').add(earR);
 
   const legGeo = new THREE.CylinderGeometry(0.055, 0.07, 0.3, 6);
   const forepawL = new THREE.Mesh(legGeo, coatDarkMat);
+  forepawL.name = 'lion-forepaw-l';
   rig.getJoint('forepawL').add(forepawL);
   const forepawR = new THREE.Mesh(legGeo.clone(), coatDarkMat);
+  forepawR.name = 'lion-forepaw-r';
   rig.getJoint('forepawR').add(forepawR);
   const hindpawL = new THREE.Mesh(legGeo.clone(), coatDarkMat);
+  hindpawL.name = 'lion-hindpaw-l';
   rig.getJoint('hindpawL').add(hindpawL);
   const hindpawR = new THREE.Mesh(legGeo.clone(), coatDarkMat);
+  hindpawR.name = 'lion-hindpaw-r';
   rig.getJoint('hindpawR').add(hindpawR);
 
   // The tail: a real lion trait no other species in the game has — a long, thin, plain-coated
   // chain ending in a dark tuft, not just a decorative wiggle.
   const tail0Seg = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.045, 0.3, 5), coatMat);
+  tail0Seg.name = 'lion-tail';
   tail0Seg.rotation.x = -0.2;
   tail0Seg.position.y = 0.15;
   rig.getJoint('tail0').add(tail0Seg);
   const tailTuft = new THREE.Mesh(new THREE.IcosahedronGeometry(0.055, 0), maneTipMat);
+  tailTuft.name = 'lion-tail-tuft';
   tailTuft.position.y = 0.25;
   rig.getJoint('tail1').add(tailTuft);
 

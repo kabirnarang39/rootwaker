@@ -1,7 +1,29 @@
 import { describe, it, expect } from 'vitest';
+import * as THREE from 'three';
 import { createGroveBear, getGroveBearHitbox } from '../createGroveBear';
 
+function meshNames(group: THREE.Object3D): Set<string> {
+  const names = new Set<string>();
+  group.traverse((obj) => {
+    if ((obj as { isMesh?: boolean }).isMesh) names.add(obj.name);
+  });
+  return names;
+}
+
 describe('createGroveBear', () => {
+  it('every real anatomy part is named — body, head, snout, nose, 2 eyes, 2 ears, 2 claws, 4 legs (regression 5b812b5: a creature built from bare unnamed primitives reads as "a dark shapeless rock"; viper/owl/finch already had this guard, bear never did)', () => {
+    const bear = createGroveBear();
+    const names = meshNames(bear.group);
+    for (const part of [
+      'bear-body', 'bear-head', 'bear-snout', 'bear-nose',
+      'bear-eye-l', 'bear-eye-r', 'bear-ear-l', 'bear-ear-r',
+      'bear-claw-l', 'bear-claw-r',
+      'bear-forepaw-l', 'bear-forepaw-r', 'bear-hindpaw-l', 'bear-hindpaw-r',
+    ]) {
+      expect(names, `missing anatomy part: ${part}`).toContain(part);
+    }
+  });
+
   it('starts at 65 HP (matching the old mountainGuard exactly — visual redesign, not a difficulty change)', () => {
     const bear = createGroveBear();
     expect(bear.combatant.hp).toBe(65);

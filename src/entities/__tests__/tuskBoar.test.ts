@@ -1,7 +1,29 @@
 import { describe, it, expect } from 'vitest';
+import * as THREE from 'three';
 import { createTuskBoar, getBoarHitbox } from '../tuskBoar';
 
+function meshNames(group: THREE.Object3D): Set<string> {
+  const names = new Set<string>();
+  group.traverse((obj) => {
+    if ((obj as { isMesh?: boolean }).isMesh) names.add(obj.name);
+  });
+  return names;
+}
+
 describe('createTuskBoar', () => {
+  it('every real anatomy part is named — body, head, snout, 2 eyes, 2 ears, 2 tusks, 4 legs (regression 5b812b5: a creature built from bare unnamed primitives reads as "a dark shapeless rock"; viper/owl/finch already had this guard, boar never did)', () => {
+    const boar = createTuskBoar();
+    const names = meshNames(boar.group);
+    for (const part of [
+      'boar-body', 'boar-head', 'boar-snout',
+      'boar-eye-l', 'boar-eye-r', 'boar-ear-l', 'boar-ear-r',
+      'boar-tusk-l', 'boar-tusk-r',
+      'boar-forepaw-l', 'boar-forepaw-r', 'boar-hindpaw-l', 'boar-hindpaw-r',
+    ]) {
+      expect(names, `missing anatomy part: ${part}`).toContain(part);
+    }
+  });
+
   it('starts at 55 HP, idle', () => {
     const boar = createTuskBoar();
     expect(boar.combatant.hp).toBe(55);

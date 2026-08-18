@@ -60,51 +60,64 @@ export function createTuskBoar(): TuskBoar {
   const eyeMat = new THREE.MeshStandardMaterial({ color: EYE_COLOR, emissive: EYE_COLOR, emissiveIntensity: 0.9, flatShading: true });
 
   const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.24, 0.4, 2, 6), bodyMat);
+  body.name = 'boar-body';
   body.rotation.z = Math.PI / 2;
   body.castShadow = true;
   rig.getJoint('spine').add(body);
 
   const head = new THREE.Mesh(new THREE.IcosahedronGeometry(0.18, 0), bodyMat);
+  head.name = 'boar-head';
   head.scale.set(1, 0.85, 1.2);
   head.castShadow = true;
   rig.getJoint('head').add(head);
 
   const snout = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.09, 0.16, 6), darkMat);
+  snout.name = 'boar-snout';
   snout.rotation.x = Math.PI / 2;
   snout.position.z = 0.1;
   rig.getJoint('head').add(snout);
 
   const eyeGeo = new THREE.SphereGeometry(0.022, 6, 6);
   const eyeL = new THREE.Mesh(eyeGeo, eyeMat);
+  eyeL.name = 'boar-eye-l';
   eyeL.position.set(-0.08, 0.03, 0.12);
   const eyeR = eyeL.clone();
+  eyeR.name = 'boar-eye-r';
   eyeR.position.x = 0.08;
   rig.getJoint('head').add(eyeL, eyeR);
 
   const earGeo = new THREE.ConeGeometry(0.06, 0.14, 4);
   const earL = new THREE.Mesh(earGeo, darkMat);
+  earL.name = 'boar-ear-l';
   earL.rotation.z = 0.4;
   const earR = earL.clone();
+  earR.name = 'boar-ear-r';
   earR.rotation.z = -0.4;
   rig.getJoint('earL').add(earL);
   rig.getJoint('earR').add(earR);
 
   const tuskGeo = new THREE.ConeGeometry(0.03, 0.14, 4);
   const tuskL = new THREE.Mesh(tuskGeo, tuskMat);
+  tuskL.name = 'boar-tusk-l';
   tuskL.rotation.x = Math.PI / 2;
   rig.getJoint('tuskL').add(tuskL);
   const tuskR = new THREE.Mesh(tuskGeo, tuskMat);
+  tuskR.name = 'boar-tusk-r';
   tuskR.rotation.x = Math.PI / 2;
   rig.getJoint('tuskR').add(tuskR);
 
   const legGeo = new THREE.CylinderGeometry(0.045, 0.055, 0.24, 6);
   const forepawL = new THREE.Mesh(legGeo, darkMat);
+  forepawL.name = 'boar-forepaw-l';
   rig.getJoint('forepawL').add(forepawL);
   const forepawR = new THREE.Mesh(legGeo.clone(), darkMat);
+  forepawR.name = 'boar-forepaw-r';
   rig.getJoint('forepawR').add(forepawR);
   const hindpawL = new THREE.Mesh(legGeo.clone(), darkMat);
+  hindpawL.name = 'boar-hindpaw-l';
   rig.getJoint('hindpawL').add(hindpawL);
   const hindpawR = new THREE.Mesh(legGeo.clone(), darkMat);
+  hindpawR.name = 'boar-hindpaw-r';
   rig.getJoint('hindpawR').add(hindpawR);
 
   const ai = new EnemyAI();

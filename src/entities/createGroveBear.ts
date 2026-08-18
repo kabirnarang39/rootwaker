@@ -62,54 +62,68 @@ export function createGroveBear(): GroveBear {
   const eyeMat = new THREE.MeshStandardMaterial({ color: BEAR_EYE_COLOR, emissive: BEAR_EYE_COLOR, emissiveIntensity: 0.9, flatShading: true });
 
   const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.32, 0.5, 2, 6), furMat);
+  body.name = 'bear-body';
   body.rotation.z = Math.PI / 2;
   body.castShadow = true;
   rig.getJoint('spine').add(body);
 
   const head = new THREE.Mesh(new THREE.IcosahedronGeometry(0.22, 0), furMat);
+  head.name = 'bear-head';
   head.scale.set(1, 0.9, 1.05);
   head.castShadow = true;
   rig.getJoint('head').add(head);
 
   const snout = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.12, 0.2, 6), furDarkMat);
+  snout.name = 'bear-snout';
   snout.rotation.x = Math.PI / 2;
   rig.getJoint('jaw').add(snout);
 
   const noseGeo = new THREE.SphereGeometry(0.035, 6, 6);
   const nose = new THREE.Mesh(noseGeo, clawMat);
+  nose.name = 'bear-nose';
   nose.position.set(0, 0.01, 0.1);
   rig.getJoint('jaw').add(nose);
 
   const eyeGeo = new THREE.SphereGeometry(0.028, 6, 6);
   const eyeL = new THREE.Mesh(eyeGeo, eyeMat);
+  eyeL.name = 'bear-eye-l';
   eyeL.position.set(-0.1, 0.02, 0.16);
   const eyeR = eyeL.clone();
+  eyeR.name = 'bear-eye-r';
   eyeR.position.x = 0.1;
   rig.getJoint('head').add(eyeL, eyeR);
 
   const earGeo = new THREE.SphereGeometry(0.07, 6, 6);
   const earL = new THREE.Mesh(earGeo, furDarkMat);
+  earL.name = 'bear-ear-l';
   earL.scale.set(1, 1, 0.6);
   const earR = earL.clone();
+  earR.name = 'bear-ear-r';
   rig.getJoint('earL').add(earL);
   rig.getJoint('earR').add(earR);
 
   const clawGeo = new THREE.ConeGeometry(0.04, 0.12, 4);
   const clawL = new THREE.Mesh(clawGeo, clawMat);
+  clawL.name = 'bear-claw-l';
   clawL.rotation.z = Math.PI / 2;
   rig.getJoint('shoulderL').add(clawL);
   const clawR = new THREE.Mesh(clawGeo, clawMat);
+  clawR.name = 'bear-claw-r';
   clawR.rotation.z = -Math.PI / 2;
   rig.getJoint('shoulderR').add(clawR);
 
   const legGeo = new THREE.CylinderGeometry(0.06, 0.075, 0.32, 6);
   const forepawL = new THREE.Mesh(legGeo, furDarkMat);
+  forepawL.name = 'bear-forepaw-l';
   rig.getJoint('forepawL').add(forepawL);
   const forepawR = new THREE.Mesh(legGeo.clone(), furDarkMat);
+  forepawR.name = 'bear-forepaw-r';
   rig.getJoint('forepawR').add(forepawR);
   const hindpawL = new THREE.Mesh(legGeo.clone(), furDarkMat);
+  hindpawL.name = 'bear-hindpaw-l';
   rig.getJoint('hindpawL').add(hindpawL);
   const hindpawR = new THREE.Mesh(legGeo.clone(), furDarkMat);
+  hindpawR.name = 'bear-hindpaw-r';
   rig.getJoint('hindpawR').add(hindpawR);
 
   const ai = new EnemyAI();

@@ -2,7 +2,31 @@ import { describe, it, expect } from 'vitest';
 import * as THREE from 'three';
 import { createLion, getLionHitbox } from '../createLion';
 
+function meshNames(group: THREE.Object3D): Set<string> {
+  const names = new Set<string>();
+  group.traverse((obj) => {
+    if ((obj as { isMesh?: boolean }).isMesh) names.add(obj.name);
+  });
+  return names;
+}
+
 describe('createLion', () => {
+  it('every real anatomy part is named — body, head, mane lobes, snout, nose, 2 eyes, 2 ears, 4 legs, tail + tuft (regression 5b812b5: a creature built from bare unnamed primitives reads as "a dark shapeless rock"; viper/owl/finch already had this guard)', () => {
+    const lion = createLion();
+    const names = meshNames(lion.group);
+    for (const part of [
+      'lion-body', 'lion-head', 'lion-snout', 'lion-nose',
+      'lion-eye-l', 'lion-eye-r', 'lion-ear-l', 'lion-ear-r',
+      'lion-forepaw-l', 'lion-forepaw-r', 'lion-hindpaw-l', 'lion-hindpaw-r',
+      'lion-tail', 'lion-tail-tuft',
+    ]) {
+      expect(names, `missing anatomy part: ${part}`).toContain(part);
+    }
+    for (let i = 0; i < 7; i++) {
+      expect(names, `missing mane lobe: lion-mane-${i}`).toContain(`lion-mane-${i}`);
+    }
+  });
+
   it('starts at 70 HP, idle', () => {
     const lion = createLion();
     expect(lion.combatant.hp).toBe(70);
