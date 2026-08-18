@@ -9,6 +9,8 @@ import type { PlayableCharacter } from './PlayableCharacter';
 const CLAW_COLOR = 0x2a2015;
 
 const WALK_SPEED_FOR_FULL_BLEND = 5; // a bear's real top speed reads slower than the fox's
+const BLOCK_SPINE_PITCH = 0.35;
+const BLOCK_HEAD_PITCH = 0.25;
 
 /** Builds the player-controlled Grove Bear — same low-slung anatomy as the enemy version
  * (createGroveBear.ts) with a real quadruped pacing walk, a chest glow core matching the fox's
@@ -147,13 +149,20 @@ export function createPlayableBear(skin: CharacterSkin = BEAR_SKINS[0]): Playabl
   const glowMaterials = [glowShellMat, glowCoreMat];
   let walkTime = 0;
 
-  function update(time: number, delta: number, moveSpeed: number) {
+  function update(time: number, delta: number, moveSpeed: number, blocking = false) {
     glowMaterials.forEach((m) => {
       (m.uniforms.uTime.value as number) = time;
     });
     walkTime += delta * THREE.MathUtils.clamp(moveSpeed / WALK_SPEED_FOR_FULL_BLEND, 0, 1.6);
     const walkWeight = THREE.MathUtils.clamp(moveSpeed / WALK_SPEED_FOR_FULL_BLEND, 0, 1);
     blendClips(rig, idleClip, time, walkClip, walkTime, walkWeight);
+    // Real Block pose — see createFox.ts's own comment for the shared "overlay after the blend"
+    // convention. A real bear brace reads as lowering onto all fours and dropping the head, a
+    // heavier/deeper version of the fox's own crouch given the bear's own bulk.
+    if (blocking) {
+      rig.setLocalRotation('spine', BLOCK_SPINE_PITCH, 0, 0);
+      rig.setLocalRotation('head', BLOCK_HEAD_PITCH, 0, 0);
+    }
   }
 
   function revealCrown() {

@@ -8,7 +8,9 @@ export interface PlayableCharacter {
   group: THREE.Group;
   rig: Rig;
   crownGroup: THREE.Group;
-  update(time: number, delta: number, moveSpeed: number): void;
+  // `blocking` defaults to false for every existing caller — a real braced/lowered pose overlaid
+  // on top of the normal idle/walk blend (see Game.ts's real Block mechanic), not a separate clip.
+  update(time: number, delta: number, moveSpeed: number, blocking?: boolean): void;
   revealCrown(): void;
 }
 

@@ -142,13 +142,21 @@ export function createPlayableViper(skin: CharacterSkin = VIPER_SKINS[0]): Playa
   const glowMaterials = [glowCoreMat];
   let slitherTime = 0;
 
-  function update(time: number, delta: number, moveSpeed: number) {
+  function update(time: number, delta: number, moveSpeed: number, blocking = false) {
     glowMaterials.forEach((m) => {
       (m.uniforms.uTime.value as number) = time;
     });
     slitherTime += delta * THREE.MathUtils.clamp(moveSpeed / WALK_SPEED_FOR_FULL_BLEND, 0, 1.6);
     const slitherWeight = THREE.MathUtils.clamp(moveSpeed / WALK_SPEED_FOR_FULL_BLEND, 0, 1);
     blendClips(rig, coilClip, time, slitherClip, slitherTime, slitherWeight);
+    // Real Block pose: a snake doesn't crouch — a real defensive brace is rearing back tighter,
+    // head pulled up ready to strike. Reuses the exact same rear-back head pose strikeClip's own
+    // telegraph keyframe authors (vineViperClips.ts), rather than inventing a second real pose
+    // for the same physical motion.
+    if (blocking) {
+      rig.setLocalRotation('head', -0.55, 0, 0);
+      rig.applyPositionOffset('head', 0, 0.025, -0.05);
+    }
   }
 
   function revealCrown() {

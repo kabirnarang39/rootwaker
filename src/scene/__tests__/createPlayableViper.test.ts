@@ -30,6 +30,23 @@ describe('createPlayableViper', () => {
     expect(viper.crownGroup.visible).toBe(true);
   });
 
+  it('blocking=true applies a real rear-back head pose (reusing the strike clip\'s own real telegraph rotation), distinct from the coiled idle pose', () => {
+    const viper = createPlayableViper();
+    viper.update(0, 1 / 60, 0, false);
+    const idleHeadX = viper.rig.getJoint('head').rotation.x;
+    viper.update(0, 1 / 60, 0, true);
+    expect(viper.rig.getJoint('head').rotation.x).toBeCloseTo(-0.55, 5);
+    expect(viper.rig.getJoint('head').rotation.x).not.toBeCloseTo(idleHeadX, 2);
+  });
+
+  it('blocking defaults to false when omitted', () => {
+    const viperA = createPlayableViper();
+    viperA.update(0, 1 / 60, 0);
+    const viperB = createPlayableViper();
+    viperB.update(0, 1 / 60, 0, false);
+    expect(viperA.rig.getJoint('head').rotation.x).toBeCloseTo(viperB.rig.getJoint('head').rotation.x, 5);
+  });
+
   it('accepts a real skin and applies its glow color to the chest light', () => {
     const viper = createPlayableViper(VIPER_SKINS[1]);
     let light: THREE.PointLight | undefined;

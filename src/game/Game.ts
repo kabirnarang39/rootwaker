@@ -843,7 +843,7 @@ export class Game {
     }
 
     this.fox.group.position.copy(this.playerController.body.position);
-    this.fox.update(time, delta, this.playerController.moveSpeed);
+    this.fox.update(time, delta, this.playerController.moveSpeed, this.blocking);
     if (!this.seaAmbienceStarted) {
       const { min, max } = this.level.chapterBounds;
       const COAST_TRIGGER_MARGIN = 5; // starts once the player is within 5m of any of the island's 4 edges

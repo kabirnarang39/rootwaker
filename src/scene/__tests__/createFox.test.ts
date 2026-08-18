@@ -43,4 +43,21 @@ describe('createFox', () => {
     fox.revealCrown();
     expect(fox.crownGroup.visible).toBe(true);
   });
+
+  it('blocking=true applies a real defensive brace (spine/head pitch forward), a genuinely different pose from normal idle', () => {
+    const fox = createFox();
+    fox.update(0, 1 / 60, 0, false);
+    const idleSpineX = fox.rig.getJoint('spine').rotation.x;
+    fox.update(0, 1 / 60, 0, true);
+    expect(fox.rig.getJoint('spine').rotation.x).not.toBeCloseTo(idleSpineX, 2);
+    expect(fox.rig.getJoint('spine').rotation.x).toBeGreaterThan(0);
+  });
+
+  it('blocking defaults to false when omitted — every pre-Block call site stays byte-identical', () => {
+    const foxA = createFox();
+    foxA.update(0, 1 / 60, 0);
+    const foxB = createFox();
+    foxB.update(0, 1 / 60, 0, false);
+    expect(foxA.rig.getJoint('spine').rotation.x).toBeCloseTo(foxB.rig.getJoint('spine').rotation.x, 5);
+  });
 });

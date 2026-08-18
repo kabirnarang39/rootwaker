@@ -13,6 +13,10 @@ function furMaterial(color: THREE.ColorRepresentation) {
 }
 
 const WALK_SPEED_FOR_FULL_BLEND = 6; // moveSpeed at/above this = fully walkClip, 0 = fully idleClip
+// Real Block pose: a real defensive brace reads as lowering the whole front — spine pitches
+// forward/down, head tucks further still (a fox lowers its head behind its own raised guard).
+const BLOCK_SPINE_PITCH = 0.35;
+const BLOCK_HEAD_PITCH = 0.25;
 
 /** Builds a custom stylized low-poly fox-spirit on the shared Rig/Clip system — no external model. */
 export function createFox(skin: FoxSkin = SKINS[0]): Fox {
@@ -184,13 +188,21 @@ export function createFox(skin: FoxSkin = SKINS[0]): Fox {
   const glowMaterials = [glowShellMat, glowCoreMat];
   let walkTime = 0;
 
-  function update(time: number, delta: number, moveSpeed: number) {
+  function update(time: number, delta: number, moveSpeed: number, blocking = false) {
     glowMaterials.forEach((m) => {
       (m.uniforms.uTime.value as number) = time;
     });
     walkTime += delta * THREE.MathUtils.clamp(moveSpeed / WALK_SPEED_FOR_FULL_BLEND, 0, 1.6);
     const walkWeight = THREE.MathUtils.clamp(moveSpeed / WALK_SPEED_FOR_FULL_BLEND, 0, 1);
     blendClips(rig, idleClip, time, walkClip, walkTime, walkWeight);
+    // Real Block (see Game.ts): a braced, lowered stance overlaid on top of the normal blend —
+    // not a separate authored clip, just a real forward spine pitch + head duck, applied AFTER
+    // the idle/walk blend so it always wins (blockClips's own convention: later calls override
+    // earlier ones on the joints they touch, same rule the eat-ritual overlay already relies on).
+    if (blocking) {
+      rig.setLocalRotation('spine', BLOCK_SPINE_PITCH, 0, 0);
+      rig.setLocalRotation('head', BLOCK_HEAD_PITCH, 0, 0);
+    }
   }
 
   function revealCrown() {

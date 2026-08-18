@@ -32,6 +32,24 @@ describe('createPlayableBear', () => {
     expect(bear.crownGroup.visible).toBe(true);
   });
 
+  it('blocking=true applies a real defensive brace (spine/head pitch forward), distinct from the normal idle pose', () => {
+    const bear = createPlayableBear();
+    bear.update(0, 1 / 60, 0, false);
+    const idleSpineX = bear.rig.getJoint('spine').rotation.x;
+    bear.update(0, 1 / 60, 0, true);
+    expect(bear.rig.getJoint('spine').rotation.x).not.toBeCloseTo(idleSpineX, 2);
+    expect(bear.rig.getJoint('spine').rotation.x).toBeGreaterThan(0);
+  });
+
+  it('blocking defaults to false when omitted — every existing single-player-era call site stays byte-identical', () => {
+    const bear = createPlayableBear();
+    bear.update(0, 1 / 60, 0);
+    const withoutArg = bear.rig.getJoint('spine').rotation.x;
+    const bear2 = createPlayableBear();
+    bear2.update(0, 1 / 60, 0, false);
+    expect(withoutArg).toBeCloseTo(bear2.rig.getJoint('spine').rotation.x, 5);
+  });
+
   it('accepts a real skin and applies its glow color to the chest light (regression: a hardcoded color would ignore the skin parameter entirely)', () => {
     const bear = createPlayableBear(BEAR_SKINS[1]);
     let light: THREE.PointLight | undefined;
