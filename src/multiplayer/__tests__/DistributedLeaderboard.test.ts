@@ -15,8 +15,10 @@ const fakeRoom = {
   getPeers: vi.fn(() => ({})),
 };
 
+const { getWorldRoomImpl } = vi.hoisted(() => ({ getWorldRoomImpl: vi.fn() }));
+
 vi.mock('../DistributedRoom', () => ({
-  getWorldRoom: () => fakeRoom,
+  getWorldRoom: () => getWorldRoomImpl(),
   onPeerJoin: (h: (peerId: string) => void) => joinHandlers.push(h),
 }));
 
@@ -41,6 +43,8 @@ beforeEach(() => {
   fullAction = fakeAction();
   joinHandlers = [];
   fakeRoom.makeAction.mockClear();
+  getWorldRoomImpl.mockReset();
+  getWorldRoomImpl.mockReturnValue(fakeRoom);
 });
 
 describe('DistributedCoronationLeaderboardClient', () => {
@@ -143,5 +147,25 @@ describe('DistributedCoronationLeaderboardClient', () => {
     const clientB = new mod.DistributedCoronationLeaderboardClient();
     const top = await clientB.getTop(10);
     expect(top[0].coronationSeconds).toBe(450);
+  });
+
+  it('getTop() resolves (does not reject) when joining the mesh fails — Game.ts calls this with a bare .then(), no .catch(), so a reject here would silently break the real leaderboard panel', async () => {
+    getWorldRoomImpl.mockImplementation(() => {
+      throw new Error('WebRTC unavailable in this environment');
+    });
+    const { DistributedCoronationLeaderboardClient } = await import('../DistributedLeaderboard');
+    const client = new DistributedCoronationLeaderboardClient();
+    await expect(client.getTop(10)).resolves.toEqual([]);
+  });
+
+  it('submit() still ranks/persists locally (does not reject) when joining the mesh fails — degrades to local-only rather than breaking the coronation-result toast', async () => {
+    getWorldRoomImpl.mockImplementation(() => {
+      throw new Error('WebRTC unavailable in this environment');
+    });
+    const { DistributedCoronationLeaderboardClient } = await import('../DistributedLeaderboard');
+    const client = new DistributedCoronationLeaderboardClient();
+    const result = await client.submit({ species: 'fox', coronationSeconds: 300, animalsDefeated: 2 });
+    expect(result.rank).toBe(1);
+    expect(result.top[0].coronationSeconds).toBe(300);
   });
 });

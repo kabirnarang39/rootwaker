@@ -75,22 +75,34 @@ export class DistributedCoronationLeaderboardClient implements CoronationLeaderb
    * pattern. Real sync shape: broadcast a single updated entry whenever this device's own best
    * improves; on any peer join, hand the newcomer this device's full known state once (a fresh
    * peer has seen nothing yet, so a single-entry broadcast alone would leave it missing history). */
+  /** Real degrade path: if joining the mesh fails for any reason (WebRTC unavailable, the
+   * environment blocks it, a future trystero bug), this catches it rather than letting getTop()/
+   * submit() reject — every consumer in Game.ts calls these with a bare .then(), no .catch(), so
+   * an unguarded throw here would silently break the O-key panel and the coronation-result toast
+   * with zero feedback to the player. Degrades to fully local-only (still ranks/persists real
+   * entries, just without gossip) — `wired` stays true either way so a persistently-unreachable
+   * mesh doesn't retry the same failure on every single getTop()/submit() call. */
   private ensureWired(): void {
     if (this.wired) return;
     this.wired = true;
-    const room = getWorldRoom();
-    const entryAction = room.makeAction<WorldCoronationEntry>('lb-entry');
-    const fullAction = room.makeAction<WorldCoronationEntry[]>('lb-full');
-    entryAction.onMessage = (entry) => {
-      if (this.mergeOne(entry)) void this.persist();
-    };
-    fullAction.onMessage = (entries) => {
-      void this.mergeMany(entries);
-    };
-    onPeerJoin((peerId) => {
-      fullAction.send([...this.state.values()], { target: peerId });
-    });
-    this.broadcastEntry = (entry) => entryAction.send(entry);
+    try {
+      const room = getWorldRoom();
+      const entryAction = room.makeAction<WorldCoronationEntry>('lb-entry');
+      const fullAction = room.makeAction<WorldCoronationEntry[]>('lb-full');
+      entryAction.onMessage = (entry) => {
+        if (this.mergeOne(entry)) void this.persist();
+      };
+      fullAction.onMessage = (entries) => {
+        void this.mergeMany(entries);
+      };
+      onPeerJoin((peerId) => {
+        fullAction.send([...this.state.values()], { target: peerId });
+      });
+      this.broadcastEntry = (entry) => entryAction.send(entry);
+    } catch {
+      // networking unavailable — this.broadcastEntry stays the no-op default; getTop()/submit()
+      // still work against local state.
+    }
   }
 
   private broadcastEntry: (entry: WorldCoronationEntry) => void = () => {};
