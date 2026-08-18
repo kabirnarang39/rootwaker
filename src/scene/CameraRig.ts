@@ -86,6 +86,10 @@ export class CameraRig {
     return this._orbitYaw;
   }
 
+  get orbitPitch(): number {
+    return this._orbitPitch;
+  }
+
   get viewMode(): ViewMode {
     return this._viewMode;
   }

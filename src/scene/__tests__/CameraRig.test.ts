@@ -19,4 +19,13 @@ describe('CameraRig', () => {
     for (let i = 0; i < 30; i++) rig.update(target, 'combat', 1 / 60);
     expect(rig.camera.fov).toBeLessThan(groundedFov);
   });
+
+  it('orbitPitch reflects real accumulated look-delta, clamped the same way orbitYaw already is (used by the duel camera to orbit around a fighter outside CameraRig\'s own update() loop)', () => {
+    const rig = new CameraRig();
+    expect(rig.orbitPitch).toBe(0);
+    rig.applyLookDelta(0, 0.3);
+    expect(rig.orbitPitch).toBeCloseTo(0.3, 5);
+    rig.applyLookDelta(0, 10); // well past PITCH_MAX — must clamp, not run away
+    expect(rig.orbitPitch).toBeLessThanOrEqual(0.9);
+  });
 });

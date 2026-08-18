@@ -33,6 +33,10 @@ function fakeElement(): any {
       add: (...names: string[]) => names.forEach((n) => classSet.add(n)),
       remove: (...names: string[]) => names.forEach((n) => classSet.delete(n)),
       contains: (n: string) => classSet.has(n),
+      toggle: (n: string, force?: boolean) => {
+        const on = force ?? !classSet.has(n);
+        if (on) classSet.add(n); else classSet.delete(n);
+      },
     },
     style: {
       setProperty: (name: string, value: string) => setPropertyCalls.push([name, value]),
@@ -168,6 +172,26 @@ describe('HUD boss bar + arc-complete toast — behavior (real HUD instance, fak
     hud.showArcComplete();
     const arcCompleteEl = (hud as unknown as { arcCompleteEl: ReturnType<typeof fakeElement> }).arcCompleteEl;
     expect(arcCompleteEl.classList.contains('rw-visible')).toBe(true);
+  });
+
+  it('showDuelOutcome renders real distinct win/lose copy and toggles the loss color modifier', async () => {
+    const { HUD } = await import('../HUD');
+    const hud = new HUD(fakeElement() as unknown as HTMLElement);
+    const h = hud as unknown as {
+      duelOutcomeEl: ReturnType<typeof fakeElement>;
+      duelOutcomeEyebrowEl: ReturnType<typeof fakeElement>;
+      duelOutcomeTitleEl: ReturnType<typeof fakeElement>;
+    };
+
+    hud.showDuelOutcome(true);
+    expect(h.duelOutcomeEl.classList.contains('rw-visible')).toBe(true);
+    expect(h.duelOutcomeEl.classList.contains('rw-duel-lost')).toBe(false);
+    expect(h.duelOutcomeEyebrowEl.textContent).toBe('The Throne Is Claimed');
+
+    hud.showDuelOutcome(false);
+    expect(h.duelOutcomeEl.classList.contains('rw-duel-lost')).toBe(true);
+    expect(h.duelOutcomeEyebrowEl.textContent).toBe('Single Combat');
+    expect(h.duelOutcomeTitleEl.textContent).toContain('defeated');
   });
 
   it('showCoronationResult renders rank/stats and reveals the panel without throwing', async () => {

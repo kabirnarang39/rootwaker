@@ -45,6 +45,10 @@ export class HUD {
   private bossHealthFillEl: HTMLDivElement;
   private arcCompleteEl: HTMLDivElement;
   private arcCompleteTimer: number | null = null;
+  private duelOutcomeEl: HTMLDivElement;
+  private duelOutcomeEyebrowEl: HTMLDivElement;
+  private duelOutcomeTitleEl: HTMLDivElement;
+  private duelOutcomeTimer: number | null = null;
   private coronationResultEl: HTMLDivElement;
   private coronationRankEl: HTMLDivElement;
   private coronationStatsEl: HTMLDivElement;
@@ -130,6 +134,10 @@ export class HUD {
       <div class="rw-arc-complete">
         <div class="rw-arc-eyebrow">Arc Complete</div>
         <div class="rw-arc-title">The summit gate swings open</div>
+      </div>
+      <div class="rw-duel-outcome">
+        <div class="rw-arc-eyebrow rw-duel-eyebrow"></div>
+        <div class="rw-arc-title rw-duel-title"></div>
       </div>
       <div class="rw-coronation-result">
         <div class="rw-coronation-eyebrow">Coronation Record</div>
@@ -538,6 +546,36 @@ export class HUD {
         font-family: var(--display-face); font-weight: 600; font-size: 22px;
         letter-spacing: 0.01em; text-shadow: 0 0 18px rgba(255,106,58,0.45);
       }
+      /* Real duel-outcome toast: same centered climax-beat position/lifecycle as arc-complete
+         (mutually exclusive with it — a duel never fires alongside the AI King fight, so sharing
+         the visual slot is safe), but its own real win/lose framing set dynamically at call time
+         (see showDuelOutcome) rather than the fixed "Arc Complete" copy. A real color split — a
+         win reuses the same amber the coronation-result panel uses, a loss reads in a duller
+         red — so the two outcomes are visually distinct at a glance, not just by text. */
+      .rw-duel-outcome {
+        position: fixed; top: 50%; left: 50%; z-index: 16;
+        display: none; pointer-events: none; text-align: center;
+        font-family: var(--body-face); color: var(--parchment);
+        min-width: 260px; max-width: min(420px, 88vw);
+        padding: 16px 32px 14px;
+        background: linear-gradient(180deg, rgba(20,13,9,0.8), rgba(7,10,8,0.94));
+        border-top: 1px solid rgba(255,177,94,0.6);
+        box-shadow: 0 0 32px rgba(255,177,94,0.4), 0 18px 44px rgba(0,0,0,0.55);
+        clip-path: polygon(3% 0, 97% 0, 100% 100%, 0% 100%);
+      }
+      .rw-duel-outcome.rw-duel-lost {
+        border-top-color: rgba(217,102,122,0.6);
+        box-shadow: 0 0 32px rgba(217,102,122,0.3), 0 18px 44px rgba(0,0,0,0.55);
+      }
+      .rw-duel-outcome.rw-visible {
+        display: block;
+        animation: rw-arc-complete-toast 4500ms cubic-bezier(0.16, 1, 0.3, 1) both;
+      }
+      .rw-duel-eyebrow { color: var(--spirit-amber); }
+      .rw-duel-outcome.rw-duel-lost .rw-duel-eyebrow { color: var(--vitality-low); }
+      .rw-duel-title { text-shadow: 0 0 18px rgba(255,177,94,0.45); }
+      .rw-duel-outcome.rw-duel-lost .rw-duel-title { text-shadow: 0 0 18px rgba(217,102,122,0.4); }
+
       @keyframes rw-arc-complete-toast {
         0% { opacity: 0; transform: translate(-50%, calc(-50% - 14px)) scale(0.97); }
         10%, 88% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
@@ -845,6 +883,9 @@ export class HUD {
     this.bossNameEl = this.root.querySelector('.rw-boss-name')!;
     this.bossHealthFillEl = this.root.querySelector('.rw-boss-fill')!;
     this.arcCompleteEl = this.root.querySelector('.rw-arc-complete')!;
+    this.duelOutcomeEl = this.root.querySelector('.rw-duel-outcome')!;
+    this.duelOutcomeEyebrowEl = this.root.querySelector('.rw-duel-eyebrow')!;
+    this.duelOutcomeTitleEl = this.root.querySelector('.rw-duel-title')!;
     this.coronationResultEl = this.root.querySelector('.rw-coronation-result')!;
     this.coronationRankEl = this.root.querySelector('.rw-coronation-rank')!;
     this.coronationStatsEl = this.root.querySelector('.rw-coronation-stats')!;
@@ -1173,6 +1214,28 @@ export class HUD {
       this.arcCompleteEl.classList.remove('rw-visible');
       this.arcCompleteTimer = null;
     }, 4000);
+  }
+
+  /** A real distinct PvP-duel outcome beat — shown to BOTH players (winner and loser see their
+   * own real framing, not a shared "arc complete" line meant for the single-player King fight).
+   * A win still fires showCoronationResult() alongside this for the leaderboard payoff; a loss
+   * gets no leaderboard entry at all, just this toast. */
+  showDuelOutcome(won: boolean): void {
+    this.duelOutcomeEyebrowEl.textContent = won ? 'The Throne Is Claimed' : 'Single Combat';
+    this.duelOutcomeTitleEl.textContent = won
+      ? 'You have defeated your challenger'
+      : 'You have been defeated — the throne remains contested';
+    this.duelOutcomeEl.classList.toggle('rw-duel-lost', !won);
+
+    this.duelOutcomeEl.classList.remove('rw-visible');
+    void this.duelOutcomeEl.offsetWidth;
+    this.duelOutcomeEl.classList.add('rw-visible');
+
+    if (this.duelOutcomeTimer !== null) window.clearTimeout(this.duelOutcomeTimer);
+    this.duelOutcomeTimer = window.setTimeout(() => {
+      this.duelOutcomeEl.classList.remove('rw-visible');
+      this.duelOutcomeTimer = null;
+    }, 4500);
   }
 
   /** The local coronation-leaderboard payoff — fires alongside showArcComplete() at the exact

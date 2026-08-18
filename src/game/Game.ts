@@ -102,6 +102,9 @@ const HIT_STAGGER_SECONDS = 0.22;
 // deep enough that trading blocked hits is clearly the losing move compared to actually dodging
 // or fighting back. No hit-stagger on a blocked hit — you can hold guard through a real flurry.
 const BLOCK_DAMAGE_MULTIPLIER = 0.25;
+// Real duel camera distance/height — same rough framing as the normal follow view.
+const DUEL_CAMERA_DISTANCE = 5;
+const DUEL_CAMERA_HEIGHT = 2.2;
 // A landed finisher (the 3rd real combo stage) staggers a stunnable enemy — the same real
 // EnemyAI.stun() King's Roar already uses — so the combo's payoff is a real tactical opening, not
 // just a bigger number. Single-player only: PvP duel opponents are real players, not an
@@ -635,9 +638,21 @@ export class Game {
       const dodgePressed = this.duelDodgePressed;
       this.duelDodgePressed = false;
       this.duel.update(delta, { x: this.rawMoveInput.x, z: this.rawMoveInput.z, jump: false }, attackPressed, dodgePressed);
+      // A real orbiting camera, not a fixed angle — reuses the SAME orbitYaw/orbitPitch
+      // CameraRig already accumulates from real mouse-drag every frame (Input.onLook/pollLook
+      // run unconditionally regardless of duel state), with the exact same spherical-offset math
+      // CameraRig.orbitedOffset uses internally, so drag-to-look feels identical to normal play.
       const p = this.duel.localFighterPosition;
-      this.cameraRig.camera.position.set(p.x, p.y + 3, p.z + 6);
-      this.cameraRig.camera.lookAt(p.x, p.y + 0.5, p.z);
+      const yaw = this.cameraRig.orbitYaw;
+      const pitch = this.cameraRig.orbitPitch;
+      const pitchedDistance = DUEL_CAMERA_DISTANCE * Math.cos(pitch);
+      const pitchedHeight = DUEL_CAMERA_HEIGHT + DUEL_CAMERA_DISTANCE * Math.sin(pitch);
+      this.cameraRig.camera.position.set(
+        p.x + pitchedDistance * Math.sin(yaw),
+        p.y + pitchedHeight,
+        p.z + pitchedDistance * Math.cos(yaw),
+      );
+      this.cameraRig.camera.lookAt(p.x, p.y + 0.6, p.z);
       this.hud.updateHealth(this.duel.myHp, DUEL_HP);
       this.composer.render();
       requestAnimationFrame(this.animate);
@@ -1465,6 +1480,7 @@ export class Game {
     this.fox.group.visible = true;
     this.duel = null;
 
+    this.hud.showDuelOutcome(won);
     if (won) {
       this.kingDefeated = true;
       this.coronationSeconds = this.clock.elapsedTime;
