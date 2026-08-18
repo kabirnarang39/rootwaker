@@ -40,6 +40,9 @@ import { eatClip } from '../scene/foxClips';
 import { WeatherSystem } from './WeatherSystem';
 import { MockCoronationLeaderboardClient, type CoronationEntry } from '../leaderboard/CoronationLeaderboard';
 import { SaveGame, type GameSaveState } from './SaveGame';
+import { ChallengeGate } from '../multiplayer/ChallengeGate';
+import { DuelSession, DUEL_HP, type DuelCombatantInfo } from '../multiplayer/DuelSession';
+import type { P2PChallengeLink } from '../multiplayer/P2PChallengeLink';
 import { createRainSystem, type RainSystem } from '../scene/createRainSystem';
 
 // Mirrors PlayerController's own (unexported) pounce range so the hunt-prompt lights up
@@ -254,6 +257,12 @@ export class Game {
   private saveGame = new SaveGame();
   private lastAutosaveTime = -Infinity;
   private coronationSeconds: number | null = null;
+  private container!: HTMLElement;
+  // Real P2P throne-claim duel state — see multiplayer/DuelSession.ts and ChallengeGate.ts. Both
+  // null outside a duel; `duel` is the live session once two players connect and start fighting.
+  private duel: DuelSession | null = null;
+  private challengeGate: ChallengeGate | null = null;
+  private duelAttackPressed = false;
   // The root-wraith is unkillable and nothing notices (Task 6 Step 7a): nothing ever checked
   // isDefeated(wraith.combatant), so it absorbed hits and kept dealing damage forever past 0 HP.
   // A root-spirit grants no ability on kill, so its enemyEntries() onDefeat only removes it.
@@ -355,6 +364,7 @@ export class Game {
     this.fox = createPlayableCharacter(character.species, character.skinId);
     this.playerSpecies = character.species;
     this.playerSkinId = character.skinId;
+    this.container = container;
     this.scene.background = new THREE.Color(0x0a1420);
     this.scene.fog = new THREE.FogExp2(0x0a1420, 0.014);
 
@@ -406,6 +416,16 @@ export class Game {
     });
     this.input.onAction((action: PlayerAction) => {
       this.dismissLegendOnce();
+      if (action === 'multiplayer' && !this.duel && !this.challengeGate) {
+        this.openChallengeGate();
+        return;
+      }
+      if (this.duel) {
+        // A duel in progress owns 'attack' entirely — no abilities, jump, pounce, or view-cycle
+        // mid-duel (see DuelSession's own deliberately-minimal move set).
+        if (action === 'attack') this.duelAttackPressed = true;
+        return;
+      }
       if (action === 'jump') this.jumpPressed = true;
       if (action === 'attack') this.tryAttack();
       if (action === 'pounce') this.tryPounce();
@@ -561,6 +581,22 @@ export class Game {
 
     this.input.pollMove();
     this.input.pollLook();
+
+    if (this.duel) {
+      // Duel mode owns the frame entirely — none of the single-player world (weather, wildlife,
+      // the King, abilities) runs while a real P2P duel is in progress; see DuelSession.ts for
+      // the actual host-authoritative simulation this drives.
+      const attackPressed = this.duelAttackPressed;
+      this.duelAttackPressed = false;
+      this.duel.update(delta, { x: this.rawMoveInput.x, z: this.rawMoveInput.z, jump: false }, attackPressed);
+      const p = this.duel.localFighterPosition;
+      this.cameraRig.camera.position.set(p.x, p.y + 3, p.z + 6);
+      this.cameraRig.camera.lookAt(p.x, p.y + 0.5, p.z);
+      this.hud.updateHealth(this.duel.myHp, DUEL_HP);
+      this.composer.render();
+      requestAnimationFrame(this.animate);
+      return;
+    }
 
     const AUTOSAVE_INTERVAL_SECONDS = 15;
     if (time - this.lastAutosaveTime >= AUTOSAVE_INTERVAL_SECONDS) {
@@ -1311,6 +1347,63 @@ export class Game {
       savedAt: Date.now(),
     };
     this.saveGame.save(state).catch(() => {});
+  }
+
+  /** Opens the real WebRTC manual-code exchange screen (KeyM) — see ChallengeGate.ts's own doc
+   * comment for why "current king" is inherently a local, per-player fact rather than a globally
+   * synchronized one in a backend-free P2P design. */
+  private async openChallengeGate(): Promise<void> {
+    const gate = new ChallengeGate(this.container, {
+      species: this.playerSpecies,
+      skinId: this.playerSkinId,
+    });
+    this.challengeGate = gate;
+    try {
+      const { link, remote } = await gate.whenConnected();
+      this.startDuel(link, remote);
+    } catch {
+      // canceled — no real state change, the player just returns to normal play
+    } finally {
+      this.challengeGate = null;
+    }
+  }
+
+  private startDuel(link: P2PChallengeLink, remote: DuelCombatantInfo): void {
+    this.level.group.visible = false;
+    this.fox.group.visible = false;
+    this.hud.hideBossBar();
+    const local: DuelCombatantInfo = { species: this.playerSpecies, skinId: this.playerSkinId };
+    this.duel = new DuelSession(link, local, remote);
+    this.scene.add(this.duel.group);
+    this.duel.onOutcome(() => this.finishDuel());
+  }
+
+  private finishDuel(): void {
+    if (!this.duel) return;
+    const won = this.duel.iAmWinner;
+    this.scene.remove(this.duel.group);
+    this.level.group.visible = true;
+    this.fox.group.visible = true;
+    this.duel = null;
+
+    if (won) {
+      this.kingDefeated = true;
+      this.coronationSeconds = this.clock.elapsedTime;
+      this.fox.revealCrown();
+      this.hud.setObjective('You claimed the throne in single combat. You are the King of the Mountain.');
+      this.audio.playCoronationCheer();
+      const entry = {
+        species: this.playerSpecies,
+        coronationSeconds: this.coronationSeconds,
+        animalsDefeated: this.animalsDefeated,
+      };
+      this.coronationLeaderboard.submit(entry).then(({ rank, top }) => {
+        this.hud.showCoronationResult(rank, top, entry);
+      });
+      this.saveProgress();
+    } else {
+      this.hud.setObjective('You were defeated in single combat — grow stronger and challenge again.');
+    }
   }
 
   private resolveDefeat(entry: EnemyEntry): void {
