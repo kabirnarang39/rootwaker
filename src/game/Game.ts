@@ -562,12 +562,32 @@ export class Game {
       this.animalsDefeated = resume.animalsDefeated;
       if (resume.kingDefeated) {
         // Restores the post-coronation world state without replaying the one-time
-        // audio/story-beat/leaderboard-submit side effects from the original victory — those
-        // already happened in the session that created this save.
+        // audio/story-beat side effects from the original victory — those already happened in
+        // the session that created this save.
         this.kingDefeated = true;
         this.level.throneRoom.openGate();
         this.fox.revealCrown();
         this.hud.setObjective('You are the new King of the Mountain.');
+      }
+      // Real gap this fixes: GameSaveState.coronationSeconds has always been saved specifically
+      // so a resumed session can re-submit even if the tab closed before the original submit()
+      // finished — but no code ever actually did this. This matters more now than when that field
+      // was first added: submit() is genuinely async and network-dependent (joins the mesh,
+      // persists locally, broadcasts to peers), so a tab closed in that narrow window could lose
+      // the coronation from ever reaching the leaderboard. Silent and idempotent-safe — submit()
+      // only replaces this device's own entry when the value is actually better, so resubmitting
+      // an already-recorded best on every resume is a real no-op, not a duplicate or a downgrade.
+      // Deliberately does NOT re-show the coronation toast — same "restore state, don't replay
+      // one-time UI" rule the kingDefeated branch above already follows.
+      if (resume.coronationSeconds !== null) {
+        this.coronationSeconds = resume.coronationSeconds;
+        const resumedEntry: CoronationEntry & { playerId: string } = {
+          species: this.playerSpecies,
+          coronationSeconds: resume.coronationSeconds,
+          animalsDefeated: resume.animalsDefeated,
+          playerId: getDeviceId(),
+        };
+        this.coronationLeaderboard.submit(resumedEntry).catch(() => {});
       }
     }
 
