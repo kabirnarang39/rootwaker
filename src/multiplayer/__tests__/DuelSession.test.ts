@@ -49,6 +49,30 @@ describe('DuelSession', () => {
     expect(h.host.controller.body.position.x).toBeGreaterThan(before);
   });
 
+  it('as host: clamps an oversized remote input vector from the guest instead of trusting it directly (real anti-cheat — an unclamped x/z would let a malicious guest speed-hack/teleport, since PlayerController.update() multiplies input straight into velocity)', () => {
+    const { link, receive } = fakeLink('host');
+    const duel = new DuelSession(link, fox, bear);
+    const h = duel as unknown as { guest: { controller: { moveSpeed: number; body: { position: { x: number } } } } };
+    const before = h.guest.controller.body.position.x;
+    receive({ type: 'input', x: 999999, z: 0, jump: false, attack: false, dodge: false });
+    duel.update(1 / 60, { x: 0, z: 0, jump: false }, false, false);
+    // Clamped to a real keyboard's max per-axis magnitude (1) — one frame at normal move speed,
+    // not an instant teleport across the whole arena.
+    const realMaxStep = h.guest.controller.moveSpeed * (1 / 60) * 1.5; // generous slack over one frame's real max displacement
+    expect(h.guest.controller.body.position.x - before).toBeLessThan(realMaxStep);
+  });
+
+  it('as host: treats a non-numeric/NaN remote input axis as zero rather than propagating NaN into physics', () => {
+    const { link, receive } = fakeLink('host');
+    const duel = new DuelSession(link, fox, bear);
+    const h = duel as unknown as { guest: { controller: { body: { position: { x: number } } } } };
+    const before = h.guest.controller.body.position.x;
+    receive({ type: 'input', x: NaN, z: 'not a number', jump: false, attack: false, dodge: false });
+    duel.update(1 / 60, { x: 0, z: 0, jump: false }, false, false);
+    expect(Number.isFinite(h.guest.controller.body.position.x)).toBe(true);
+    expect(h.guest.controller.body.position.x).toBe(before);
+  });
+
   it('as guest: update() sends real input over the link and does not run local physics (no desync risk)', () => {
     const { link, sent } = fakeLink('guest');
     const duel = new DuelSession(link, fox, bear);

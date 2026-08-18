@@ -56,6 +56,21 @@ interface FighterSnapshot {
   hp: number;
 }
 
+// Real anti-cheat: the host is authoritative and simulates the guest's movement directly from
+// whatever x/z arrives over the network — PlayerController.update() multiplies input straight
+// into velocity with no clamping of its own (safe in single-player, where input always comes
+// pre-bounded from Input.ts's real {-1,0,1}-per-axis keyboard output; NOT safe for raw network
+// data from a peer that could be running a modified client). Without this, a malicious guest
+// sending e.g. {x: 999999} would get an instant speed-hack/teleport, since the honest host would
+// unknowingly simulate it as real, authoritative movement. Clamps to the same [-1, 1] per-axis
+// range a real keyboard could ever produce, and treats a non-numeric/NaN value as "no input" —
+// the same substance as pass 11's leaderboard input validation, applied to duel netcode.
+function clampAxis(value: unknown): number {
+  const n = typeof value === 'number' ? value : 0;
+  if (!Number.isFinite(n)) return 0;
+  return Math.max(-1, Math.min(1, n));
+}
+
 function snapshot(fighter: DuelFighter): FighterSnapshot {
   return {
     x: fighter.controller.body.position.x,
@@ -155,9 +170,9 @@ export class DuelSession {
 
   private handleMessage(msg: NetMessage): void {
     if (msg.type === 'input' && this.role === 'host') {
-      this.remoteInput = { x: msg.x, z: msg.z, jump: msg.jump };
-      if (msg.attack) this.remoteAttackPressed = true;
-      if (msg.dodge) this.remoteDodgePressed = true;
+      this.remoteInput = { x: clampAxis(msg.x), z: clampAxis(msg.z), jump: msg.jump === true };
+      if (msg.attack === true) this.remoteAttackPressed = true;
+      if (msg.dodge === true) this.remoteDodgePressed = true;
     } else if (msg.type === 'state' && this.role === 'guest') {
       applySnapshot(this.host, msg.host);
       applySnapshot(this.guest, msg.guest);
