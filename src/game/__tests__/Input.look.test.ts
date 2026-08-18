@@ -156,4 +156,14 @@ describe('Input mouse-drag look', () => {
     window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyM' }));
     expect(firedAction).toBe('multiplayer');
   });
+
+  it('isHeld reflects real key-down/key-up state for Block (KeyH) — a HELD check, not a one-shot press event', () => {
+    const el = fakeElement();
+    const input = new Input(el as unknown as HTMLElement);
+    expect(input.isHeld('KeyH')).toBe(false);
+    window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyH' }));
+    expect(input.isHeld('KeyH')).toBe(true);
+    window.dispatchEvent(new KeyboardEvent('keyup', { code: 'KeyH' }));
+    expect(input.isHeld('KeyH')).toBe(false);
+  });
 });

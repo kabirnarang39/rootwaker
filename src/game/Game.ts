@@ -96,6 +96,17 @@ const DODGE_COOLDOWN_SECONDS = 0.9;
 // a stunlock chain (every enemy's own recoverSeconds is comfortably longer than this), long
 // enough to read as a real flinch.
 const HIT_STAGGER_SECONDS = 0.22;
+
+// Real block (hold KeyH): a real defensive stance, not a mash-J-forever combat — a blocked hit
+// still lands real chip damage (a total-immunity block would trivialize combat entirely) but
+// deep enough that trading blocked hits is clearly the losing move compared to actually dodging
+// or fighting back. No hit-stagger on a blocked hit — you can hold guard through a real flurry.
+const BLOCK_DAMAGE_MULTIPLIER = 0.25;
+// A landed finisher (the 3rd real combo stage) staggers a stunnable enemy — the same real
+// EnemyAI.stun() King's Roar already uses — so the combo's payoff is a real tactical opening, not
+// just a bigger number. Single-player only: PvP duel opponents are real players, not an
+// interruptible AI state machine, so this mechanic has no PvP equivalent by design.
+const FINISHER_STAGGER_SECONDS = 0.6;
 const DASH_DAMAGE = 16;
 const DASH_RADIUS = 0.7;
 const DASH_REACH = 3.2; // meters — the charge's forward hit capsule, well past the base attack's 1m reach
@@ -346,6 +357,9 @@ export class Game {
   private lastComboAttackTime = -Infinity;
   // Real hit-stagger — see HIT_STAGGER_SECONDS above.
   private staggerUntil = -Infinity;
+  // Real block (hold KeyH) — computed once per frame in animate(), consumed later the same
+  // frame by hurtPlayer() when an enemy attack actually resolves.
+  private blocking = false;
 
   // Base terrain heightAt() has no notion of the mountain's elevated ledges, so a player
   // topping out a climb segment would otherwise free-fall straight back down to jungle-floor
@@ -610,6 +624,7 @@ export class Game {
 
     this.input.pollMove();
     this.input.pollLook();
+    this.blocking = !this.duel && this.input.isHeld('KeyH'); // no block during a duel — see DuelSession's own combo/dodge parity note
 
     if (this.duel) {
       // Duel mode owns the frame entirely — none of the single-player world (weather, wildlife,
@@ -728,13 +743,14 @@ export class Game {
           this.owlDiveDirection.z * OWL_DIVE_FORWARD_SPEED,
         );
       } else {
-        // Real hit-stagger: a fresh hit briefly locks out normal movement input — the player
-        // visibly reacts instead of shrugging a hit off mid-stride. jump is deliberately still
-        // allowed through (a real player can still leap away while staggered; only x/z drive is
-        // locked), and a dodge is a direct position override that bypasses this branch entirely,
-        // so a skilled player can always roll OUT of stagger — never a true lockout.
-        const staggered = time < this.staggerUntil;
-        const effectiveMoveInput = staggered ? { x: 0, z: 0, jump: this.moveInput.jump } : this.moveInput;
+        // Real hit-stagger (a fresh hit briefly locks movement) AND real block (holding KeyH
+        // roots you in a guard stance — a real defensive commitment, not a free-movement damage
+        // reduction) both zero x/z the same way. jump is deliberately still allowed through both
+        // (a real player can still leap away while staggered or guarding), and a dodge is a
+        // direct position override that bypasses this branch entirely, so a skilled player can
+        // always roll OUT of either state — never a true lockout.
+        const movementLocked = time < this.staggerUntil || this.blocking;
+        const effectiveMoveInput = movementLocked ? { x: 0, z: 0, jump: this.moveInput.jump } : this.moveInput;
         this.playerController.update(effectiveMoveInput, delta, this.groundHeightWithLedges);
       }
       // PLAYER_COLLISION_RADIUS (0.35m) must stay well under TreeObstacleGrid's cell size
@@ -1227,6 +1243,14 @@ export class Game {
    * entirely: no damage, no flash, no hurt sound, the same as if the attack simply missed. */
   private hurtPlayer(amount: number): void {
     if (this.clock.elapsedTime < this.dodgeInvulnerableUntil) return;
+    if (this.blocking) {
+      // Real chip damage, not full immunity — a block absorbs most of a hit but still costs
+      // something, and deliberately skips hit-stagger entirely: holding guard through a real
+      // flurry has to actually work, not fold on the very first blocked swing.
+      applyDamage(this.playerCombatant, amount * BLOCK_DAMAGE_MULTIPLIER);
+      this.audio.playBlockImpact();
+      return;
+    }
     applyDamage(this.playerCombatant, amount);
     this.staggerUntil = this.clock.elapsedTime + HIT_STAGGER_SECONDS;
     this.audio.playPlayerHurt();
@@ -1484,7 +1508,7 @@ export class Game {
    * facing, dealing `damage` and shoving anything hit back by `knockback` meters. Knockback
    * lands on every hit including the killing one, and one sound plays for the whole sweep no
    * matter how many enemies it caught. */
-  private meleeSweep(damage: number, radius: number, reach: number, knockback: number): void {
+  private meleeSweep(damage: number, radius: number, reach: number, knockback: number, staggerEnemies = false): void {
     const forward = this.facingForward();
     const hitbox = {
       start: this.playerController.body.position.clone(),
@@ -1498,6 +1522,9 @@ export class Game {
       applyDamage(entry.combatant, damage);
       entry.position.addScaledVector(forward, knockback);
       hitAnything = true;
+      // A landed combo finisher is a real tactical opening, not just a bigger number — reuses
+      // the exact same EnemyAI.stun() King's Roar already drives.
+      if (staggerEnemies && entry.stunnable) entry.ai.stun(FINISHER_STAGGER_SECONDS);
       if (isDefeated(entry.combatant)) this.resolveDefeat(entry);
     }
 
@@ -1583,8 +1610,9 @@ export class Game {
 
     this.lastAttackTime = time;
     this.lastComboAttackTime = time;
-    this.meleeSweep(move.damage, 0.6, 1, COMBO_KNOCKBACK[this.comboStage]);
-    if (this.comboStage === COMBO_MOVES.length - 1) this.audio.playBearSwipeActivate(); // a real distinct heavier cue on the finisher
+    const isFinisher = this.comboStage === COMBO_MOVES.length - 1;
+    this.meleeSweep(move.damage, 0.6, 1, COMBO_KNOCKBACK[this.comboStage], isFinisher);
+    if (isFinisher) this.audio.playBearSwipeActivate(); // a real distinct heavier cue on the finisher
     this.comboStage = (this.comboStage + 1) % COMBO_MOVES.length;
   }
 

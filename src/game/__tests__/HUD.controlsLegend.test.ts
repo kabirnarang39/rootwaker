@@ -95,13 +95,13 @@ describe('HUD controls legend — content (source-text check, no DOM needed)', (
   if (!legendMatch) throw new Error('rw-controls-legend markup block not found in HUD.ts — has it moved or been renamed?');
   const legendMarkup = legendMatch[1];
 
-  it('has exactly 9 control rows', () => {
+  it('has exactly 10 control rows', () => {
     const rowCount = (legendMarkup.match(/rw-legend-row/g) ?? []).length;
-    expect(rowCount).toBe(9);
+    expect(rowCount).toBe(10);
   });
 
   it('lists only real, currently-bound controls', () => {
-    for (const label of ['Move', 'Jump', 'Attack', 'Dodge', 'Pounce', 'Look', 'View', 'Powers', 'Challenge']) {
+    for (const label of ['Move', 'Jump', 'Attack', 'Dodge', 'Block', 'Pounce', 'Look', 'View', 'Powers', 'Challenge']) {
       expect(legendMarkup).toContain(`>${label}<`);
     }
   });

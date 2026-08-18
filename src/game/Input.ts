@@ -66,6 +66,12 @@ export class Input {
     this.lookHandlers.push(handler);
   }
 
+  /** Real held-key check — for a state you hold rather than press once (Block). Distinct from
+   * the discrete onAction press events every other control uses. */
+  isHeld(code: string): boolean {
+    return this.keysDown.has(code);
+  }
+
   /** Called once per frame by the game loop to push the current move intent. */
   pollMove() {
     const { x, z } = resolveMoveVector(this.keysDown);

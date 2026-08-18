@@ -844,6 +844,24 @@ export class AudioFX {
     noise.start();
   }
 
+  /** A real blocked hit: a short, dull, low-pitched thud — deliberately unlike playPlayerHurt's
+   * own cue (a blocked hit reads as "absorbed," not "wounded"). */
+  playBlockImpact(): void {
+    if (!this.ctx) return;
+    const ctx = this.ctx;
+    const osc = ctx.createOscillator();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(180, ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(90, ctx.currentTime + 0.12);
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0.14, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.15);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.16);
+  }
+
   startVillageAmbience(): void {
     // A single warm, sustained drone — deliberately sparser than startJungleAmbience's
     // multi-layer canopy/floor/bird/water soundscape or startMountainWind's noise gusts: this is
