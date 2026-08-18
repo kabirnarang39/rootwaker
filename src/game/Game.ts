@@ -39,6 +39,7 @@ import { applyClipToRig } from '../scene/rig/Clip';
 import { eatClip } from '../scene/foxClips';
 import { WeatherSystem } from './WeatherSystem';
 import { MockCoronationLeaderboardClient, type CoronationEntry } from '../leaderboard/CoronationLeaderboard';
+import { SaveGame, type GameSaveState } from './SaveGame';
 import { createRainSystem, type RainSystem } from '../scene/createRainSystem';
 
 // Mirrors PlayerController's own (unexported) pounce range so the hunt-prompt lights up
@@ -249,6 +250,10 @@ export class Game {
   private animalsDefeated = 0;
   private coronationLeaderboard = new MockCoronationLeaderboardClient();
   private playerSpecies: SpeciesId = 'fox';
+  private playerSkinId: string = FOX_SKINS[0].id;
+  private saveGame = new SaveGame();
+  private lastAutosaveTime = -Infinity;
+  private coronationSeconds: number | null = null;
   // The root-wraith is unkillable and nothing notices (Task 6 Step 7a): nothing ever checked
   // isDefeated(wraith.combatant), so it absorbed hits and kept dealing damage forever past 0 HP.
   // A root-spirit grants no ability on kill, so its enemyEntries() onDefeat only removes it.
@@ -342,9 +347,14 @@ export class Game {
     return best;
   };
 
-  constructor(container: HTMLElement, character: { species: SpeciesId; skinId: string } = { species: 'fox', skinId: FOX_SKINS[0].id }) {
+  constructor(
+    container: HTMLElement,
+    character: { species: SpeciesId; skinId: string } = { species: 'fox', skinId: FOX_SKINS[0].id },
+    resume?: GameSaveState,
+  ) {
     this.fox = createPlayableCharacter(character.species, character.skinId);
     this.playerSpecies = character.species;
+    this.playerSkinId = character.skinId;
     this.scene.background = new THREE.Color(0x0a1420);
     this.scene.fog = new THREE.FogExp2(0x0a1420, 0.014);
 
@@ -445,6 +455,40 @@ export class Game {
     // it would otherwise sit on screen permanently, listing controls a touch player can't use.
     this.renderer.domElement.addEventListener('touchstart', () => this.dismissLegendOnce(), { once: true, passive: true });
 
+    if (resume) {
+      // Real state restore, not just species/skin — checkpoint position/hp/unlocked
+      // abilities/animals-defeated/king-status. Deliberately NOT restored: which specific
+      // enemies were previously killed (they respawn fresh on resume) — a full world-state
+      // snapshot is real extra scope beyond "resumable/checkpointable" and this project's own
+      // "decompose rather than build everything at once" discipline; the player's own progress
+      // (the part that actually matters for "did I lose my progress") is what's preserved.
+      this.playerController.body.position.set(resume.checkpointX, resume.checkpointY, resume.checkpointZ);
+      this.checkpoint.copy(this.playerController.body.position);
+      this.playerCombatant.hp = resume.hp;
+      this.playerCombatant.maxHp = resume.maxHp;
+      for (const id of resume.unlockedAbilities) {
+        if ((ABILITY_SLOTS as string[]).includes(id)) this.abilityKit.unlock(id as AbilityId);
+      }
+      this.animalsDefeated = resume.animalsDefeated;
+      if (resume.kingDefeated) {
+        // Restores the post-coronation world state without replaying the one-time
+        // audio/story-beat/leaderboard-submit side effects from the original victory — those
+        // already happened in the session that created this save.
+        this.kingDefeated = true;
+        this.level.throneRoom.openGate();
+        this.fox.revealCrown();
+        this.hud.setObjective('You are the new King of the Mountain.');
+      }
+    }
+
+    // Best-effort autosave: real checkpoints (ability unlocks, King defeat) save immediately
+    // elsewhere in this file, but a plain periodic save also catches ordinary progress (HP,
+    // position) between those events. A closed tab without a clean unload still keeps whatever
+    // the last periodic/event save wrote — real "resumable," not "only saves if you exit politely."
+    window.addEventListener('beforeunload', () => {
+      this.saveProgress();
+    });
+
     if (import.meta.env.DEV) {
       (window as unknown as { __rw: unknown }).__rw = {
         renderer: this.renderer,
@@ -517,6 +561,12 @@ export class Game {
 
     this.input.pollMove();
     this.input.pollLook();
+
+    const AUTOSAVE_INTERVAL_SECONDS = 15;
+    if (time - this.lastAutosaveTime >= AUTOSAVE_INTERVAL_SECONDS) {
+      this.lastAutosaveTime = time;
+      this.saveProgress();
+    }
 
     const weatherSnap = this.weather.update(time);
     (this.scene.fog as THREE.FogExp2).density = this.baseFogDensity * weatherSnap.params.fogMultiplier;
@@ -959,6 +1009,7 @@ export class Game {
         this.hud.setObjective('You are the new King of the Mountain.');
         this.tryShowStoryBeat('coronation');
 
+        this.coronationSeconds = time;
         const coronationEntry: CoronationEntry = {
           species: this.playerSpecies,
           coronationSeconds: time,
@@ -967,6 +1018,7 @@ export class Game {
         this.coronationLeaderboard.submit(coronationEntry).then(({ rank, top }) => {
           this.hud.showCoronationResult(rank, top, coronationEntry);
         });
+        this.saveProgress(); // real checkpoint — becoming King is the single biggest moment to save
       }
     }
 
@@ -1027,6 +1079,7 @@ export class Game {
     if (unlockedAbility) {
       this.hud.showAbilityUnlocked(unlockedAbility);
       this.audio.playAbilityUnlock();
+      this.saveProgress(); // real checkpoint — gaining a power is real, worth-saving progress
     }
     this.hud.updatePowers(
       ABILITY_SLOTS.map((id) => ({
@@ -1238,6 +1291,28 @@ export class Game {
    * into the eat-ritual instead of resolving onDefeat instantly — the fox visibly consumes it
    * first. The wraith and the King (both without grantsAbility) resolve immediately, exactly as
    * before this ritual existed. */
+  /** Builds and encrypts a real snapshot of current progress — called on real checkpoints
+   * (ability unlock, King defeat), a periodic autosave in animate(), and beforeunload as a
+   * last-resort catch-all. Fire-and-forget: a save failing (storage full, private browsing)
+   * should never interrupt gameplay, so the rejection is swallowed here rather than propagated. */
+  private saveProgress(): void {
+    const state: GameSaveState = {
+      species: this.playerSpecies,
+      skinId: this.playerSkinId,
+      checkpointX: this.checkpoint.x,
+      checkpointY: this.checkpoint.y,
+      checkpointZ: this.checkpoint.z,
+      hp: this.playerCombatant.hp,
+      maxHp: this.playerCombatant.maxHp,
+      unlockedAbilities: ABILITY_SLOTS.filter((id) => this.abilityKit.has(id)),
+      animalsDefeated: this.animalsDefeated,
+      kingDefeated: this.kingDefeated,
+      coronationSeconds: this.coronationSeconds,
+      savedAt: Date.now(),
+    };
+    this.saveGame.save(state).catch(() => {});
+  }
+
   private resolveDefeat(entry: EnemyEntry): void {
     if (entry.grantsAbility) {
       // Idempotency guard: a venom tick can still fire on a later frame against a combatant
