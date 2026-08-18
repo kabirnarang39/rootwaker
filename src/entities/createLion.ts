@@ -17,6 +17,7 @@ const LION_EYE_COLOR = 0xffcf6b; // amber — real big-cat eye-shine
 
 export interface Lion {
   group: THREE.Group;
+  rig: Rig;
   ai: EnemyAI;
   combatant: Combatant;
   update(time: number, delta: number, distanceToPlayer: number): void;
@@ -206,7 +207,7 @@ export function createLion(): Lion {
     syncHitbox();
   }
 
-  return { group: rig.root, ai, combatant, update };
+  return { group: rig.root, rig, ai, combatant, update };
 }
 
 export function getLionHitbox(lion: Lion): Capsule {

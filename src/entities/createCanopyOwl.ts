@@ -22,6 +22,7 @@ const OWL_TELEGRAPH_SECONDS = 0.5;
 
 export interface CanopyOwl {
   group: THREE.Group;
+  rig: Rig;
   ai: EnemyAI;
   combatant: Combatant;
   /** Set by the level at spawn (groundHeight + ~3.2). The owl hunts from a perch and climbs back
@@ -224,7 +225,7 @@ export function createCanopyOwl(): CanopyOwl {
     syncHitbox();
   }
 
-  return { group: rig.root, ai, combatant, perchY: 0, update };
+  return { group: rig.root, rig, ai, combatant, perchY: 0, update };
 }
 
 export function getCanopyOwlHitbox(owl: CanopyOwl): Capsule {

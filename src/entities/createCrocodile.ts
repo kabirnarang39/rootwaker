@@ -15,6 +15,7 @@ const EYE_COLOR = 0xffd23d;
 
 export interface Crocodile {
   group: THREE.Group;
+  rig: Rig;
   ai: EnemyAI;
   combatant: Combatant;
   update(time: number, delta: number, distanceToPlayer: number): void;
@@ -211,7 +212,7 @@ export function createCrocodile(): Crocodile {
     syncHitbox();
   }
 
-  return { group: rig.root, ai, combatant, update };
+  return { group: rig.root, rig, ai, combatant, update };
 }
 
 export function getCrocodileHitbox(crocodile: Crocodile): Capsule {

@@ -28,6 +28,7 @@ const SEGMENT_LENGTH = 0.24; // spacing between successive body joints down the 
 
 export interface VineViper {
   group: THREE.Group;
+  rig: Rig;
   ai: EnemyAI;
   combatant: Combatant;
   update(time: number, delta: number, distanceToPlayer: number): void;
@@ -195,7 +196,7 @@ export function createVineViper(): VineViper {
     syncHitbox();
   }
 
-  return { group: rig.root, ai, combatant, update };
+  return { group: rig.root, rig, ai, combatant, update };
 }
 
 export function getVineViperHitbox(viper: VineViper): Capsule {

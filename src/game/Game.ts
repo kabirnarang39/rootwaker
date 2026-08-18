@@ -37,6 +37,7 @@ import { toCameraRelative } from './CameraRelativeMove';
 import { computeFacingAngle } from './FoxFacing';
 import { chaseTowardPlayer, horizontalDistance } from './EnemyChase';
 import { applyClipToRig } from '../scene/rig/Clip';
+import type { Rig } from '../scene/rig/Rig';
 import { eatClip } from '../scene/foxClips';
 import { WeatherSystem } from './WeatherSystem';
 import type { CoronationEntry } from '../leaderboard/CoronationLeaderboard';
@@ -274,6 +275,11 @@ interface EnemyEntry {
    * it — no power) and the King (no onDefeat at all; a coronation, not a meal) are deliberately
    * excluded — the fox does not eat either of them. */
   grantsAbility?: AbilityId;
+  /** Optional so the King/wraith (built differently, see rootWraith.ts/createElderBearKing.ts)
+   * don't need to satisfy this — set for every real huntable species so resolveDefeat() can apply
+   * a real one-time death-collapse pose the instant a kill lands, since the entity's own update()
+   * never runs again once beingEaten (see the eat-ritual loop's own `if (beingEaten) continue`). */
+  rig?: Rig;
 }
 
 export class Game {
@@ -1499,6 +1505,7 @@ export class Game {
         combatant: boar.combatant,
         position: boar.group.position,
         ai: boar.ai,
+        rig: boar.rig,
         stunnable: true,
         grantsAbility: 'boar-charge',
         onDefeat: () => {
@@ -1519,6 +1526,7 @@ export class Game {
         combatant: bear.combatant,
         position: bear.group.position,
         ai: bear.ai,
+        rig: bear.rig,
         stunnable: true,
         grantsAbility: 'bear-swipe',
         onDefeat: () => {
@@ -1536,6 +1544,7 @@ export class Game {
         combatant: owl.combatant,
         position: owl.group.position,
         ai: owl.ai,
+        rig: owl.rig,
         stunnable: true,
         grantsAbility: 'owl-dive',
         onDefeat: () => {
@@ -1553,6 +1562,7 @@ export class Game {
         combatant: viper.combatant,
         position: viper.group.position,
         ai: viper.ai,
+        rig: viper.rig,
         stunnable: true,
         grantsAbility: 'viper-venom',
         onDefeat: () => {
@@ -1570,6 +1580,7 @@ export class Game {
         combatant: lion.combatant,
         position: lion.group.position,
         ai: lion.ai,
+        rig: lion.rig,
         stunnable: true,
         grantsAbility: 'lion-pounce',
         onDefeat: () => {
@@ -1587,6 +1598,7 @@ export class Game {
         combatant: crocodile.combatant,
         position: crocodile.group.position,
         ai: crocodile.ai,
+        rig: crocodile.rig,
         stunnable: true,
         grantsAbility: 'croc-lunge',
         onDefeat: () => {
@@ -1737,6 +1749,7 @@ export class Game {
       // reactions closed, now for the killing blow specifically).
       this.audio.playKnockout();
       this.playDeathSoundFor(entry);
+      this.playDeathPoseFor(entry);
       this.hud.flashKO();
       // grantsAbility is exactly the field that distinguishes a real huntable animal from the
       // wraith (a root-spirit, no power, no count) — the leaderboard's animalsDefeated stat
@@ -1776,6 +1789,60 @@ export class Game {
         return;
       case 'croc-lunge':
         this.audio.playCrocodileDeath();
+        return;
+    }
+  }
+
+  /** Real one-time death-collapse pose, applied the instant a kill lands — a real visible death
+   * scene instead of the corpse just freezing mid-idle/mid-attack pose (which is what happened
+   * before: every enemy's own update() stops running once beingEaten, so whatever pose it was in
+   * on its last live frame is what stayed frozen for the whole eat-ritual). Each species gets its
+   * own real collapse, not a shared generic slump — `spine`/`head` exist on every rig so those two
+   * calls are always safe; tail/wing/jaw touches are gated on `hasJoint()` since only some species
+   * have them (a bear has no tail, calling setLocalRotation on a joint the rig was never built
+   * with throws — see Rig.ts's own getJoint()). */
+  private playDeathPoseFor(entry: EnemyEntry): void {
+    const rig = entry.rig;
+    if (!rig) return;
+    switch (entry.grantsAbility) {
+      case 'boar-charge':
+        // A real boar's legs buckle forward under its own low bulk — body pitches down and to
+        // the side, head drops.
+        rig.setLocalRotation('spine', 0.5, 0, 0.35);
+        rig.setLocalRotation('head', 0.4, 0, 0);
+        return;
+      case 'bear-swipe':
+        // A heavy slump onto one side — the real weight of the biggest ground species in the
+        // game finally giving out.
+        rig.setLocalRotation('spine', 0.3, 0, 0.6);
+        rig.setLocalRotation('head', 0.5, 0, 0.2);
+        return;
+      case 'owl-dive':
+        // Wings splay open asymmetrically (a real bird's wings go slack, not folded neatly),
+        // head lolls to the side, body tips.
+        rig.setLocalRotation('spine', 0, 0, 0.5);
+        rig.setLocalRotation('head', 0.3, 0, 0.4);
+        if (rig.hasJoint('wingL')) rig.setLocalRotation('wingL', 0, 0, -0.9);
+        if (rig.hasJoint('wingR')) rig.setLocalRotation('wingR', 0, 0, 0.5);
+        return;
+      case 'viper-venom':
+        // A real snake goes fully limp and straightens out — the opposite of every coiled/
+        // striking pose it ever holds alive, which is exactly what makes this read as dead.
+        rig.setLocalRotation('spine', 0, 0, 0.3);
+        rig.setLocalRotation('head', 0.15, 0.2, 0);
+        return;
+      case 'lion-pounce':
+        // A real apex predator's fall — the mane-heavy head drops first, body slumps, tail goes
+        // fully slack (a live lion's tail is never limp).
+        rig.setLocalRotation('spine', 0.35, 0, 0.4);
+        rig.setLocalRotation('head', 0.45, 0, 0.15);
+        if (rig.hasJoint('tail0')) rig.setLocalRotation('tail0', 0.6, 0, 0);
+        return;
+      case 'croc-lunge':
+        // Jaw falls open, body flattens further and head lolls sideways — a real long-bodied
+        // animal's death reads through the head/jaw far more than a body slump would.
+        rig.setLocalRotation('head', 0, 0.35, 0);
+        if (rig.hasJoint('jaw')) rig.setLocalRotation('jaw', -0.4, 0, 0);
         return;
     }
   }

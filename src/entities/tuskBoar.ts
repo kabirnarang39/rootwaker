@@ -14,6 +14,9 @@ const EYE_COLOR = 0xff9d3d;
 
 export interface TuskBoar {
   group: THREE.Group;
+  // Exposed so Game.ts's resolveDefeat() can apply a real one-time death-collapse pose the
+  // instant a kill lands, since this entity's own update() never runs again once beingEaten.
+  rig: Rig;
   ai: EnemyAI;
   combatant: Combatant;
   update(time: number, delta: number, distanceToPlayer: number): void;
@@ -166,7 +169,7 @@ export function createTuskBoar(): TuskBoar {
     syncHitbox();
   }
 
-  return { group: rig.root, ai, combatant, update };
+  return { group: rig.root, rig, ai, combatant, update };
 }
 
 export function getBoarHitbox(boar: TuskBoar): Capsule {

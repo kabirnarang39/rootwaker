@@ -14,6 +14,7 @@ const BEAR_EYE_COLOR = 0xffb84d; // amber eye-shine — real nocturnal animal ey
 
 export interface GroveBear {
   group: THREE.Group;
+  rig: Rig;
   ai: EnemyAI;
   combatant: Combatant;
   update(time: number, delta: number, distanceToPlayer: number): void;
@@ -170,7 +171,7 @@ export function createGroveBear(): GroveBear {
     syncHitbox();
   }
 
-  return { group: rig.root, ai, combatant, update };
+  return { group: rig.root, rig, ai, combatant, update };
 }
 
 export function getGroveBearHitbox(bear: GroveBear): Capsule {
