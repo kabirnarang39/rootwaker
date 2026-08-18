@@ -161,6 +161,17 @@ describe('Input mouse-drag look', () => {
     expect(firedAction).toBe('ability8');
   });
 
+  it('Digit9 emits an ability9 action', () => {
+    const el = fakeElement();
+    const input = new Input(el as unknown as HTMLElement);
+    let firedAction: string | null = null;
+    input.onAction((action) => {
+      firedAction = action;
+    });
+    window.dispatchEvent(new KeyboardEvent('keydown', { code: 'Digit9' }));
+    expect(firedAction).toBe('ability9');
+  });
+
   it('KeyM emits a multiplayer action', () => {
     const el = fakeElement();
     const input = new Input(el as unknown as HTMLElement);

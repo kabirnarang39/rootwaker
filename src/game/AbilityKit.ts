@@ -1,4 +1,13 @@
-export type AbilityId = 'keen-ear' | 'boar-charge' | 'bear-swipe' | 'kings-roar' | 'owl-dive' | 'viper-venom' | 'lion-pounce' | 'croc-lunge';
+export type AbilityId =
+  | 'keen-ear'
+  | 'boar-charge'
+  | 'bear-swipe'
+  | 'kings-roar'
+  | 'owl-dive'
+  | 'viper-venom'
+  | 'lion-pounce'
+  | 'croc-lunge'
+  | 'shark-bite';
 
 export interface Ability {
   id: AbilityId;
@@ -65,9 +74,16 @@ export const ABILITIES: Record<AbilityId, Ability> = {
     cooldownSeconds: 5,
     key: '8',
   },
+  'shark-bite': {
+    id: 'shark-bite',
+    name: 'Shark Bite',
+    description: 'A real underwater ram-and-bite, learned from the reef shark\'s own explosive lunge.',
+    cooldownSeconds: 5,
+    key: '9',
+  },
 };
 
-// Fixed HUD/keybind order — Digit1..Digit8 map to this array by index.
+// Fixed HUD/keybind order — Digit1..Digit9 map to this array by index.
 export const ABILITY_SLOTS: AbilityId[] = [
   'keen-ear',
   'boar-charge',
@@ -77,6 +93,7 @@ export const ABILITY_SLOTS: AbilityId[] = [
   'viper-venom',
   'lion-pounce',
   'croc-lunge',
+  'shark-bite',
 ];
 
 export class AbilityKit {

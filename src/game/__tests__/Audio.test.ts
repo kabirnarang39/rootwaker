@@ -213,6 +213,28 @@ describe('AudioFX player-fox voice', () => {
   });
 });
 
+describe('AudioFX shark (living sea)', () => {
+  it('playSharkThreat does not throw before unlock()', () => {
+    const fx = new AudioFX();
+    expect(() => fx.playSharkThreat()).not.toThrow();
+  });
+
+  it('playSharkBiteActivate does not throw before unlock()', () => {
+    const fx = new AudioFX();
+    expect(() => fx.playSharkBiteActivate()).not.toThrow();
+  });
+
+  it('playSharkHurt does not throw before unlock()', () => {
+    const fx = new AudioFX();
+    expect(() => fx.playSharkHurt()).not.toThrow();
+  });
+
+  it('playSharkDeath does not throw before unlock()', () => {
+    const fx = new AudioFX();
+    expect(() => fx.playSharkDeath()).not.toThrow();
+  });
+});
+
 describe('AudioFX weather', () => {
   it('playThunder does not throw before unlock()', () => {
     const fx = new AudioFX();

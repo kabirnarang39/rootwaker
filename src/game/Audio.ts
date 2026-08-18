@@ -1474,4 +1474,111 @@ export class AudioFX {
       noise.start(t0);
     });
   }
+
+  /** The shark's own telegraph — deliberately NOT a vocal cry like every land predator's own
+   * warning sound: real sharks are silent, they have no vocal apparatus at all. This is a real
+   * physical water-surge instead — a rushing, turbulent noise swell as it accelerates into its
+   * approach, the same real distinguishing trait (silent, water-borne threat) that separates a
+   * shark from every land species already in the game. */
+  playSharkThreat(): void {
+    if (!this.ctx) return;
+    const ctx = this.ctx;
+    const noise = ctx.createBufferSource();
+    noise.buffer = makeNoiseBuffer(ctx, 0.55);
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.setValueAtTime(500, ctx.currentTime);
+    filter.frequency.exponentialRampToValueAtTime(1400, ctx.currentTime + 0.55); // rushing water, rising
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0, ctx.currentTime);
+    gain.gain.linearRampToValueAtTime(0.13, ctx.currentTime + 0.3);
+    gain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.55);
+    noise.connect(filter);
+    filter.connect(gain);
+    gain.connect(ctx.destination);
+    noise.start();
+  }
+
+  /** Shark Bite's own real activation cue — a sharp underwater snap (muffled, low-passed —
+   * unlike the crocodile's crisp highpass crack, everything underwater reads duller/rounder)
+   * landing with a real splash-thump underneath. */
+  playSharkBiteActivate(): void {
+    if (!this.ctx) return;
+    const ctx = this.ctx;
+    const snap = ctx.createBufferSource();
+    snap.buffer = makeNoiseBuffer(ctx, 0.12);
+    const snapFilter = ctx.createBiquadFilter();
+    snapFilter.type = 'lowpass';
+    snapFilter.frequency.value = 1600; // muffled/underwater, contrast with playCrocodileLungeActivate's highpass crack
+    const snapGain = ctx.createGain();
+    snapGain.gain.setValueAtTime(0.18, ctx.currentTime);
+    snapGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.1);
+    snap.connect(snapFilter);
+    snapFilter.connect(snapGain);
+    snapGain.connect(ctx.destination);
+    snap.start();
+
+    const thud = ctx.createOscillator();
+    thud.type = 'sine';
+    thud.frequency.setValueAtTime(75, ctx.currentTime);
+    thud.frequency.exponentialRampToValueAtTime(35, ctx.currentTime + 0.22);
+    const thudGain = ctx.createGain();
+    thudGain.gain.setValueAtTime(0.14, ctx.currentTime);
+    thudGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.25);
+    thud.connect(thudGain);
+    thudGain.connect(ctx.destination);
+    thud.start();
+    thud.stop(ctx.currentTime + 0.27);
+  }
+
+  /** Real shark hurt reaction: a hard-attack muffled thrash-burst, distinct from every land
+   * species' vocal hurt reaction — a shark taking a hit thrashes the water, it doesn't cry out. */
+  playSharkHurt(): void {
+    if (!this.ctx) return;
+    const ctx = this.ctx;
+    const noise = ctx.createBufferSource();
+    noise.buffer = makeNoiseBuffer(ctx, 0.2);
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.value = 900;
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0.15, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.2);
+    noise.connect(filter);
+    filter.connect(gain);
+    gain.connect(ctx.destination);
+    noise.start();
+
+    const thump = ctx.createOscillator();
+    thump.type = 'sine';
+    thump.frequency.setValueAtTime(100, ctx.currentTime);
+    thump.frequency.exponentialRampToValueAtTime(50, ctx.currentTime + 0.16);
+    const thumpGain = ctx.createGain();
+    thumpGain.gain.setValueAtTime(0.08, ctx.currentTime);
+    thumpGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.16);
+    thump.connect(thumpGain);
+    thumpGain.connect(ctx.destination);
+    thump.start();
+    thump.stop(ctx.currentTime + 0.18);
+  }
+
+  /** Real shark death: a long muffled thrashing that gradually stills — real underwater death
+   * has no cry, just diminishing turbulence, distinct from every land species' vocal death cry. */
+  playSharkDeath(): void {
+    if (!this.ctx) return;
+    const ctx = this.ctx;
+    const noise = ctx.createBufferSource();
+    noise.buffer = makeNoiseBuffer(ctx, 1.4);
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.setValueAtTime(700, ctx.currentTime);
+    filter.frequency.exponentialRampToValueAtTime(150, ctx.currentTime + 1.4); // thrashing settles/stills
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0.14, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 1.4);
+    noise.connect(filter);
+    filter.connect(gain);
+    gain.connect(ctx.destination);
+    noise.start();
+  }
 }

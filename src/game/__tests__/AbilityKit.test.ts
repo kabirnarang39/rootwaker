@@ -53,6 +53,7 @@ describe('AbilityKit', () => {
       'viper-venom',
       'lion-pounce',
       'croc-lunge',
+      'shark-bite',
     ]);
   });
 
@@ -66,6 +67,12 @@ describe('AbilityKit', () => {
     expect(ABILITIES['croc-lunge'].key).toBe('8');
     expect(ABILITIES['croc-lunge'].cooldownSeconds).toBe(5);
     expect(ABILITY_SLOTS[7]).toBe('croc-lunge');
+  });
+
+  it('shark-bite is registered with the right key, cooldown, and slot order', () => {
+    expect(ABILITIES['shark-bite'].key).toBe('9');
+    expect(ABILITIES['shark-bite'].cooldownSeconds).toBe(5);
+    expect(ABILITY_SLOTS[8]).toBe('shark-bite');
   });
 
   it('owl-dive and viper-venom activate/cooldown like every other ability once unlocked', () => {

@@ -13,6 +13,7 @@ import { createRootWraith, getAttackHitbox } from '../entities/rootWraith';
 import { getBoarHitbox } from '../entities/tuskBoar';
 import { getGroveBearHitbox } from '../entities/createGroveBear';
 import { getCrocodileHitbox } from '../entities/createCrocodile';
+import { getSharkHitbox } from '../entities/createShark';
 import { getElderBearKingHitbox } from '../entities/createElderBearKing';
 import { getCanopyOwlHitbox } from '../entities/createCanopyOwl';
 import { getVineViperHitbox } from '../entities/createVineViper';
@@ -145,6 +146,12 @@ const CROC_LUNGE_DAMAGE = 20;
 const CROC_LUNGE_RADIUS = 0.65;
 const CROC_LUNGE_REACH = 2.0;
 const CROC_LUNGE_KNOCKBACK = 1.5;
+// Shark Bite: same dash+meleeSweep mechanism as every other lunge power, a real underwater ram.
+const SHARK_BITE_SECONDS = 0.25;
+const SHARK_BITE_DAMAGE = 22;
+const SHARK_BITE_RADIUS = 0.65;
+const SHARK_BITE_REACH = 2.2;
+const SHARK_BITE_KNOCKBACK = 1.6;
 const HEAVY_SWIPE_RADIUS = 0.9;
 const HEAVY_SWIPE_REACH = 1.3;
 const HEAVY_SWIPE_KNOCKBACK = 0.6;
@@ -225,6 +232,17 @@ const LION_HIT_DAMAGE = 18; // bumped with the lion's real-size scale-up in crea
 const CROC_STALK_SPEED = 0.6;
 const CROC_LUNGE_SPEED = 7.5;
 const CROC_HIT_DAMAGE = 15;
+
+// Shark: a real reef shark never stops moving (see sharkClips.ts's own cruiseClip comment) — its
+// "cruise" gear is already a real, deliberate swim, not a stalk-from-stillness like the
+// crocodile. Its ram gear matches the lion/crocodile tier's own fastest-burst-in-the-game feel.
+const SHARK_CRUISE_SPEED = 2.2;
+const SHARK_RAM_SPEED = 7.5;
+const SHARK_HIT_DAMAGE = 16;
+// A shark's own vertical roam band relative to its sea body's real surface — real sharks patrol
+// well below the surface, not skimming it; this keeps it a genuine mid-water presence.
+const SHARK_MIN_DEPTH_BELOW_SURFACE = 1;
+const SHARK_MAX_DEPTH_BELOW_SURFACE = 4;
 
 // Owl's Descent: a real forward-and-down leap (mirrors the boar-charge dash idiom — a direct
 // position override for the leap window, falling through to the same obstacle/water checks).
@@ -371,6 +389,7 @@ export class Game {
   private prevBoarAiState = new WeakMap<object, string>();
   private prevBearAiState = new WeakMap<object, string>();
   private prevCrocAiState = new WeakMap<object, string>();
+  private prevSharkAiState = new WeakMap<object, string>();
   private prevSquirrelState = new WeakMap<object, string>();
   private prevFinchFlockState: FlockState = 'perched';
   private prevWraithAiState = 'idle'; // single instance — no WeakMap needed, unlike the arrays above
@@ -1174,6 +1193,49 @@ export class Game {
       }
     }
 
+    for (const shark of this.level.sharks) {
+      if (this.beingEaten.has(shark.combatant)) continue;
+      // Real full 3D distance, not horizontalDistance — the ground species need horizontal-only
+      // because terrain roughness leaves a residual vertical gap even once fully converged (see
+      // EnemyChase.ts's own doc comment); underwater there's no terrain roughness, so real 3D
+      // distance is both correct and necessary (a shark directly below/above the player is a
+      // real threat, not a false negative).
+      const sharkDistance = shark.group.position.distanceTo(this.playerController.body.position);
+      const prevSharkAiState = this.prevSharkAiState.get(shark.ai);
+      shark.update(time, delta, sharkDistance);
+      if (shark.ai.state === 'telegraph' && prevSharkAiState !== 'telegraph') {
+        this.audio.playSharkThreat();
+        this.tryShowStoryBeat('shark');
+      }
+      this.prevSharkAiState.set(shark.ai, shark.ai.state);
+      if (shark.ai.state !== 'idle') {
+        const sharkSpeed = shark.ai.state === 'telegraph' ? SHARK_RAM_SPEED : SHARK_CRUISE_SPEED;
+        // Real full-3D chase — no ground to snap to, so this can't reuse chaseTowardPlayer
+        // (horizontal-only by design, see its own doc comment); moves directly toward the
+        // player's exact position in 3D, stopping at strikeRange.
+        const toPlayer = this.playerController.body.position.clone().sub(shark.group.position);
+        const distance = toPlayer.length();
+        const gap = distance - shark.ai.strikeRange;
+        if (gap > 0) {
+          const step = Math.min(sharkSpeed * delta, gap);
+          shark.group.position.addScaledVector(toPlayer.normalize(), step);
+        }
+      }
+      // Real depth clamp: a shark patrols a real mid-water band below the surface, never
+      // breaching it and never resting on the seafloor — keeps it a genuine open-water presence
+      // even while actively chasing.
+      const seaSurfaceY = this.level.livingSea[0].surfaceY;
+      shark.group.position.y = THREE.MathUtils.clamp(
+        shark.group.position.y,
+        seaSurfaceY - SHARK_MAX_DEPTH_BELOW_SURFACE,
+        seaSurfaceY - SHARK_MIN_DEPTH_BELOW_SURFACE,
+      );
+      if (shark.ai.shouldDealDamageThisFrame()) {
+        const hit = resolveMeleeHit(getSharkHitbox(shark), this.playerCombatant);
+        if (hit) this.hurtPlayer(SHARK_HIT_DAMAGE);
+      }
+    }
+
     for (const owl of this.level.owls) {
       if (this.beingEaten.has(owl.combatant)) continue;
       // horizontalDistance, not the 3D .distanceTo() this loop used before Task 6's own live
@@ -1655,6 +1717,27 @@ export class Game {
       });
     }
 
+    for (const shark of this.level.sharks) {
+      entries.push({
+        combatant: shark.combatant,
+        position: shark.group.position,
+        ai: shark.ai,
+        rig: shark.rig,
+        stunnable: true,
+        grantsAbility: 'shark-bite',
+        onDefeat: () => {
+          // Deliberately NOT this.level.group.remove(shark.group) — see the boar's own onDefeat
+          // comment above for why: a real kill leaves a real corpse behind. Note: resolveDefeat's
+          // own ground-snap-on-death fix is deliberately scoped to owl-dive only, NOT this
+          // species — a shark corpse stays exactly where it died (see that comment).
+          const idx = this.level.sharks.indexOf(shark);
+          if (idx !== -1) this.level.sharks.splice(idx, 1);
+          this.abilityKit.unlock('shark-bite');
+          this.venom.clear(shark.combatant);
+        },
+      });
+    }
+
     // A combatant mid-eat-ritual is already dead — exclude it from every consumer at the one
     // source (melee, King's Roar, Owl's Descent AOE, and the venom-tick lookup all read this
     // list), rather than teaching each of them about beingEaten individually.
@@ -1798,9 +1881,14 @@ export class Game {
       // logic (in the main animate() loop, below) is gated on `!beingEaten` just like its
       // update() call — once dead it stops running entirely, so without this an owl killed
       // mid-dive would otherwise stay frozen floating in mid-air forever as a persistent corpse.
-      // Every ground species is already at groundHeightAt on its last live frame, so this is a
-      // no-op for them.
-      entry.position.y = this.level.groundHeightAt(entry.position.x, entry.position.z);
+      // Deliberately scoped to the owl ONLY, not every species: groundHeightAt() returns
+      // DEEP_OCEAN_FLOOR_Y (-20) for any x/z beyond the island (see createJungleLevel.ts's own
+      // comment) — applying this to a shark corpse (which lives permanently offshore) would
+      // yank it violently down to -20 instead of leaving it exactly where it died, which is the
+      // correct resting position for a species that was never ground-relative to begin with.
+      if (entry.grantsAbility === 'owl-dive') {
+        entry.position.y = this.level.groundHeightAt(entry.position.x, entry.position.z);
+      }
       this.spawnBloodPool(entry.position);
       this.hud.flashKO();
       // grantsAbility is exactly the field that distinguishes a real huntable animal from the
@@ -1867,6 +1955,9 @@ export class Game {
       case 'croc-lunge':
         this.audio.playCrocodileDeath();
         return;
+      case 'shark-bite':
+        this.audio.playSharkDeath();
+        return;
     }
   }
 
@@ -1921,6 +2012,16 @@ export class Game {
         rig.setLocalRotation('head', 0, 0.35, 0);
         if (rig.hasJoint('jaw')) rig.setLocalRotation('jaw', -0.4, 0, 0);
         return;
+      case 'shark-bite':
+        // A real shark that stops swimming goes rigid then rolls — body tips to one side, jaw
+        // hangs slack, tail droops (no more thrust). Distinct from the crocodile's jaw-open
+        // lateral loll: this is a full body ROLL (spine z-rotation), the real physical result of
+        // a rigid torpedo body with no more active fin control.
+        rig.setLocalRotation('spine', 0, 0, 0.9);
+        rig.setLocalRotation('head', 0.2, 0.15, 0);
+        if (rig.hasJoint('jaw')) rig.setLocalRotation('jaw', -0.3, 0, 0);
+        if (rig.hasJoint('tail0')) rig.setLocalRotation('tail0', 0, 0.4, 0);
+        return;
     }
   }
 
@@ -1949,6 +2050,9 @@ export class Game {
         return;
       case 'croc-lunge':
         this.audio.playCrocodileHurt();
+        return;
+      case 'shark-bite':
+        this.audio.playSharkHurt();
         return;
     }
     if (entry.combatant === this.wraith.combatant) {
@@ -2049,6 +2153,12 @@ export class Game {
         this.dashDirection.copy(this.facingForward());
         this.audio.playCrocodileLungeActivate();
         this.meleeSweep(CROC_LUNGE_DAMAGE, CROC_LUNGE_RADIUS, CROC_LUNGE_REACH, CROC_LUNGE_KNOCKBACK);
+        break;
+      case 'shark-bite':
+        this.dashEndTime = time + SHARK_BITE_SECONDS;
+        this.dashDirection.copy(this.facingForward());
+        this.audio.playSharkBiteActivate();
+        this.meleeSweep(SHARK_BITE_DAMAGE, SHARK_BITE_RADIUS, SHARK_BITE_REACH, SHARK_BITE_KNOCKBACK);
         break;
     }
   }

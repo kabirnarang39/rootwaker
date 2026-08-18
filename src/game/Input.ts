@@ -13,6 +13,7 @@ export type PlayerAction =
   | 'ability6'
   | 'ability7'
   | 'ability8'
+  | 'ability9'
   | 'multiplayer'
   | 'leaderboard'
   | 'chatFocus'
@@ -143,6 +144,7 @@ export class Input {
     else if (e.code === 'Digit6') this.emitAction('ability6');
     else if (e.code === 'Digit7') this.emitAction('ability7');
     else if (e.code === 'Digit8') this.emitAction('ability8');
+    else if (e.code === 'Digit9') this.emitAction('ability9');
     else if (e.code === 'KeyM') this.emitAction('multiplayer');
     else if (e.code === 'KeyO') this.emitAction('leaderboard');
     else if (e.code === 'KeyT') {

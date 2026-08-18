@@ -1,4 +1,4 @@
-export type StoryBeatId = 'wraith' | 'boar' | 'bear' | 'owl' | 'viper' | 'lion' | 'crocodile' | 'king' | 'coronation';
+export type StoryBeatId = 'wraith' | 'boar' | 'bear' | 'owl' | 'viper' | 'lion' | 'crocodile' | 'shark' | 'king' | 'coronation';
 
 export interface StoryBeat {
   eyebrow: string;
@@ -37,6 +37,10 @@ export const STORY_BEATS: Record<StoryBeatId, StoryBeat> = {
   crocodile: {
     eyebrow: 'What the Water Hides',
     text: 'The river never warned you. It never does — the crocodile has been still since before you arrived.',
+  },
+  shark: {
+    eyebrow: 'Beyond the Shallows',
+    text: 'Out past the reef, something old and silent turns toward you — the open sea keeps its own hunters.',
   },
   king: {
     eyebrow: 'The Crown Itself',

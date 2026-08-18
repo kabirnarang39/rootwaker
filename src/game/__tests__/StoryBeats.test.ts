@@ -28,6 +28,11 @@ describe('StoryBeatTracker', () => {
     expect(tracker.consume('crocodile')).toEqual(STORY_BEATS.crocodile);
   });
 
+  it('returns the real shark beat content the first time it is consumed', () => {
+    const tracker = new StoryBeatTracker();
+    expect(tracker.consume('shark')).toEqual(STORY_BEATS.shark);
+  });
+
   it('every real story beat id has non-empty eyebrow and text content', () => {
     for (const id of Object.keys(STORY_BEATS) as Array<keyof typeof STORY_BEATS>) {
       expect(STORY_BEATS[id].eyebrow.length).toBeGreaterThan(0);

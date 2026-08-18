@@ -13,6 +13,7 @@ import { createGroveSquirrel, type GroveSquirrel } from '../entities/createGrove
 import { createCrocodile, type Crocodile } from '../entities/createCrocodile';
 import { createDuskFinchFlock, type DuskFinchFlock } from '../entities/createDuskFinchFlock';
 import { createFishSchool } from '../entities/createFishSchool';
+import { createShark, type Shark } from '../entities/createShark';
 import { TreeObstacleGrid, type TreeObstacle } from './TreeObstacleGrid';
 
 export interface ClimbableWall {
@@ -55,6 +56,7 @@ export interface JungleLevel {
   // just against a different body. Previously the sea was deliberately visual-only (walking
   // straight through it) — the user directly asked for real swim gating, closing that gap.
   livingSea: WaterBody[];
+  sharks: Shark[];
   chapterBounds: THREE.Box3;
   hares: GroveHare[];
   boars: TuskBoar[];
@@ -1201,6 +1203,13 @@ export function createJungleLevel(): JungleLevel {
   ];
   group.add(...fishSchools.map((school) => school.group));
 
+  // One real shark for the living sea — the first fightable species that never touches the
+  // ground at all. Placed offshore of the east coastline (same real footprint the east sea
+  // slab/fish school already use) at a real mid-water swimming depth, not right at the surface.
+  const sharks = [createShark()];
+  sharks[0].group.position.set(half + OFFSHORE_MARGIN, SEA_SURFACE_Y - 2, 0);
+  group.add(...sharks.map((shark) => shark.group));
+
   const chapterBounds = new THREE.Box3(new THREE.Vector3(-half, -5, -half), new THREE.Vector3(half, 40, half));
 
   return {
@@ -1209,6 +1218,7 @@ export function createJungleLevel(): JungleLevel {
     climbableWall: wall,
     water,
     livingSea,
+    sharks,
     chapterBounds,
     hares,
     boars,
