@@ -52,8 +52,30 @@ export class TouchControls {
           background: linear-gradient(180deg, rgba(255,177,94,0.28), rgba(20,13,9,0.7));
           border-color: rgba(255,177,94,0.55);
         }
+        /* Secondary menu row (view cycle / duel / leaderboard) — real actions a touch player
+           otherwise has no way to reach at all (KeyC/KeyM/KeyO only), but low-frequency enough
+           to earn a small top-right row rather than the core cluster's large thumb-reach buttons.
+           Sits below the desktop CONTROLS legend, out of its way — the legend dismisses itself
+           on first real move input either way (see Game.ts's dismissLegendOnce). */
+        .rw-touch-menu {
+          position: fixed; top: 130px; right: 16px; z-index: 12;
+          display: flex; flex-direction: column; gap: 6px; pointer-events: none;
+        }
+        .rw-touch-menu-btn {
+          pointer-events: auto; touch-action: none; border-radius: 4px; border: 1px solid rgba(238,242,230,0.2);
+          background: linear-gradient(180deg, rgba(20,13,9,0.55), rgba(7,10,8,0.7));
+          color: var(--parchment); font-family: var(--body-face); font-size: 10px;
+          text-transform: uppercase; letter-spacing: 0.06em; padding: 6px 10px;
+          user-select: none; -webkit-user-select: none;
+        }
+        .rw-touch-menu-btn:active { border-color: rgba(255,177,94,0.5); }
       </style>
       <div class="rw-stick-base"><div class="rw-stick-knob"></div></div>
+      <div class="rw-touch-menu">
+        <button type="button" class="rw-touch-menu-btn rw-touch-view">View</button>
+        <button type="button" class="rw-touch-menu-btn rw-touch-duel">Duel</button>
+        <button type="button" class="rw-touch-menu-btn rw-touch-ranks">Ranks</button>
+      </div>
       <div class="rw-touch-buttons">
         <button type="button" class="rw-touch-btn rw-touch-dodge">Dodge</button>
         <button type="button" class="rw-touch-btn rw-touch-jump">Jump</button>
@@ -67,6 +89,7 @@ export class TouchControls {
     this.stickKnob = this.root.querySelector('.rw-stick-knob')!;
     this.wireStick();
     this.wireButtons();
+    this.wireMenu();
   }
 
   private wireStick(): void {
@@ -140,6 +163,24 @@ export class TouchControls {
     block.addEventListener('pointerup', releaseBlock);
     block.addEventListener('pointercancel', releaseBlock);
     block.addEventListener('pointerleave', releaseBlock);
+  }
+
+  private wireMenu(): void {
+    const view = this.root.querySelector('.rw-touch-view')!;
+    const duel = this.root.querySelector('.rw-touch-duel')!;
+    const ranks = this.root.querySelector('.rw-touch-ranks')!;
+    view.addEventListener('pointerdown', (e: Event) => {
+      e.preventDefault();
+      this.input.pressAction('cycleView');
+    });
+    duel.addEventListener('pointerdown', (e: Event) => {
+      e.preventDefault();
+      this.input.pressAction('multiplayer');
+    });
+    ranks.addEventListener('pointerdown', (e: Event) => {
+      e.preventDefault();
+      this.input.pressAction('leaderboard');
+    });
   }
 
   dispose(): void {
