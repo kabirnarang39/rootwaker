@@ -29,7 +29,7 @@ export const ABILITIES: Record<AbilityId, Ability> = {
   'boar-charge': {
     id: 'boar-charge',
     name: "Boar's Charge",
-    description: 'A low, driving charge-dash, learned from the tusk-boar itself.',
+    description: 'A low, driving charge-dash with a real tusk toss at impact, learned from the tusk-boar itself.',
     cooldownSeconds: 4,
     key: '2',
   },
