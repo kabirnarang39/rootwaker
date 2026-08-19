@@ -4,6 +4,7 @@ import { SKINS, type FoxSkin } from './skins';
 import { Rig } from './rig/Rig';
 import { blendClips } from './rig/Clip';
 import { walkClip, idleClip } from './foxClips';
+import { applyClimbPose } from './climbPose';
 import type { PlayableCharacter } from './PlayableCharacter';
 
 export type Fox = PlayableCharacter;
@@ -192,7 +193,7 @@ export function createFox(skin: FoxSkin = SKINS[0]): Fox {
   const glowMaterials = [glowShellMat, glowCoreMat];
   let walkTime = 0;
 
-  function update(time: number, delta: number, moveSpeed: number, blocking = false, hurt = false) {
+  function update(time: number, delta: number, moveSpeed: number, blocking = false, hurt = false, climbing = false) {
     glowMaterials.forEach((m) => {
       (m.uniforms.uTime.value as number) = time;
     });
@@ -213,6 +214,7 @@ export function createFox(skin: FoxSkin = SKINS[0]): Fox {
       rig.setLocalRotation('spine', HURT_SPINE_RECOIL, 0, 0);
       rig.setLocalRotation('head', HURT_HEAD_RECOIL, 0, 0);
     }
+    if (climbing) applyClimbPose(rig, time);
   }
 
   function revealCrown() {

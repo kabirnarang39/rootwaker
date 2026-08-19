@@ -3,6 +3,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { DuelSession, type DuelOutcome } from '../DuelSession';
 import type { P2PChallengeLink, PeerRole } from '../P2PChallengeLink';
 import { CLAW_SWIPE } from '../../game/Combat';
+import { scaleMoveForSpecies } from '../../game/SpeciesCombatProfile';
 
 const CLAW_SWIPE_DAMAGE = CLAW_SWIPE.damage;
 
@@ -164,6 +165,19 @@ describe('DuelSession', () => {
     const thirdHitDamage = hpAfterHit();
     expect(secondHitDamage).toBeGreaterThan(firstHitDamage);
     expect(thirdHitDamage).toBeGreaterThan(secondHitDamage);
+  });
+
+  it('as host: a real per-species combo — a bear hits harder than a fox on the exact same move, same as single-player', () => {
+    const { link } = fakeLink('host');
+    const duel = new DuelSession(link, bear, fox); // bear is host/attacker this time
+    const h = duel as unknown as { host: FakeFighter; guest: FakeFighter };
+    h.host.controller.body.position.set(0, 0, 0);
+    h.guest.controller.body.position.set(0, 0, 0.6);
+    const hpBefore = h.guest.combatant.hp;
+    duel.update(1 / 60, { x: 0, z: 0, jump: false }, true, false);
+    const bearDamage = hpBefore - h.guest.combatant.hp;
+    expect(bearDamage).toBe(scaleMoveForSpecies(CLAW_SWIPE, 'bear').damage);
+    expect(bearDamage).toBeGreaterThan(CLAW_SWIPE_DAMAGE);
   });
 
   it('as host: a real dodge grants i-frames — a hit that lands during the defender\'s invulnerability window deals zero damage', () => {

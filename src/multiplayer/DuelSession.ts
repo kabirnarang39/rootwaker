@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { PlayerController, type MoveInput } from '../game/PlayerController';
 import { computeFacingAngle } from '../game/FoxFacing';
 import { resolveMeleeHit, applyDamage, isDefeated, COMBO_MOVES, COMBO_WINDOW_SECONDS, COMBO_KNOCKBACK, type Combatant } from '../game/Combat';
+import { scaleMoveForSpecies, scaleKnockbackForSpecies } from '../game/SpeciesCombatProfile';
 import { createPlayableCharacter } from '../scene/createPlayableCharacter';
 import type { PlayableCharacter, SpeciesId } from '../scene/PlayableCharacter';
 import type { P2PChallengeLink, PeerRole } from './P2PChallengeLink';
@@ -31,6 +32,7 @@ export interface DuelOutcome {
 }
 
 interface DuelFighter {
+  species: SpeciesId; // real per-species combo damage/recovery/knockback — see SpeciesCombatProfile.ts
   character: PlayableCharacter;
   controller: PlayerController;
   combatant: Combatant;
@@ -103,6 +105,7 @@ function makeFighter(info: DuelCombatantInfo, spawnX: number, spawnZ: number): D
   };
   character.group.position.copy(controller.body.position);
   return {
+    species: info.species,
     character,
     controller,
     combatant,
@@ -276,12 +279,14 @@ export class DuelSession {
   private resolveAttack(attacker: DuelFighter, defender: DuelFighter, pressed: boolean): void {
     if (!pressed) return;
     if (this.time - attacker.lastComboAttackTime > COMBO_WINDOW_SECONDS) attacker.comboStage = 0;
-    const move = COMBO_MOVES[attacker.comboStage];
+    // Real per-species combat identity, same as single-player's tryAttack — see
+    // SpeciesCombatProfile.ts, so the two never silently drift apart.
+    const move = scaleMoveForSpecies(COMBO_MOVES[attacker.comboStage], attacker.species);
     if (this.time - attacker.lastAttackTime < move.recoverySeconds) return;
 
     attacker.lastAttackTime = this.time;
     attacker.lastComboAttackTime = this.time;
-    const knockback = COMBO_KNOCKBACK[attacker.comboStage];
+    const knockback = scaleKnockbackForSpecies(COMBO_KNOCKBACK[attacker.comboStage], attacker.species);
     attacker.comboStage = (attacker.comboStage + 1) % COMBO_MOVES.length;
 
     if (this.time < defender.dodgeInvulnerableUntil) return; // real dodge-through, no hit at all

@@ -222,6 +222,36 @@ export class AudioFX {
     noise.start();
   }
 
+  /** A real climbing scrabble — claws/paws scraping stone, not footstepRustle's soft leaf/grass
+   * texture. Higher-passed and grittier: a real bandpass sweep from low to high (a scrape has
+   * real pitch motion, footstepRustle's is static) plus a short high-passed grain layer for the
+   * grit of stone-on-claw contact. */
+  playClimbScrabble(): void {
+    if (!this.ctx) return;
+    const ctx = this.ctx;
+    const bufferSize = ctx.sampleRate * 0.12;
+    const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < bufferSize; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / bufferSize);
+    const noise = ctx.createBufferSource();
+    noise.buffer = buffer;
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'bandpass';
+    filter.frequency.setValueAtTime(2200, ctx.currentTime);
+    filter.frequency.linearRampToValueAtTime(3400, ctx.currentTime + 0.1); // real scrape pitch rises as claws catch and slip
+    filter.Q.value = 1.4;
+    const grit = ctx.createBiquadFilter();
+    grit.type = 'highpass';
+    grit.frequency.value = 4000;
+    const gain = ctx.createGain();
+    gain.gain.value = 0.045;
+    noise.connect(filter);
+    filter.connect(grit);
+    grit.connect(gain);
+    gain.connect(ctx.destination);
+    noise.start();
+  }
+
   playWindTelegraph(): void {
     this.tone(600, 0.9, 'sine', 0.03);
   }

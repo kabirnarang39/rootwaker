@@ -26,6 +26,7 @@ import { StoryBeatTracker, type StoryBeatId } from './StoryBeats';
 import type { GroundSlamState } from './GroundSlam';
 import type { GroveHare } from '../entities/groveHare';
 import { resolveMeleeHit, applyDamage, isDefeated, COMBO_MOVES, COMBO_WINDOW_SECONDS, COMBO_KNOCKBACK, type Combatant } from './Combat';
+import { scaleMoveForSpecies, scaleKnockbackForSpecies } from './SpeciesCombatProfile';
 import { Input, type PlayerAction } from './Input';
 import { isInsideWaterBody, type WaterBody } from './WaterBody';
 import { computeApproachSpeed, checkPounceRange } from './Stalking';
@@ -67,6 +68,8 @@ const VIEW_MODE_NAMES: Record<ViewMode, string> = {
   hawkEye: 'Hawk Eye',
   foxEye: 'Fox Eyes',
 };
+const CLIMB_SCRABBLE_INTERVAL = 0.35; // seconds between real climbing-effort sound events
+const FOOTSTEP_INTERVAL = 0.32; // seconds between real footstep sound events, grounded and moving
 const BOAR_HIT_DAMAGE = 14; // bumped with the boar's real-size scale-up in tuskBoar.ts
 const BEAR_HIT_DAMAGE = 16; // bumped with the bear's real-size scale-up in createGroveBear.ts
 const PLAYER_COLLISION_RADIUS = 0.35;
@@ -458,6 +461,10 @@ export class Game {
   // Real block (hold KeyH) — computed once per frame in animate(), consumed later the same
   // frame by hurtPlayer() when an enemy attack actually resolves.
   private blocking = false;
+  // Real climbing/movement sound cadence — periodic, not per-frame (a real scrape/rustle every
+  // frame would just be a droning tone, not distinct events).
+  private lastClimbScrabbleTime = -Infinity;
+  private lastFootstepTime = -Infinity;
 
   // Base terrain heightAt() has no notion of the mountain's elevated ledges, so a player
   // topping out a climb segment would otherwise free-fall straight back down to jungle-floor
@@ -918,6 +925,15 @@ export class Game {
 
     if (this.playerController.mode === 'climbing') {
       this.playerController.updateClimb({ ...this.rawMoveInput, jump: false }, delta);
+      // Real climbing-effort sound, only while actually reaching/shuffling (not frozen mid-air
+      // holding no input) — periodic, same idiom as the footstep cadence below.
+      if (
+        (this.rawMoveInput.z !== 0 || this.rawMoveInput.x !== 0) &&
+        time - this.lastClimbScrabbleTime > CLIMB_SCRABBLE_INTERVAL
+      ) {
+        this.lastClimbScrabbleTime = time;
+        this.audio.playClimbScrabble();
+      }
     } else if (this.playerController.mode === 'swimming') {
       this.playerController.updateSwim(this.moveInput, delta, this.activeWater);
     } else {
@@ -1075,10 +1091,28 @@ export class Game {
     }
 
     this.fox.group.position.copy(this.playerController.body.position);
+    // Real grounded footstep sound — periodic while actually moving, same cadence idiom as the
+    // climbing scrabble above. playFootstepRustle() existed in Audio.ts but was never wired to
+    // anything; a real found gap, closed here rather than deferred.
+    if (
+      this.playerController.mode === 'grounded' &&
+      this.playerController.moveSpeed > 0.1 &&
+      time - this.lastFootstepTime > FOOTSTEP_INTERVAL
+    ) {
+      this.lastFootstepTime = time;
+      this.audio.playFootstepRustle();
+    }
     // Real visible hit-flinch, not just a screen flash — reuses the exact same staggerUntil
     // window hurtPlayer() already sets (HIT_STAGGER_SECONDS), so the pose and the movement-lock
     // clear at the same moment.
-    this.fox.update(time, delta, this.playerController.moveSpeed, this.blocking, time < this.staggerUntil);
+    this.fox.update(
+      time,
+      delta,
+      this.playerController.moveSpeed,
+      this.blocking,
+      time < this.staggerUntil,
+      this.playerController.mode === 'climbing',
+    );
     if (!this.seaAmbienceStarted) {
       const { min, max } = this.level.chapterBounds;
       const COAST_TRIGGER_MARGIN = 5; // starts once the player is within 5m of any of the island's 4 edges
@@ -2256,13 +2290,16 @@ export class Game {
     const time = this.clock.elapsedTime;
     if (time - this.lastComboAttackTime > COMBO_WINDOW_SECONDS) this.comboStage = 0;
 
-    const move = COMBO_MOVES[this.comboStage];
+    // Real per-species combat identity on the BASIC attack, not just the special ability slot —
+    // see SpeciesCombatProfile.ts. Windup stays untouched (species-uniform).
+    const move = scaleMoveForSpecies(COMBO_MOVES[this.comboStage], this.playerSpecies);
     if (time - this.lastAttackTime < move.recoverySeconds) return;
 
     this.lastAttackTime = time;
     this.lastComboAttackTime = time;
     const isFinisher = this.comboStage === COMBO_MOVES.length - 1;
-    this.meleeSweep(move.damage, 0.6, 1, COMBO_KNOCKBACK[this.comboStage], isFinisher);
+    const knockback = scaleKnockbackForSpecies(COMBO_KNOCKBACK[this.comboStage], this.playerSpecies);
+    this.meleeSweep(move.damage, 0.6, 1, knockback, isFinisher);
     if (isFinisher) this.audio.playBearSwipeActivate(); // a real distinct heavier cue on the finisher
     this.comboStage = (this.comboStage + 1) % COMBO_MOVES.length;
   }

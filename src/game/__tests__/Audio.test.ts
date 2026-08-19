@@ -17,6 +17,11 @@ describe('AudioFX hunting sounds', () => {
     const fx = new AudioFX();
     expect(() => fx.playFootstepRustle()).not.toThrow();
   });
+
+  it('playClimbScrabble does not throw before unlock()', () => {
+    const fx = new AudioFX();
+    expect(() => fx.playClimbScrabble()).not.toThrow();
+  });
 });
 
 describe('AudioFX throne-room sounds', () => {

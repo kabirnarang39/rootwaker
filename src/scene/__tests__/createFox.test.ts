@@ -72,4 +72,20 @@ describe('createFox', () => {
     foxB.update(0, 1 / 60, 0, false);
     expect(foxA.rig.getJoint('spine').rotation.x).toBeCloseTo(foxB.rig.getJoint('spine').rotation.x, 5);
   });
+
+  it('climbing=true applies a real reaching pose, not the frozen idle a zero moveSpeed would otherwise show', () => {
+    const fox = createFox();
+    fox.update(0.3, 1 / 60, 0, false, false, false);
+    const idleForepawL = fox.rig.getJoint('forepawL').rotation.x;
+    fox.update(0.3, 1 / 60, 0, false, false, true);
+    expect(fox.rig.getJoint('forepawL').rotation.x).not.toBeCloseTo(idleForepawL, 2);
+  });
+
+  it('climbing defaults to false when omitted — every pre-climb-pose call site stays byte-identical', () => {
+    const foxA = createFox();
+    foxA.update(0.3, 1 / 60, 0, false, false);
+    const foxB = createFox();
+    foxB.update(0.3, 1 / 60, 0, false, false, false);
+    expect(foxA.rig.getJoint('forepawL').rotation.x).toBeCloseTo(foxB.rig.getJoint('forepawL').rotation.x, 5);
+  });
 });

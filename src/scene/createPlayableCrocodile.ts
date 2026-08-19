@@ -5,6 +5,7 @@ import { Rig } from './rig/Rig';
 import { blendClips } from './rig/Clip';
 import { idleClip } from '../entities/crocodileClips';
 import { crocodileWalkClip } from '../entities/playableWalkClips';
+import { applyClimbPose } from './climbPose';
 import type { PlayableCharacter } from './PlayableCharacter';
 
 const TOOTH_COLOR = 0xe8e0d0;
@@ -176,7 +177,7 @@ export function createPlayableCrocodile(skin: CharacterSkin = CROCODILE_SKINS[0]
   const glowMaterials = [glowShellMat, glowCoreMat];
   let walkTime = 0;
 
-  function update(time: number, delta: number, moveSpeed: number, blocking = false, hurt = false) {
+  function update(time: number, delta: number, moveSpeed: number, blocking = false, hurt = false, climbing = false) {
     glowMaterials.forEach((m) => {
       (m.uniforms.uTime.value as number) = time;
     });
@@ -196,6 +197,7 @@ export function createPlayableCrocodile(skin: CharacterSkin = CROCODILE_SKINS[0]
       rig.setLocalRotation('head', 0, 0.3, 0);
       rig.applyPositionOffset('spine', 0, 0.04, 0);
     }
+    if (climbing) applyClimbPose(rig, time);
   }
 
   function revealCrown() {
