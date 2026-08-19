@@ -57,14 +57,22 @@ export class Input {
   private lastDragY = 0;
   private pendingYaw = 0;
   private pendingPitch = 0;
+  // Real analog joystick vector from TouchControls.ts, [-1, 1] per axis — only consulted by
+  // pollMove when no keyboard movement key is held, so a touch device and a keyboard never fight
+  // over which vector wins (see pollMove's own comment).
+  private touchMoveX = 0;
+  private touchMoveZ = 0;
 
   constructor(target: HTMLElement) {
     this.target = target;
     window.addEventListener('keydown', this.onKeyDown);
     window.addEventListener('keyup', this.onKeyUp);
-    target.addEventListener('mousedown', this.onMouseDown);
-    target.addEventListener('mousemove', this.onMouseMove);
-    target.addEventListener('mouseup', this.onMouseUp);
+    // Pointer events (not mouse-only) so a single-finger drag on the canvas orbits the camera
+    // exactly like a mouse drag does — real touch look support, not just touch-tolerant clicks.
+    target.addEventListener('pointerdown', this.onPointerDown);
+    target.addEventListener('pointermove', this.onPointerMove);
+    target.addEventListener('pointerup', this.onPointerUp);
+    target.addEventListener('pointercancel', this.onPointerUp);
   }
 
   onAction(handler: (action: PlayerAction) => void) {
@@ -85,9 +93,36 @@ export class Input {
     return this.keysDown.has(code);
   }
 
-  /** Called once per frame by the game loop to push the current move intent. */
+  /** TouchControls.ts's own hold-button (Block) reuses this SAME set a keyboard press populates,
+   * so isHeld/the rest of Game.ts never needs to know which input device is actually driving it. */
+  setHeld(code: string, held: boolean): void {
+    if (held) this.keysDown.add(code);
+    else this.keysDown.delete(code);
+  }
+
+  /** TouchControls.ts's own discrete buttons (Jump/Attack/Dodge/ability taps/hunt-prompt tap) fire
+   * through this SAME emitAction path a keyboard press uses, so Game.ts's one onAction switchboard
+   * covers both input devices with zero new dispatch logic. */
+  pressAction(action: PlayerAction): void {
+    this.emitAction(action);
+  }
+
+  /** Real analog joystick vector from TouchControls.ts, each axis already clamped to [-1, 1]. */
+  setTouchMove(x: number, z: number): void {
+    this.touchMoveX = x;
+    this.touchMoveZ = z;
+  }
+
+  /** Called once per frame by the game loop to push the current move intent. Keyboard wins
+   * outright whenever any movement key is actually held — a touch device never also has a
+   * keyboard in hand, so there's no real scenario where the two need to blend, only one where
+   * a stale non-zero touch vector must not silently override real keyboard input (or vice
+   * versa). */
   pollMove() {
-    const { x, z } = resolveMoveVector(this.keysDown);
+    const keyboard = resolveMoveVector(this.keysDown);
+    const usingKeyboard = keyboard.x !== 0 || keyboard.z !== 0;
+    const x = usingKeyboard ? keyboard.x : this.touchMoveX;
+    const z = usingKeyboard ? keyboard.z : this.touchMoveZ;
     this.moveHandlers.forEach((h) => h(x, z));
   }
 
@@ -104,14 +139,16 @@ export class Input {
     this.actionHandlers.forEach((h) => h(action));
   }
 
-  private onMouseDown = (e: MouseEvent) => {
+  private onPointerDown = (e: PointerEvent) => {
+    // button 0 covers both a real left mouse click AND a real primary-touch pointer (a touch
+    // contact reports button 0 too) — no separate touch branch needed.
     if (e.button !== 0) return;
     this.dragging = true;
     this.lastDragX = e.clientX;
     this.lastDragY = e.clientY;
   };
 
-  private onMouseMove = (e: MouseEvent) => {
+  private onPointerMove = (e: PointerEvent) => {
     if (!this.dragging) return;
     const dx = e.clientX - this.lastDragX;
     const dy = e.clientY - this.lastDragY;
@@ -121,7 +158,7 @@ export class Input {
     this.pendingPitch += dy * LOOK_SENSITIVITY;
   };
 
-  private onMouseUp = () => {
+  private onPointerUp = () => {
     this.dragging = false;
   };
 
@@ -169,8 +206,9 @@ export class Input {
   dispose() {
     window.removeEventListener('keydown', this.onKeyDown);
     window.removeEventListener('keyup', this.onKeyUp);
-    this.target.removeEventListener('mousedown', this.onMouseDown);
-    this.target.removeEventListener('mousemove', this.onMouseMove);
-    this.target.removeEventListener('mouseup', this.onMouseUp);
+    this.target.removeEventListener('pointerdown', this.onPointerDown);
+    this.target.removeEventListener('pointermove', this.onPointerMove);
+    this.target.removeEventListener('pointerup', this.onPointerUp);
+    this.target.removeEventListener('pointercancel', this.onPointerUp);
   }
 }

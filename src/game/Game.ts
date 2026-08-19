@@ -28,6 +28,7 @@ import type { GroveHare } from '../entities/groveHare';
 import { resolveMeleeHit, applyDamage, isDefeated, COMBO_MOVES, COMBO_WINDOW_SECONDS, COMBO_KNOCKBACK, type Combatant } from './Combat';
 import { scaleMoveForSpecies, scaleKnockbackForSpecies } from './SpeciesCombatProfile';
 import { Input, type PlayerAction } from './Input';
+import { TouchControls } from './TouchControls';
 import { isInsideWaterBody, type WaterBody } from './WaterBody';
 import { computeApproachSpeed, checkPounceRange } from './Stalking';
 import { HUD } from './HUD';
@@ -552,6 +553,10 @@ export class Game {
     this.composer.addPass(new OutputPass());
 
     this.input = new Input(this.renderer.domElement);
+    // Real on-screen joystick/buttons — only touch-primary devices get them mounted; a mouse+
+    // keyboard player never sees this overlay at all. Its own event listeners (and the DOM node
+    // they're attached to) keep it alive for the life of the page — no field needed to hold it.
+    if (isTouchPrimary) new TouchControls(container, this.input);
     this.input.onMove((x, z) => {
       const relative = toCameraRelative(x, z, this.cameraRig.orbitYaw);
       this.moveInput = { x: relative.x, z: relative.z, jump: this.jumpPressed };
@@ -628,7 +633,8 @@ export class Game {
       if (action === 'ability10') this.tryActivateAbility(ABILITY_SLOTS[9]);
     });
 
-    this.hud = new HUD(container);
+    this.hud = new HUD(container, isTouchPrimary);
+    this.hud.wireTouchTaps((action) => this.input.pressAction(action));
     this.hud.initMinimap({
       bounds: {
         minX: this.level.chapterBounds.min.x,

@@ -57,8 +57,8 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe('Input mouse-drag look', () => {
-  it('accumulates a look delta between mousedown-drag-mouseup and reports it once via pollLook', () => {
+describe('Input pointer-drag look (mouse AND touch — both dispatch PointerEvent)', () => {
+  it('accumulates a look delta between pointerdown-drag-pointerup and reports it once via pollLook', () => {
     const el = fakeElement();
     const input = new Input(el as unknown as HTMLElement);
     let reportedYaw = 0;
@@ -68,8 +68,8 @@ describe('Input mouse-drag look', () => {
       reportedPitch += dp;
     });
 
-    el.dispatch('mousedown', { clientX: 100, clientY: 100, button: 0 });
-    el.dispatch('mousemove', { clientX: 130, clientY: 100 }); // moved 30px right -> positive yaw delta
+    el.dispatch('pointerdown', { clientX: 100, clientY: 100, button: 0 });
+    el.dispatch('pointermove', { clientX: 130, clientY: 100 }); // moved 30px right -> positive yaw delta
     input.pollLook();
     expect(reportedYaw).toBeGreaterThan(0);
   });
@@ -88,7 +88,7 @@ describe('Input mouse-drag look', () => {
     expect(lastYaw).toBe(0);
   });
 
-  it('mouseup stops further drag accumulation', () => {
+  it('pointerup stops further drag accumulation', () => {
     const el = fakeElement();
     const input = new Input(el as unknown as HTMLElement);
     let totalYaw = 0;
@@ -96,12 +96,12 @@ describe('Input mouse-drag look', () => {
       totalYaw += dy;
     });
 
-    el.dispatch('mousedown', { clientX: 100, clientY: 100, button: 0 });
-    el.dispatch('mousemove', { clientX: 150, clientY: 100 });
+    el.dispatch('pointerdown', { clientX: 100, clientY: 100, button: 0 });
+    el.dispatch('pointermove', { clientX: 150, clientY: 100 });
     input.pollLook();
     const afterFirstDrag = totalYaw;
-    el.dispatch('mouseup', {});
-    el.dispatch('mousemove', { clientX: 200, clientY: 100 }); // should be ignored, no active drag
+    el.dispatch('pointerup', {});
+    el.dispatch('pointermove', { clientX: 200, clientY: 100 }); // should be ignored, no active drag
     input.pollLook();
     expect(totalYaw).toBe(afterFirstDrag);
   });
@@ -256,5 +256,50 @@ describe('Input mouse-drag look', () => {
     expect(input.isHeld('KeyH')).toBe(true);
     window.dispatchEvent(new KeyboardEvent('keyup', { code: 'KeyH' }));
     expect(input.isHeld('KeyH')).toBe(false);
+  });
+});
+
+describe('Input touch API (TouchControls.ts drives these directly, same effect as a keyboard)', () => {
+  it('setHeld writes into the same isHeld state a real keydown/keyup would — a touch Block button behaves identically to holding KeyH', () => {
+    const el = fakeElement();
+    const input = new Input(el as unknown as HTMLElement);
+    expect(input.isHeld('KeyH')).toBe(false);
+    input.setHeld('KeyH', true);
+    expect(input.isHeld('KeyH')).toBe(true);
+    input.setHeld('KeyH', false);
+    expect(input.isHeld('KeyH')).toBe(false);
+  });
+
+  it('pressAction fires the same onAction handlers a real keypress would', () => {
+    const el = fakeElement();
+    const input = new Input(el as unknown as HTMLElement);
+    let fired: string | null = null;
+    input.onAction((action) => {
+      fired = action;
+    });
+    input.pressAction('dodge');
+    expect(fired).toBe('dodge');
+  });
+
+  it('pollMove uses the touch joystick vector only when no keyboard movement key is held', () => {
+    const el = fakeElement();
+    const input = new Input(el as unknown as HTMLElement);
+    let reportedX = 0;
+    let reportedZ = 0;
+    input.onMove((x, z) => {
+      reportedX = x;
+      reportedZ = z;
+    });
+
+    input.setTouchMove(0.5, -0.5);
+    input.pollMove();
+    expect(reportedX).toBe(0.5);
+    expect(reportedZ).toBe(-0.5);
+
+    // A real keyboard press must win outright over a stale touch vector, not blend with it.
+    window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyW' }));
+    input.pollMove();
+    expect(reportedX).toBe(0);
+    expect(reportedZ).toBe(1);
   });
 });

@@ -3,6 +3,7 @@ import type { DuelChat, ChatMessage } from '../multiplayer/DuelChat';
 import type { DuelVoice } from '../multiplayer/DuelVoice';
 import { SPECIES_LABELS } from '../scene/createPlayableCharacter';
 import { ABILITIES, ABILITY_SLOTS, type Ability, type AbilityId } from './AbilityKit';
+import type { PlayerAction } from './Input';
 
 export interface PowerSlotState {
   id: AbilityId;
@@ -80,8 +81,12 @@ export class HUD {
   // so redrawing it from scratch every frame (like the rest of the minimap) would be pure waste.
   private minimapTerrainBackdrop: HTMLCanvasElement | null = null;
 
-  constructor(container: HTMLElement) {
+  constructor(container: HTMLElement, isTouchPrimary = false) {
     this.root = document.createElement('div');
+    // Real layout accommodation, not cosmetic: TouchControls.ts mounts a joystick + button
+    // cluster over the same bottom-left/bottom-right corners the power bar and prompts already
+    // occupy on desktop — see the .rw-touch power-bar rule below.
+    if (isTouchPrimary) this.root.classList.add('rw-touch');
     this.root.innerHTML = `
       <div class="rw-health-bar">
         <span class="rw-label">vitality</span>
@@ -824,6 +829,9 @@ export class HUD {
         max-width: calc(100vw - 40px);
         font-family: var(--body-face); color: var(--parchment);
       }
+      /* TouchControls.ts mounts a real joystick over this exact bottom-left corner on
+         touch-primary devices — shift the bar up clear of it rather than let the two overlap. */
+      .rw-touch .rw-power-bar { bottom: 150px; }
       .rw-power-slot {
         display: flex; flex-direction: column; align-items: center; gap: 3px;
         padding: 6px 10px 5px; min-width: 54px;
@@ -832,6 +840,7 @@ export class HUD {
         clip-path: polygon(10% 0, 90% 0, 100% 100%, 0% 100%);
         opacity: 0.32;
         transition: opacity 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
+        cursor: pointer;
       }
       .rw-power-slot.rw-power-unlocked {
         opacity: 0.55;
@@ -1211,6 +1220,25 @@ export class HUD {
       el.classList.toggle('rw-power-unlocked', unlocked);
       el.classList.toggle('rw-power-ready', unlocked && ready);
     }
+  }
+
+  /** Real touch parity: the power-bar slots and hunt prompt already exist as the desktop UI's own
+   * visual reference for "which key does this" — rather than build a second, redundant set of
+   * touch-only ability buttons, this makes the SAME elements real tap targets, firing through the
+   * exact PlayerAction union every keyboard shortcut already emits (so Game.ts's one onAction
+   * switchboard, and every gating check inside tryActivateAbility/tryPounce, covers touch for
+   * free). Climb has no discrete action to wire — see Game.ts's own rawMoveInput.z>0 gate, already
+   * satisfied by TouchControls.ts's joystick with zero extra code. */
+  wireTouchTaps(onAction: (action: PlayerAction) => void): void {
+    ABILITY_SLOTS.forEach((id, index) => {
+      const el = this.powerSlotEls.get(id);
+      if (!el) return;
+      el.style.pointerEvents = 'auto';
+      el.addEventListener('pointerdown', () => onAction(`ability${index + 1}` as PlayerAction));
+    });
+    this.huntPromptEl.style.pointerEvents = 'auto';
+    this.huntPromptEl.style.cursor = 'pointer';
+    this.huntPromptEl.addEventListener('pointerdown', () => onAction('pounce'));
   }
 
   hideBossBar(): void {
