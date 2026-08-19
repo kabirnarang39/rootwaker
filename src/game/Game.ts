@@ -2235,6 +2235,9 @@ export class Game {
     // Same real block-vs-offense fix as tryAttack() — a held guard shouldn't be free to combine
     // with using an ability too, same risk/reward reasoning.
     if (this.blocking) return;
+    // Same real hyper-armor fix as tryAttack() — no ability should fire while the player is still
+    // visibly reeling from a landed hit.
+    if (this.clock.elapsedTime < this.staggerUntil) return;
     const time = this.clock.elapsedTime;
     if (!this.abilityKit.activate(id, time)) return;
 
@@ -2320,6 +2323,13 @@ export class Game {
     // or defense the way every other species' real risk/reward tuning in this game assumes. A
     // real block is a stance, not a free action alongside attacking.
     if (this.blocking) return;
+    // A third real combination-testing find, same pass: staggerUntil already locks the player's
+    // own MOVEMENT (see movementLocked above) and drives the real hurt-flinch pose, but never
+    // stopped the player's own attack — real hyper-armor, landing a hit on the player carried no
+    // real tactical payoff for the enemy AI since the player could immediately swing right back
+    // mid-flinch. tryDodge() deliberately stays ungated here — rolling out of hitstun to escape a
+    // combo is a real, desirable defensive option in most fighting games, not an exploit.
+    if (this.clock.elapsedTime < this.staggerUntil) return;
     const time = this.clock.elapsedTime;
     if (time - this.lastComboAttackTime > COMBO_WINDOW_SECONDS) this.comboStage = 0;
 
