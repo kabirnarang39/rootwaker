@@ -21,6 +21,44 @@ export interface GameSaveState {
 
 const SAVE_STORAGE_KEY = 'rootwaker.save.v1';
 
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value);
+}
+
+/** Real combination-testing find: decryptJSON's AES-GCM auth tag catches TAMPERED ciphertext, but
+ * a successfully-decrypted payload with the wrong SHAPE sailed straight through with zero
+ * validation — this project's own GameSaveState has changed shape multiple times already this
+ * session (coronationSeconds was added after unlockedAbilities existed), so an older save missing
+ * a now-required field is a completely real scenario, not a hypothetical. Two concrete crashes
+ * this closes: `for (const id of resume.unlockedAbilities)` in Game.ts throws immediately on a
+ * save where that field is missing/undefined ("undefined is not iterable"); and
+ * `body.position.set(resume.checkpointX, ...)` with a NaN/undefined coordinate would silently
+ * corrupt the player's position for the rest of the session with no error at all, poisoning every
+ * downstream physics/collision/groundHeightAt call. Rejecting the whole save (not trying to patch
+ * individual fields) is deliberate — this project's `load()` already treats "no usable save" as a
+ * safe, well-tested fallback (main.ts falls through to character-select), so folding "malformed"
+ * into that exact same path is the smallest real fix, not a new code path to get wrong. */
+function isValidSaveState(value: unknown): value is GameSaveState {
+  if (!value || typeof value !== 'object') return false;
+  const v = value as Record<string, unknown>;
+  return (
+    typeof v.species === 'string' &&
+    typeof v.skinId === 'string' &&
+    isFiniteNumber(v.checkpointX) &&
+    isFiniteNumber(v.checkpointY) &&
+    isFiniteNumber(v.checkpointZ) &&
+    isFiniteNumber(v.hp) &&
+    isFiniteNumber(v.maxHp) &&
+    v.maxHp > 0 &&
+    Array.isArray(v.unlockedAbilities) &&
+    v.unlockedAbilities.every((id) => typeof id === 'string') &&
+    isFiniteNumber(v.animalsDefeated) &&
+    typeof v.kingDefeated === 'boolean' &&
+    (v.coronationSeconds === null || isFiniteNumber(v.coronationSeconds)) &&
+    isFiniteNumber(v.savedAt)
+  );
+}
+
 /** Encrypted, local-only save/resume — real AES-GCM via the shared multiplayer/crypto.ts core
  * (a fresh random IV every save, AES-GCM must never reuse an IV under the same key). Same honesty
  * standard this project already applies to the "local, not global" leaderboard: this protects the
@@ -32,12 +70,14 @@ export class SaveGame {
     safeSetItem(SAVE_STORAGE_KEY, payload);
   }
 
-  /** Returns null on no save, a corrupt/tampered save, or storage being unavailable — never
-   * throws, matching every other local store in this project. */
+  /** Returns null on no save, a corrupt/tampered save, a save with the wrong shape (an older or
+   * hand-edited save), or storage being unavailable — never throws, matching every other local
+   * store in this project. */
   async load(): Promise<GameSaveState | null> {
     const raw = safeGetItem(SAVE_STORAGE_KEY);
     if (!raw) return null;
-    return decryptJSON<GameSaveState>(raw);
+    const state = await decryptJSON<GameSaveState>(raw);
+    return isValidSaveState(state) ? state : null;
   }
 
   clear(): void {

@@ -121,6 +121,40 @@ describe('SaveGame', () => {
     await expect(save.load()).resolves.toBeNull();
   });
 
+  it('a real save missing a newer field (an older schema version) is rejected — load() returns null rather than handing malformed state to the resume path (regression: Game.ts does `for (const id of resume.unlockedAbilities)`, which throws on undefined, and `body.position.set(resume.checkpointX, ...)`, which would silently poison physics with NaN)', async () => {
+    const save = new SaveGame();
+    // Simulate an older save missing unlockedAbilities entirely — a real, plausible scenario
+    // given this project's own GameSaveState has grown fields over time.
+    const { unlockedAbilities: _unused, ...withoutAbilities } = sampleState;
+    await save.save(withoutAbilities as GameSaveState);
+    expect(await save.load()).toBeNull();
+  });
+
+  it('a save with a NaN/non-finite checkpoint coordinate is rejected — never lets a corrupted position reach body.position.set()', async () => {
+    const save = new SaveGame();
+    await save.save({ ...sampleState, checkpointX: NaN });
+    expect(await save.load()).toBeNull();
+  });
+
+  it('a save with a non-array unlockedAbilities is rejected', async () => {
+    const save = new SaveGame();
+    await save.save({ ...sampleState, unlockedAbilities: 'bear-swipe' } as unknown as GameSaveState);
+    expect(await save.load()).toBeNull();
+  });
+
+  it('a save with maxHp <= 0 is rejected — a real save can never have zero max health', async () => {
+    const save = new SaveGame();
+    await save.save({ ...sampleState, maxHp: 0 });
+    expect(await save.load()).toBeNull();
+  });
+
+  it('a real valid save with coronationSeconds actually set (not null) still round-trips correctly', async () => {
+    const save = new SaveGame();
+    const withCoronation: GameSaveState = { ...sampleState, kingDefeated: true, coronationSeconds: 342.5 };
+    await save.save(withCoronation);
+    expect(await save.load()).toEqual(withCoronation);
+  });
+
   it('clear() does not throw when localStorage.removeItem throws', async () => {
     vi.stubGlobal('localStorage', {
       getItem: () => null,
