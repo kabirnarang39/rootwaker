@@ -91,11 +91,29 @@ function snapshot(fighter: DuelFighter): FighterSnapshot {
   };
 }
 
+// Real combination-testing find, same substance as clampAxis above but a gap that fix never
+// covered: 'state' messages (the HOST's broadcast, applied on the GUEST side) went straight
+// into position.set()/hp with zero validation — a malicious or buggy remote host could send
+// NaN/Infinity and silently corrupt the guest's own rendering of both fighters (a NaN position
+// breaks THREE's matrix/frustum math for that mesh; NaN hp makes isDefeated() — `hp <= 0` — always
+// false, since every comparison against NaN is false, so a fighter could visually read as
+// unkillable on the guest's own screen). Real impact is cosmetic-only here, not a competitive
+// exploit — winner is decided by the host's separate, explicit `winner` field below, never
+// derived from hp locally — but the exact same "never trust a raw peer message" standard this
+// file already applies to input should apply here too, not stop halfway.
+function finiteOr(value: unknown, fallback: number): number {
+  return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
+}
+
 function applySnapshot(fighter: DuelFighter, snap: FighterSnapshot): void {
-  fighter.controller.body.position.set(snap.x, snap.y, snap.z);
-  fighter.character.group.position.set(snap.x, snap.y, snap.z);
-  fighter.character.group.rotation.y = snap.facingAngle;
-  fighter.combatant.hp = snap.hp;
+  const p = fighter.controller.body.position;
+  const x = finiteOr(snap.x, p.x);
+  const y = finiteOr(snap.y, p.y);
+  const z = finiteOr(snap.z, p.z);
+  fighter.controller.body.position.set(x, y, z);
+  fighter.character.group.position.set(x, y, z);
+  fighter.character.group.rotation.y = finiteOr(snap.facingAngle, fighter.facingAngle);
+  fighter.combatant.hp = finiteOr(snap.hp, fighter.combatant.hp);
 }
 
 function makeFighter(info: DuelCombatantInfo, spawnX: number, spawnZ: number): DuelFighter {
@@ -189,7 +207,9 @@ export class DuelSession {
     } else if (msg.type === 'state' && this.role === 'guest') {
       applySnapshot(this.host, msg.host);
       applySnapshot(this.guest, msg.guest);
-      if (msg.winner && !this.winner) this.declareWinner(msg.winner);
+      // Same real-network-data standard: winner must actually be a real PeerRole, not whatever a
+      // malformed/malicious message happens to put there.
+      if ((msg.winner === 'host' || msg.winner === 'guest') && !this.winner) this.declareWinner(msg.winner);
     }
   }
 

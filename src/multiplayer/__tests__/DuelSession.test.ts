@@ -99,6 +99,47 @@ describe('DuelSession', () => {
     expect(duel.guestHp).toBe(60);
   });
 
+  it('as guest: a real malicious/malformed state broadcast (NaN/Infinity position or hp) never corrupts local state — falls back to the fighter\'s own last-known-good values instead', () => {
+    const { link, receive } = fakeLink('guest');
+    const duel = new DuelSession(link, fox, bear);
+    const h = duel as unknown as { host: FakeFighter; guest: FakeFighter };
+    // Establish real known-good state first.
+    receive({
+      type: 'state',
+      host: { x: 1, y: 0, z: -2, facingAngle: 0.5, hp: 80 },
+      guest: { x: -1, y: 0, z: 2, facingAngle: 1.2, hp: 60 },
+      winner: null,
+    });
+    // A malicious/broken peer sends NaN/Infinity for every numeric field.
+    receive({
+      type: 'state',
+      host: { x: NaN, y: Infinity, z: -Infinity, facingAngle: NaN, hp: NaN },
+      guest: { x: NaN, y: NaN, z: NaN, facingAngle: NaN, hp: NaN },
+      winner: null,
+    });
+    expect(h.host.controller.body.position.x).toBe(1);
+    expect(h.host.combatant.hp).toBe(80);
+    expect(h.guest.controller.body.position.x).toBe(-1);
+    expect(h.guest.combatant.hp).toBe(60);
+    expect(Number.isFinite(h.host.controller.body.position.y)).toBe(true);
+  });
+
+  it('as guest: a real malformed winner field (not "host"/"guest") is ignored rather than declaring a bogus outcome', () => {
+    const { link, receive } = fakeLink('guest');
+    const duel = new DuelSession(link, fox, bear);
+    let outcome: DuelOutcome | null = null;
+    duel.onOutcome((o) => {
+      outcome = o;
+    });
+    receive({
+      type: 'state',
+      host: { x: 0, y: 0, z: 0, facingAngle: 0, hp: 100 },
+      guest: { x: 0, y: 0, z: 0, facingAngle: 0, hp: 100 },
+      winner: 'not-a-real-role',
+    });
+    expect(outcome).toBeNull();
+  });
+
   it('as host: a real melee hit at close range damages the defender and knocks it back', () => {
     const { link } = fakeLink('host');
     const duel = new DuelSession(link, fox, bear);
