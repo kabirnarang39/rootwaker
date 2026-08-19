@@ -8,12 +8,20 @@ export interface PlayableCharacter {
   group: THREE.Group;
   rig: Rig;
   crownGroup: THREE.Group;
-  // `blocking`/`hurt`/`climbing` all default to false for every existing caller — real pose
-  // overlays on top of the normal idle/walk blend (see Game.ts's Block mechanic,
-  // HIT_STAGGER_SECONDS, and climbPose.ts), none a separate authored clip. `hurt` wins over
-  // `blocking` when both are true (a real flinch always overrides a held brace visually), and
-  // `climbing` is applied last of all — every species applies its overlays in that fixed order.
-  update(time: number, delta: number, moveSpeed: number, blocking?: boolean, hurt?: boolean, climbing?: boolean): void;
+  // `blocking`/`hurt`/`climbing`/`attacking` all default to false for every existing caller —
+  // real pose overlays on top of the normal idle/walk blend (see Game.ts's Block mechanic,
+  // HIT_STAGGER_SECONDS, climbPose.ts, and attackPose.ts), none a separate authored clip. Applied
+  // in this fixed order — blocking, then hurt (wins over a held brace), then climbing, then
+  // attacking last (a real swing still reads even mid-flinch) — every species follows it.
+  update(
+    time: number,
+    delta: number,
+    moveSpeed: number,
+    blocking?: boolean,
+    hurt?: boolean,
+    climbing?: boolean,
+    attacking?: boolean,
+  ): void;
   revealCrown(): void;
 }
 

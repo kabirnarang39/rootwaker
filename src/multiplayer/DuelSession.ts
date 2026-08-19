@@ -21,6 +21,7 @@ const DODGE_SECONDS = 0.35;
 const DODGE_IFRAME_SECONDS = 0.22;
 const DODGE_COOLDOWN_SECONDS = 0.9;
 const HURT_FLINCH_SECONDS = 0.22; // matches Game.ts's own HIT_STAGGER_SECONDS for single-player parity
+const ATTACK_POSE_SECONDS = 0.22; // matches Game.ts's own ATTACK_POSE_SECONDS — see attackPose.ts
 
 export interface DuelCombatantInfo {
   species: SpeciesId;
@@ -48,6 +49,8 @@ interface DuelFighter {
   // overlays a real recoil pose (see PlayableCharacter.update's hurt param) rather than only
   // changing the HP number.
   hurtUntil: number;
+  // Real player-side attack-swing pose, same idiom as Game.ts's attackPoseUntil — see attackPose.ts.
+  attackPoseUntil: number;
 }
 
 type NetMessage =
@@ -118,6 +121,7 @@ function makeFighter(info: DuelCombatantInfo, spawnX: number, spawnZ: number): D
     dodgeInvulnerableUntil: -Infinity,
     lastDodgeTime: -Infinity,
     hurtUntil: -Infinity,
+    attackPoseUntil: -Infinity,
   };
 }
 
@@ -286,6 +290,7 @@ export class DuelSession {
 
     attacker.lastAttackTime = this.time;
     attacker.lastComboAttackTime = this.time;
+    attacker.attackPoseUntil = this.time + ATTACK_POSE_SECONDS; // real swing pose, whether or not it lands
     const knockback = scaleKnockbackForSpecies(COMBO_KNOCKBACK[attacker.comboStage], attacker.species);
     attacker.comboStage = (attacker.comboStage + 1) % COMBO_MOVES.length;
 
@@ -312,7 +317,15 @@ export class DuelSession {
       // No real Block mechanic in a duel (see Game.ts's own comment on this), so blocking is
       // always false here — but a landed hit still gets the same real visible flinch overlay
       // single-player already has.
-      fighter.character.update(this.time, delta, fighter.controller.moveSpeed, false, this.time < fighter.hurtUntil);
+      fighter.character.update(
+        this.time,
+        delta,
+        fighter.controller.moveSpeed,
+        false,
+        this.time < fighter.hurtUntil,
+        false,
+        this.time < fighter.attackPoseUntil,
+      );
     }
   }
 

@@ -6,6 +6,7 @@ import { blendClips } from './rig/Clip';
 import { idleClip } from '../entities/tuskBoarClips';
 import { boarWalkClip } from '../entities/playableWalkClips';
 import { applyClimbPose } from './climbPose';
+import { applyAttackPose } from './attackPose';
 import type { PlayableCharacter } from './PlayableCharacter';
 
 const TUSK_COLOR = 0xe8e0d0;
@@ -147,7 +148,15 @@ export function createPlayableBoar(skin: CharacterSkin = BOAR_SKINS[0]): Playabl
   const glowMaterials = [glowShellMat, glowCoreMat];
   let walkTime = 0;
 
-  function update(time: number, delta: number, moveSpeed: number, blocking = false, hurt = false, climbing = false) {
+  function update(
+    time: number,
+    delta: number,
+    moveSpeed: number,
+    blocking = false,
+    hurt = false,
+    climbing = false,
+    attacking = false,
+  ) {
     glowMaterials.forEach((m) => {
       (m.uniforms.uTime.value as number) = time;
     });
@@ -167,6 +176,7 @@ export function createPlayableBoar(skin: CharacterSkin = BOAR_SKINS[0]): Playabl
       rig.setLocalRotation('spine', -0.15, 0, 0);
     }
     if (climbing) applyClimbPose(rig, time);
+    if (attacking) applyAttackPose(rig);
   }
 
   function revealCrown() {

@@ -167,6 +167,17 @@ describe('DuelSession', () => {
     expect(thirdHitDamage).toBeGreaterThan(secondHitDamage);
   });
 
+  it('as host: throwing a real attack sets the attacker\'s own attackPoseUntil, even on a whiff — a real swing should read on the attacker\'s own body, not just a hit on the defender', () => {
+    const { link } = fakeLink('host');
+    const duel = new DuelSession(link, fox, bear);
+    const h = duel as unknown as { host: FakeFighter & { attackPoseUntil: number }; time: number };
+    // Place the guest far away so the swing whiffs entirely.
+    h.host.controller.body.position.set(0, 0, 0);
+    expect(h.host.attackPoseUntil).toBe(-Infinity);
+    duel.update(1 / 60, { x: 0, z: 0, jump: false }, true, false);
+    expect(h.host.attackPoseUntil).toBeGreaterThan(h.time);
+  });
+
   it('as host: a real per-species combo — a bear hits harder than a fox on the exact same move, same as single-player', () => {
     const { link } = fakeLink('host');
     const duel = new DuelSession(link, bear, fox); // bear is host/attacker this time

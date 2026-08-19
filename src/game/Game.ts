@@ -68,6 +68,7 @@ const VIEW_MODE_NAMES: Record<ViewMode, string> = {
   hawkEye: 'Hawk Eye',
   foxEye: 'Fox Eyes',
 };
+const ATTACK_POSE_SECONDS = 0.22; // how long the real attack-swing pose holds — see attackPose.ts
 const CLIMB_SCRABBLE_INTERVAL = 0.35; // seconds between real climbing-effort sound events
 const FOOTSTEP_INTERVAL = 0.32; // seconds between real footstep sound events, grounded and moving
 const BOAR_HIT_DAMAGE = 14; // bumped with the boar's real-size scale-up in tuskBoar.ts
@@ -458,6 +459,10 @@ export class Game {
   private lastComboAttackTime = -Infinity;
   // Real hit-stagger — see HIT_STAGGER_SECONDS above.
   private staggerUntil = -Infinity;
+  // Real player-side attack-swing pose — see ATTACK_POSE_SECONDS and attackPose.ts. Previously
+  // meleeSweep() only ever computed a hitbox against the TARGET; the player's own body never
+  // visibly reacted to throwing a strike at all, basic combo or any special ability.
+  private attackPoseUntil = -Infinity;
   // Real block (hold KeyH) — computed once per frame in animate(), consumed later the same
   // frame by hurtPlayer() when an enemy attack actually resolves.
   private blocking = false;
@@ -1112,6 +1117,7 @@ export class Game {
       this.blocking,
       time < this.staggerUntil,
       this.playerController.mode === 'climbing',
+      time < this.attackPoseUntil,
     );
     if (!this.seaAmbienceStarted) {
       const { min, max } = this.level.chapterBounds;
@@ -2179,6 +2185,10 @@ export class Game {
   }
 
   private meleeSweep(damage: number, radius: number, reach: number, knockback: number, staggerEnemies = false): void {
+    // Real player-side swing pose — every melee-sweep-based attack routes through here (basic
+    // combo AND every special ability), so this is the one place that guarantees the player's own
+    // body visibly reacts to throwing a strike, not just the target's hitbox math.
+    this.attackPoseUntil = this.clock.elapsedTime + ATTACK_POSE_SECONDS;
     const forward = this.facingForward();
     const hitbox = {
       start: this.playerController.body.position.clone(),

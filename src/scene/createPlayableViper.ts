@@ -5,6 +5,7 @@ import { Rig, type JointName } from './rig/Rig';
 import { blendClips } from './rig/Clip';
 import { coilClip, slitherClip } from '../entities/vineViperClips';
 import { applyClimbPose } from './climbPose';
+import { applyAttackPose } from './attackPose';
 import type { PlayableCharacter } from './PlayableCharacter';
 
 const FANG_COLOR = 0xf2ead8;
@@ -143,7 +144,15 @@ export function createPlayableViper(skin: CharacterSkin = VIPER_SKINS[0]): Playa
   const glowMaterials = [glowCoreMat];
   let slitherTime = 0;
 
-  function update(time: number, delta: number, moveSpeed: number, blocking = false, hurt = false, climbing = false) {
+  function update(
+    time: number,
+    delta: number,
+    moveSpeed: number,
+    blocking = false,
+    hurt = false,
+    climbing = false,
+    attacking = false,
+  ) {
     glowMaterials.forEach((m) => {
       (m.uniforms.uTime.value as number) = time;
     });
@@ -166,6 +175,7 @@ export function createPlayableViper(skin: CharacterSkin = VIPER_SKINS[0]): Playa
       rig.applyPositionOffset('head', 0, -0.02, -0.03);
     }
     if (climbing) applyClimbPose(rig, time);
+    if (attacking) applyAttackPose(rig);
   }
 
   function revealCrown() {

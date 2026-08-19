@@ -88,4 +88,22 @@ describe('createFox', () => {
     foxB.update(0.3, 1 / 60, 0, false, false, false);
     expect(foxA.rig.getJoint('forepawL').rotation.x).toBeCloseTo(foxB.rig.getJoint('forepawL').rotation.x, 5);
   });
+
+  it('attacking=true applies a real forward strike commit, distinct from idle and from hurt\'s backward recoil', () => {
+    const fox = createFox();
+    fox.update(0, 1 / 60, 0, false, false, false, false);
+    const idleSpineX = fox.rig.getJoint('spine').rotation.x;
+    fox.update(0, 1 / 60, 0, false, false, false, true);
+    const attackSpineX = fox.rig.getJoint('spine').rotation.x;
+    expect(attackSpineX).not.toBeCloseTo(idleSpineX, 2);
+    expect(attackSpineX).toBeGreaterThan(0);
+  });
+
+  it('attacking defaults to false when omitted — every pre-attack-pose call site stays byte-identical', () => {
+    const foxA = createFox();
+    foxA.update(0.3, 1 / 60, 0, false, false, false);
+    const foxB = createFox();
+    foxB.update(0.3, 1 / 60, 0, false, false, false, false);
+    expect(foxA.rig.getJoint('spine').rotation.x).toBeCloseTo(foxB.rig.getJoint('spine').rotation.x, 5);
+  });
 });

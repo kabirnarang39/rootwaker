@@ -5,6 +5,7 @@ import { Rig } from './rig/Rig';
 import { blendClips } from './rig/Clip';
 import { walkClip, idleClip } from '../entities/groveBearClips';
 import { applyClimbPose } from './climbPose';
+import { applyAttackPose } from './attackPose';
 import type { PlayableCharacter } from './PlayableCharacter';
 
 const CLAW_COLOR = 0x2a2015;
@@ -152,7 +153,15 @@ export function createPlayableBear(skin: CharacterSkin = BEAR_SKINS[0]): Playabl
   const glowMaterials = [glowShellMat, glowCoreMat];
   let walkTime = 0;
 
-  function update(time: number, delta: number, moveSpeed: number, blocking = false, hurt = false, climbing = false) {
+  function update(
+    time: number,
+    delta: number,
+    moveSpeed: number,
+    blocking = false,
+    hurt = false,
+    climbing = false,
+    attacking = false,
+  ) {
     glowMaterials.forEach((m) => {
       (m.uniforms.uTime.value as number) = time;
     });
@@ -172,6 +181,7 @@ export function createPlayableBear(skin: CharacterSkin = BEAR_SKINS[0]): Playabl
       rig.setLocalRotation('head', HURT_HEAD_RECOIL, 0, 0);
     }
     if (climbing) applyClimbPose(rig, time);
+    if (attacking) applyAttackPose(rig);
   }
 
   function revealCrown() {
