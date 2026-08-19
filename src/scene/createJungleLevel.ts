@@ -447,6 +447,27 @@ function buildTreeSpeciesMeshes(
 
 const EXCLUSION_MARGIN = 0.4; // meters — keeps foliage/wildlife clear of water and wall footprints
 
+// Must match Game.ts's own hardcoded player spawn (`new PlayerController(new THREE.Vector3(0, 0,
+// 12))`) — no shared constant exists between the two files (Game.ts imports THREE directly and
+// constructs its own Vector3 rather than importing a position from here), so this is a second,
+// independently-hardcoded copy of the same real coordinate, matching the pattern already in use.
+//
+// Real, confirmed bug (live-measured, not theoretical): nothing previously kept the spawn point
+// itself clear of the general tree-scatter loop below (MIN_TREE_SPACING only keeps trees clear of
+// EACH OTHER, never of the player's own start position) — a real crocodile playthrough spawned
+// with dense canopy close enough that the third-person camera's own obstacle-raycast pulled all
+// the way in to ~2.3m, and at that range a crocodile's own real body (measured live: 3.35m long,
+// more than double any other species') filled almost the entire frame on the very first frame of
+// gameplay. A per-species camera tweak alone wouldn't have fixed this — the actual root cause is
+// that "the hollow" (see the real objective text: "Cross the hollow. Reach the climbing wall.")
+// was never guaranteed to actually BE a clearing. SPAWN_CLEAR_RADIUS (6m) covers the desired
+// follow-camera distance (GROUNDED_OFFSET's own 4.2m, see CameraRig.ts) plus real margin for the
+// longest species' own body length, so the camera's INTENDED position has clear sightlines before
+// any obstacle-clamping ever needs to engage.
+const SPAWN_CLEAR_X = 0;
+const SPAWN_CLEAR_Z = 12;
+const SPAWN_CLEAR_RADIUS = 6;
+
 function isPlaceable(x: number, z: number, water: WaterBody, wallBounds: THREE.Box2): boolean {
   const inWater =
     x >= water.bounds.min.x - EXCLUSION_MARGIN &&
@@ -458,7 +479,8 @@ function isPlaceable(x: number, z: number, water: WaterBody, wallBounds: THREE.B
     x <= wallBounds.max.x + EXCLUSION_MARGIN &&
     z >= wallBounds.min.y - EXCLUSION_MARGIN &&
     z <= wallBounds.max.y + EXCLUSION_MARGIN;
-  return !inWater && !inWall;
+  const inSpawnClearing = (x - SPAWN_CLEAR_X) ** 2 + (z - SPAWN_CLEAR_Z) ** 2 < SPAWN_CLEAR_RADIUS ** 2;
+  return !inWater && !inWall && !inSpawnClearing;
 }
 
 function buildFoliage(

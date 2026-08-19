@@ -44,6 +44,12 @@ describe('createJungleLevel', () => {
     expect(level.chapterBounds.containsBox(level.water.bounds)).toBe(true);
   });
 
+  it('the real player spawn point (0, 12 — must match Game.ts\'s own hardcoded `new PlayerController(new THREE.Vector3(0, 0, 12))`) has no tree obstacle within a 6m clearing (regression: nothing previously kept the spawn itself clear of the general tree-scatter loop — MIN_TREE_SPACING only keeps trees clear of EACH OTHER, never of the player\'s own start position. Live-measured: a crocodile spawn once landed close enough to dense canopy that the third-person camera\'s own obstacle-raycast pulled in to ~2.3m, and a crocodile\'s own real body — measured live at 3.35m long, more than double any other species\' — filled almost the entire frame on the very first frame of gameplay)', () => {
+    const level = createJungleLevel();
+    const nearSpawn = level.obstacleGrid.nearby(0, 12, 6).filter((tree) => Math.hypot(tree.x - 0, tree.z - 12) < 6);
+    expect(nearSpawn).toHaveLength(0);
+  });
+
   it('groundHeightAt returns a real deep seafloor value beyond the island\'s edge, not an extrapolated terrain-noise value (regression: without this, walking toward the sea kept landing on bogus "ground" near y=0 out over open water, so real swim-entry into the sea could never trigger — the player\'s grounded Y never dropped into any sea body\'s real Y range)', () => {
     const level = createJungleLevel();
     const withinIsland = level.groundHeightAt(0, 0);
