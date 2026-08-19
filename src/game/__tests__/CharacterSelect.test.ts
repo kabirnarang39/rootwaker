@@ -99,6 +99,32 @@ describe('CharacterSelect — behavior (real instance, fake DOM)', () => {
     expect(cs.current()).toEqual({ species: 'crocodile', skinId: 'river' });
   });
 
+  it('field notes show real wild HP/damage and the ability learned by eating that species, sourced from the same numbers that drive combat', async () => {
+    const { CharacterSelect } = await import('../CharacterSelect');
+    const cs = new CharacterSelect(fakeElement());
+    const cardEls = (cs as unknown as { cardEls: ReturnType<typeof fakeElement>[] }).cardEls;
+    const fieldNotesEl = (cs as unknown as { fieldNotesEl: ReturnType<typeof fakeElement> }).fieldNotesEl;
+
+    cardEls[1].__fire('click'); // bear
+    expect(fieldNotesEl.innerHTML).toContain('HP 90');
+    expect(fieldNotesEl.innerHTML).toContain('Bear Swipe');
+  });
+
+  it('the fox card shows real "never hunted in the wild" framing instead of fabricated wild stats', async () => {
+    const { CharacterSelect } = await import('../CharacterSelect');
+    const cs = new CharacterSelect(fakeElement());
+    const fieldNotesEl = (cs as unknown as { fieldNotesEl: ReturnType<typeof fakeElement> }).fieldNotesEl;
+    expect(fieldNotesEl.innerHTML).toContain('Never hunted in the wild');
+    expect(fieldNotesEl.innerHTML).toContain('Keen Ear');
+  });
+
+  it('the live 3D preview stays inert in this fake-DOM/no-WebGL test environment — no renderer is constructed', async () => {
+    const { CharacterSelect } = await import('../CharacterSelect');
+    const cs = new CharacterSelect(fakeElement());
+    expect((cs as unknown as { previewRenderer: unknown }).previewRenderer).toBeNull();
+    expect((cs as unknown as { previewCharacter: unknown }).previewCharacter).toBeNull();
+  });
+
   it('whenConfirmed() resolves with the current selection and removes the panel from the document', async () => {
     const { CharacterSelect } = await import('../CharacterSelect');
     const cs = new CharacterSelect(fakeElement());

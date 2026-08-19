@@ -71,7 +71,7 @@ export const ABILITIES: Record<AbilityId, Ability> = {
   'croc-lunge': {
     id: 'croc-lunge',
     name: 'Croc Lunge',
-    description: 'A real ambush lunge-bite, learned from the river crocodile\'s own explosive strike.',
+    description: 'A real ambush lunge-bite finished with a death roll, learned from the river crocodile\'s own explosive strike.',
     cooldownSeconds: 5,
     key: '8',
   },

@@ -194,7 +194,10 @@ export function createCrocodile(): Crocodile {
     ai.strikeRange = computeStrikeRange(combatant.hitbox.radius);
     // A real crocodile's own rhythm: a long, patient idle (handled by idleClip's own subtlety),
     // then commits hard once it strikes — a slow recovery, since a real lunge leaves it briefly
-    // exposed/repositioning rather than ready to strike again instantly like the boar.
+    // exposed/repositioning rather than ready to strike again instantly like the boar. The lunge
+    // clip itself now runs 1.5s (0.9s bite + a real 0.6s death roll — see crocodileClips.ts), so
+    // 1.1s of recovery on top of that 0.9s telegraph+attack window leaves the full roll room to
+    // play out before the AI is willing to strike again.
     ai.recoverSeconds = 1.1;
     ai.update(distanceToPlayer, delta);
     const isIdle = ai.state === 'idle' || ai.state === 'aggro';
