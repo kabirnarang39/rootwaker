@@ -21,6 +21,12 @@ export interface GameSaveState {
 
 const SAVE_STORAGE_KEY = 'rootwaker.save.v1';
 
+// Same real known-species set DistributedLeaderboard.ts's own VALID_SPECIES already uses for the
+// identical purpose — kept as a local literal rather than importing CharacterSelect.ts's
+// SPECIES_ORDER, since that file pulls in the whole THREE.js-backed selection UI just for a
+// 6-item list SaveGame.ts (deliberately dependency-light) doesn't otherwise need.
+const VALID_SPECIES = new Set(['fox', 'bear', 'viper', 'boar', 'lion', 'crocodile']);
+
 function isFiniteNumber(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value);
 }
@@ -37,12 +43,21 @@ function isFiniteNumber(value: unknown): value is number {
  * downstream physics/collision/groundHeightAt call. Rejecting the whole save (not trying to patch
  * individual fields) is deliberate — this project's `load()` already treats "no usable save" as a
  * safe, well-tested fallback (main.ts falls through to character-select), so folding "malformed"
- * into that exact same path is the smallest real fix, not a new code path to get wrong. */
+ * into that exact same path is the smallest real fix, not a new code path to get wrong.
+ *
+ * species is checked against VALID_SPECIES, not just typeof === 'string' — a real follow-up find
+ * on this exact function: ResumeGate.ts interpolates SPECIES_LABELS[save.species]?.name ??
+ * save.species directly into an innerHTML template with zero escaping. Under normal program flow
+ * `species` only ever comes from a fixed CharacterSelect literal, never free text, so this is
+ * self-XSS-only (a save is local-only, never transmitted) — but rejecting anything outside the
+ * real known species set here closes it at the actual choke point anyway, consistent with this
+ * project's own established pattern (DistributedLeaderboard.ts's identical VALID_SPECIES check on
+ * every remote entry) rather than leaving it to render-time escaping. */
 function isValidSaveState(value: unknown): value is GameSaveState {
   if (!value || typeof value !== 'object') return false;
   const v = value as Record<string, unknown>;
   return (
-    typeof v.species === 'string' &&
+    typeof v.species === 'string' && VALID_SPECIES.has(v.species) &&
     typeof v.skinId === 'string' &&
     isFiniteNumber(v.checkpointX) &&
     isFiniteNumber(v.checkpointY) &&
