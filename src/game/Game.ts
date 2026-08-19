@@ -2228,6 +2228,10 @@ export class Game {
   /** Fires on a Digit1-4 press. Each unlocked power is a real activatable move with its own
    * cooldown (AbilityKit.activate) — not the silent unlock-only flag this used to be. */
   private tryActivateAbility(id: AbilityId): void {
+    // Same real combination-testing fix as tryAttack() — no ability could physically fire while
+    // both hands/paws are occupied gripping a cliff face. Swimming is deliberately NOT gated here
+    // for the same #82 reason as tryAttack(): shark-bite has to work underwater.
+    if (this.playerController.mode === 'climbing') return;
     const time = this.clock.elapsedTime;
     if (!this.abilityKit.activate(id, time)) return;
 
@@ -2297,6 +2301,15 @@ export class Game {
    * too long between presses (or simply not attacking again in time) resets back to stage 0, so
    * this stays a real rhythm-based chain rather than a state that lingers forever. */
   private tryAttack() {
+    // Real combination-testing find: this method never checked the player's own locomotion mode
+    // before this fix — a player could throw a full melee combo while clinging to a cliff face
+    // mid-climb, a real physical impossibility (both hands are occupied gripping rock) and a
+    // visible bug: pass 13's attackPose overlay would fight pass 12's climbPose overlay every
+    // press, since attacking is applied after climbing in the fixed overlay order. Swimming is
+    // deliberately NOT gated here — the living-sea combat this project shipped (see #82) depends
+    // on the basic attack working underwater; a shark can only ever be damaged this way before
+    // its own shark-bite ability is unlocked; gating swimming too would softlock that entirely.
+    if (this.playerController.mode === 'climbing') return;
     const time = this.clock.elapsedTime;
     if (time - this.lastComboAttackTime > COMBO_WINDOW_SECONDS) this.comboStage = 0;
 
@@ -2318,6 +2331,13 @@ export class Game {
    * only the early part of the roll (DODGE_IFRAME_SECONDS < DODGE_SECONDS) — the tail end of a
    * dodge is a real committed recovery beat, not free invulnerability for its whole duration. */
   private tryDodge(): void {
+    // Same real combination-testing fix: the actual roll motion only ever applies in the
+    // grounded branch of animate() (dodgeEndTime is never read while climbing/swimming), so
+    // calling this while climbing was pure dead state EXCEPT for dodgeInvulnerableUntil — real,
+    // spammable, cost-free i-frames while gripping a cliff face nothing can reach anyway. Swimming
+    // stays ungated: dodgeInvulnerableUntil is real evasion value there against a real shark bite,
+    // the only way to duck one before shark-bite itself is unlocked.
+    if (this.playerController.mode === 'climbing') return;
     const time = this.clock.elapsedTime;
     if (time - this.lastDodgeTime < DODGE_COOLDOWN_SECONDS) return;
     this.lastDodgeTime = time;
