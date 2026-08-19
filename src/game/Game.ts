@@ -2232,6 +2232,9 @@ export class Game {
     // both hands/paws are occupied gripping a cliff face. Swimming is deliberately NOT gated here
     // for the same #82 reason as tryAttack(): shark-bite has to work underwater.
     if (this.playerController.mode === 'climbing') return;
+    // Same real block-vs-offense fix as tryAttack() — a held guard shouldn't be free to combine
+    // with using an ability too, same risk/reward reasoning.
+    if (this.blocking) return;
     const time = this.clock.elapsedTime;
     if (!this.abilityKit.activate(id, time)) return;
 
@@ -2310,6 +2313,13 @@ export class Game {
     // on the basic attack working underwater; a shark can only ever be damaged this way before
     // its own shark-bite ability is unlocked; gating swimming too would softlock that entirely.
     if (this.playerController.mode === 'climbing') return;
+    // A second real combination-testing find, same pass: Block (hold KeyH) reduces incoming
+    // damage to chip damage AND locks movement (see movementLocked above), but never stopped the
+    // player's own OUTGOING attack — a player could hold guard (safe from most damage, immobile)
+    // while freely spamming full-damage combos, strictly better than either committing to offense
+    // or defense the way every other species' real risk/reward tuning in this game assumes. A
+    // real block is a stance, not a free action alongside attacking.
+    if (this.blocking) return;
     const time = this.clock.elapsedTime;
     if (time - this.lastComboAttackTime > COMBO_WINDOW_SECONDS) this.comboStage = 0;
 
