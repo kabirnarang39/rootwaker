@@ -55,8 +55,8 @@ export class TouchControls {
         /* Secondary menu row (view cycle / duel / leaderboard) — real actions a touch player
            otherwise has no way to reach at all (KeyC/KeyM/KeyO only), but low-frequency enough
            to earn a small top-right row rather than the core cluster's large thumb-reach buttons.
-           Sits below the desktop CONTROLS legend, out of its way — the legend dismisses itself
-           on first real move input either way (see Game.ts's dismissLegendOnce). */
+           Sits below HUD.ts's own "?" controls-legend toggle (top:20px, 30px tall), clear of it
+           with real room to spare. */
         .rw-touch-menu {
           position: fixed; top: 130px; right: 16px; z-index: 12;
           display: flex; flex-direction: column; gap: 6px; pointer-events: none;

@@ -444,7 +444,6 @@ export class Game {
   private rawMoveInput = { x: 0, z: 0 };
   private jumpPressed = false;
   private foxFacingAngle = 0;
-  private legendDismissed = false;
   private lastAttackTime = -Infinity;
   private dashEndTime = -Infinity;
   private dashDirection = new THREE.Vector3(0, 0, 1);
@@ -562,17 +561,11 @@ export class Game {
       this.moveInput = { x: relative.x, z: relative.z, jump: this.jumpPressed };
       this.rawMoveInput = { x, z };
       this.jumpPressed = false;
-      // pollMove() fires every frame even with no keys held (x=0, z=0) — only a nonzero
-      // vector counts as the player's first real input.
-      if (x !== 0 || z !== 0) this.dismissLegendOnce();
     });
     this.input.onLook((dy, dp) => {
       this.cameraRig.applyLookDelta(dy, dp);
-      // pollLook() also fires every frame; only an actual drag delta counts.
-      if (dy !== 0 || dp !== 0) this.dismissLegendOnce();
     });
     this.input.onAction((action: PlayerAction) => {
-      this.dismissLegendOnce();
       if (action === 'multiplayer' && !this.duel && !this.challengeGate) {
         this.openChallengeGate();
         return;
@@ -662,11 +655,6 @@ export class Game {
 
     window.addEventListener('resize', this.onResize);
 
-    // Touch input has no real control scheme wired up yet (Input.ts is keyboard/mouse-drag
-    // only), so a touch player can never fire onMove/onLook/onAction to dismiss the legend —
-    // it would otherwise sit on screen permanently, listing controls a touch player can't use.
-    this.renderer.domElement.addEventListener('touchstart', () => this.dismissLegendOnce(), { once: true, passive: true });
-
     if (resume) {
       // Real state restore, not just species/skin — checkpoint position/hp/unlocked
       // abilities/animals-defeated/king-status. Deliberately NOT restored: which specific
@@ -733,13 +721,6 @@ export class Game {
         game: this,
       };
     }
-  }
-
-  /** Fades the controls-legend HUD panel the first time any real input handler fires. */
-  private dismissLegendOnce() {
-    if (this.legendDismissed) return;
-    this.legendDismissed = true;
-    this.hud.dismissLegend();
   }
 
   /** A real, previously-missing gap: a lost WebGL context (GPU driver reset, too many WebGL

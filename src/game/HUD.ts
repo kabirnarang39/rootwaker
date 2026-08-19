@@ -39,6 +39,7 @@ export class HUD {
   private abilityDescEl: HTMLDivElement;
   private abilityToastTimer: number | null = null;
   private controlsLegendEl: HTMLDivElement;
+  private legendToggleEl: HTMLButtonElement;
   private viewModeToastEl: HTMLDivElement;
   private viewModeNameEl: HTMLDivElement;
   private viewModeToastTimer: number | null = null;
@@ -174,6 +175,7 @@ export class HUD {
         <ol class="rw-coronation-list"></ol>
         <div class="rw-coronation-note">Shared peer-to-peer with everyone online now — encrypted on your device.</div>
       </div>
+      <button type="button" class="rw-legend-toggle" aria-label="Show controls">?</button>
       <div class="rw-controls-legend">
         <div class="rw-legend-eyebrow">Controls</div>
         <div class="rw-legend-row"><span class="rw-legend-key">W A S D</span><span class="rw-legend-label">Move</span></div>
@@ -733,14 +735,38 @@ export class HUD {
       }
       .rw-duel-chat-input:focus { outline: none; border-color: rgba(255,177,94,0.6); }
 
-      /* Controls legend: opposite corner from the vitality/stamina cluster, same carved-bark
-         plaque trapezoid and idle-amber key-badge treatment as the hunt prompt (rw-hunt-key)
-         rather than a new visual language. Visible by default (a fresh player needs it before
-         they've touched anything); dismissLegend() just fades it via class toggle, same
-         opacity/transform fade idiom the objective/toast panels already use. No auto-timer —
-         a player who never moves should keep seeing it. */
+      /* Controls legend: previously dumped all 13 keybind rows on screen the instant the game
+         loaded, then vanished forever on the player's first move — real usability flaw (forget
+         a keybind 20 minutes in and there was no way to check it again), and the biggest single
+         source of first-impression clutter. Redesigned as a real reference, not a one-shot
+         intro: a small carved-plaque "?" toggle sits permanently in the same corner (same
+         idle-amber key-badge language as rw-hunt-key), and the full row list only exists while
+         open. rw-legend-attract is a brief, self-clearing pulse (not a loop) so a fresh player
+         notices the toggle without it nagging for the rest of the run. */
+      .rw-legend-toggle {
+        position: fixed; top: 20px; right: 20px; z-index: 11;
+        width: 30px; height: 30px; padding: 0;
+        font-family: var(--display-face); font-size: 15px; line-height: 1; color: var(--parchment);
+        background: linear-gradient(180deg, rgba(20,13,9,0.68), rgba(7,10,8,0.84));
+        border: 1px solid rgba(255,177,94,0.4); border-radius: 4px;
+        box-shadow: 0 0 12px rgba(0,0,0,0.35);
+        cursor: pointer;
+        transition: border-color 160ms ease, box-shadow 160ms ease;
+      }
+      .rw-legend-toggle:hover, .rw-legend-toggle.rw-legend-open-state {
+        border-color: rgba(255,177,94,0.7);
+        box-shadow: 0 0 14px rgba(255,177,94,0.28);
+      }
+      .rw-legend-toggle.rw-legend-attract {
+        animation: rw-legend-attract-pulse 1400ms ease-out 2;
+      }
+      @keyframes rw-legend-attract-pulse {
+        0%, 100% { box-shadow: 0 0 12px rgba(0,0,0,0.35); border-color: rgba(255,177,94,0.4); }
+        50% { box-shadow: 0 0 18px rgba(255,177,94,0.5); border-color: rgba(255,177,94,0.85); }
+      }
+
       .rw-controls-legend {
-        position: fixed; top: 20px; right: 20px; z-index: 10;
+        position: fixed; top: 58px; right: 20px; z-index: 10;
         pointer-events: none; text-align: right;
         font-family: var(--body-face); color: var(--parchment);
         padding: 10px 18px 10px;
@@ -748,12 +774,14 @@ export class HUD {
         border-top: 1px solid rgba(255,177,94,0.32);
         box-shadow: 0 0 20px rgba(0,0,0,0.4);
         clip-path: polygon(6% 0, 94% 0, 100% 100%, 0% 100%);
-        opacity: 0.92;
-        transition: opacity 420ms cubic-bezier(0.16, 1, 0.3, 1), transform 420ms cubic-bezier(0.16, 1, 0.3, 1);
-      }
-      .rw-controls-legend.rw-legend-hidden {
         opacity: 0;
         transform: translateY(-6px);
+        transition: opacity 220ms cubic-bezier(0.16, 1, 0.3, 1), transform 220ms cubic-bezier(0.16, 1, 0.3, 1);
+      }
+      .rw-controls-legend.rw-legend-open {
+        opacity: 0.96;
+        transform: translateY(0);
+        pointer-events: auto;
       }
       .rw-legend-eyebrow {
         text-transform: uppercase; font-size: 9px; letter-spacing: 0.16em;
@@ -772,6 +800,7 @@ export class HUD {
       .rw-legend-label { text-transform: uppercase; font-size: 10px; letter-spacing: 0.1em; opacity: 0.85; }
       @media (prefers-reduced-motion: reduce) {
         .rw-controls-legend { transition: opacity 1ms linear; }
+        .rw-legend-toggle.rw-legend-attract { animation: none; }
       }
 
       /* Damage flash: a full-screen red vignette pulse — the "you got hit" signal that was
@@ -814,15 +843,15 @@ export class HUD {
         .rw-ko-flash.rw-flash-active { animation: none; }
       }
 
-      /* Power bar: the six learned-ability slots, bottom-left — same carved-plaque key-badge
-         language as the controls legend (rw-legend-key), so activatable powers read as part of
-         the same instrument family rather than a new UI language. Locked slots sit dim/inert;
-         unlocked-but-cooling-down slots dim briefly (rw-power-cooldown); unlocked+ready slots
-         get the myth-cyan "charged" treatment vitality/hunt-prompt already use for "ready".
-         flex-wrap + the viewport-relative max-width: at 6 slots (~74px each incl. padding) the
-         bar runs to ~480px, wider than most phone viewports — wrapping to a second row (growing
-         upward, since only bottom is anchored) reads fine here and avoids slots running off
-         the right edge of the screen on narrow viewports. */
+      /* Power bar: all 10 ability slots, bottom-left — same carved-plaque key-badge language as
+         the controls legend (rw-legend-key), so activatable powers read as part of the same
+         instrument family rather than a new UI language. Locked slots collapse to a small numbered
+         pip (see the :not(.rw-power-unlocked) rule above) so a fresh player sees ten quiet marks,
+         not ten full-width name cards — the bar only grows wide as abilities are actually earned.
+         Ready slots get the myth-cyan "charged" treatment vitality/hunt-prompt already use.
+         flex-wrap + the viewport-relative max-width: wrapping to a second row (growing upward,
+         since only bottom is anchored) reads fine here and avoids slots running off the right
+         edge of the screen on narrow viewports. */
       .rw-power-bar {
         position: fixed; bottom: 26px; left: 20px; z-index: 10;
         pointer-events: none; display: flex; flex-wrap: wrap; gap: 8px;
@@ -834,16 +863,23 @@ export class HUD {
       .rw-touch .rw-power-bar { bottom: 150px; }
       .rw-power-slot {
         display: flex; flex-direction: column; align-items: center; gap: 3px;
-        padding: 6px 10px 5px; min-width: 54px;
+        padding: 6px 8px 5px; min-width: 28px;
         background: linear-gradient(180deg, rgba(20,13,9,0.55), rgba(7,10,8,0.72));
         border-top: 1px solid rgba(238,242,230,0.14);
         clip-path: polygon(10% 0, 90% 0, 100% 100%, 0% 100%);
         opacity: 0.32;
-        transition: opacity 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
+        transition: opacity 160ms ease, border-color 160ms ease, box-shadow 160ms ease, min-width 160ms ease, padding 160ms ease;
         cursor: pointer;
       }
+      /* A locked slot is a blank stone totem — key number only, no name. The real ability name
+         (e.g. "Shark Bite") only carves itself in once earned, which doubles as a small, honest
+         discovery beat: the power bar tells you HOW MANY abilities exist before you've unlocked
+         any of them, but not WHAT they are, matching how the wild-form field notes already
+         withhold ability names until a species is actually eaten (see CharacterSelect.ts). */
+      .rw-power-slot:not(.rw-power-unlocked) .rw-power-name { display: none; }
       .rw-power-slot.rw-power-unlocked {
         opacity: 0.55;
+        min-width: 54px; padding: 6px 10px 5px;
         border-top-color: rgba(255,177,94,0.4);
       }
       .rw-power-slot.rw-power-ready {
@@ -882,6 +918,17 @@ export class HUD {
     this.abilityNameEl = this.root.querySelector('.rw-ability-name')!;
     this.abilityDescEl = this.root.querySelector('.rw-ability-desc')!;
     this.controlsLegendEl = this.root.querySelector('.rw-controls-legend')!;
+    this.legendToggleEl = this.root.querySelector('.rw-legend-toggle')!;
+    // Self-contained UI concern — no gameplay state, so it's wired here rather than routed
+    // through Game.ts the way every other HUD update is (those all reflect real game state).
+    this.legendToggleEl.addEventListener('click', () => {
+      const open = this.controlsLegendEl.classList.toggle('rw-legend-open');
+      this.legendToggleEl.classList.toggle('rw-legend-open-state', open);
+    });
+    // A brief, self-clearing pulse — not a loop — so a fresh player notices the toggle exists
+    // without it nagging for the rest of the run.
+    this.legendToggleEl.classList.add('rw-legend-attract');
+    window.setTimeout(() => this.legendToggleEl.classList.remove('rw-legend-attract'), 3000);
     this.viewModeToastEl = this.root.querySelector('.rw-view-mode-toast')!;
     this.viewModeNameEl = this.root.querySelector('.rw-view-mode-name')!;
     this.bossBarEl = this.root.querySelector('.rw-boss-bar')!;
@@ -1139,11 +1186,6 @@ export class HUD {
       this.storyBeatEl.classList.remove('rw-visible');
       this.storyBeatTimer = null;
     }, 4200);
-  }
-
-  /** Fades the controls-legend panel out; called once, on the player's first real input. */
-  dismissLegend(): void {
-    this.controlsLegendEl.classList.add('rw-legend-hidden');
   }
 
   /** Short-lived toast naming the camera view mode the player just cycled into. */

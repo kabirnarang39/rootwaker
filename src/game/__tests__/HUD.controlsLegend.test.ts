@@ -7,7 +7,7 @@ import hudSource from '../HUD.ts?raw';
 // deliberately has no jsdom dependency (see Input.look.test.ts / the camera-relative-movement
 // plan's Task 2 fix, which removed jsdom after it broke a fresh clone). A minimal fake
 // `document` — just enough surface for HUD's constructor to run without throwing — lets us
-// instantiate the REAL HUD class and call its REAL dismissLegend(), rather than parsing markup
+// instantiate the REAL HUD class and dispatch REAL events at it, rather than parsing markup
 // through a hand-rolled HTML tree (a much larger, more fragile stand-in for the same purpose).
 
 // The minimap's real 2D drawing calls (clearRect/fillRect/beginPath/arc/etc.) need a real-shaped
@@ -28,6 +28,7 @@ function fakeContext2D(): any {
 function fakeElement(): any {
   const classSet = new Set<string>();
   const setPropertyCalls: [string, string][] = [];
+  const listeners: Record<string, ((e: any) => void)[]> = {};
   const el: any = {
     classList: {
       add: (...names: string[]) => names.forEach((n) => classSet.add(n)),
@@ -36,6 +37,7 @@ function fakeElement(): any {
       toggle: (n: string, force?: boolean) => {
         const on = force ?? !classSet.has(n);
         if (on) classSet.add(n); else classSet.delete(n);
+        return on;
       },
     },
     style: {
@@ -47,7 +49,14 @@ function fakeElement(): any {
     width: 150,
     height: 150,
     appendChild: () => {},
-    addEventListener: () => {},
+    // Real listener storage (not a no-op) — the legend toggle test needs to actually dispatch a
+    // click through this fake, the same `dispatch` idiom Input.look.test.ts's own fakeElement uses.
+    addEventListener: (type: string, handler: (e: any) => void) => {
+      (listeners[type] ??= []).push(handler);
+    },
+    dispatch: (type: string, event: any = {}) => {
+      (listeners[type] ?? []).forEach((h) => h(event));
+    },
     querySelector: () => fakeElement(),
     getContext: () => fakeContext2D(),
     focus: () => {},
@@ -80,19 +89,40 @@ afterEach(() => {
 });
 
 describe('HUD controls legend — behavior (real HUD instance, fake DOM)', () => {
-  it('is present and visible (no rw-legend-hidden class) right after construction', async () => {
+  // Redesigned (see project memory pass 30): the legend used to dump all 13 rows on screen at
+  // load and vanish forever on the player's first move — a real usability flaw, not just
+  // clutter (forget a keybind later in the run and there was no way to check it again). It's
+  // now a real toggle: closed by default, opened/closed anytime via a persistent "?" chip.
+
+  it('starts closed (no rw-legend-open class) right after construction — no longer a wall of text on load', async () => {
     const { HUD } = await import('../HUD');
     const hud = new HUD(fakeElement() as unknown as HTMLElement);
     const legend = (hud as unknown as { controlsLegendEl: ReturnType<typeof fakeElement> }).controlsLegendEl;
-    expect(legend.classList.contains('rw-legend-hidden')).toBe(false);
+    expect(legend.classList.contains('rw-legend-open')).toBe(false);
   });
 
-  it('dismissLegend() fades the panel out by toggling the hidden class', async () => {
+  it('clicking the toggle opens the panel, clicking again closes it — reachable any time, not a one-shot dismissal', async () => {
     const { HUD } = await import('../HUD');
     const hud = new HUD(fakeElement() as unknown as HTMLElement);
-    hud.dismissLegend();
-    const legend = (hud as unknown as { controlsLegendEl: ReturnType<typeof fakeElement> }).controlsLegendEl;
-    expect(legend.classList.contains('rw-legend-hidden')).toBe(true);
+    const h = hud as unknown as {
+      controlsLegendEl: ReturnType<typeof fakeElement>;
+      legendToggleEl: ReturnType<typeof fakeElement>;
+    };
+
+    h.legendToggleEl.dispatch('click');
+    expect(h.controlsLegendEl.classList.contains('rw-legend-open')).toBe(true);
+
+    h.legendToggleEl.dispatch('click');
+    expect(h.controlsLegendEl.classList.contains('rw-legend-open')).toBe(false);
+  });
+
+  it('the toggle gets a brief attract pulse on load that clears itself after 3s — a nudge, not a nag', async () => {
+    const { HUD } = await import('../HUD');
+    const hud = new HUD(fakeElement() as unknown as HTMLElement);
+    const legendToggleEl = (hud as unknown as { legendToggleEl: ReturnType<typeof fakeElement> }).legendToggleEl;
+    expect(legendToggleEl.classList.contains('rw-legend-attract')).toBe(true);
+    vi.advanceTimersByTime(3000);
+    expect(legendToggleEl.classList.contains('rw-legend-attract')).toBe(false);
   });
 });
 
