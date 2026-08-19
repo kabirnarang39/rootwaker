@@ -53,7 +53,12 @@ function isFiniteNumber(value: unknown): value is number {
  * real known species set here closes it at the actual choke point anyway, consistent with this
  * project's own established pattern (DistributedLeaderboard.ts's identical VALID_SPECIES check on
  * every remote entry) rather than leaving it to render-time escaping. */
-function isValidSaveState(value: unknown): value is GameSaveState {
+/** Exported for SaveSyncSession.ts's own restore path — a save recovered from a peer over the
+ * distributed mesh is network-sourced data (even if that peer is honestly just your own other
+ * browser) and needs the exact same shape/bounds check a locally-decrypted save already gets
+ * here, not a weaker one. See this function's own doc comment above for why species specifically
+ * matters: ResumeGate.ts interpolates it into innerHTML with zero escaping. */
+export function isValidSaveState(value: unknown): value is GameSaveState {
   if (!value || typeof value !== 'object') return false;
   const v = value as Record<string, unknown>;
   return (
