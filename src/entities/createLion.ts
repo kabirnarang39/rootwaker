@@ -186,7 +186,9 @@ export function createLion(): Lion {
     // A real lion's ambush is FAST to commit — the shortest telegraph of any ground predator in
     // the game bar the viper's strike — but needs a real recovery beat after a full-body leap
     // before it can pounce again, unlike the boar's quick reset. Both set BEFORE ai.update(), the
-    // same ordering rule every other species follows.
+    // same ordering rule every other species follows. The pounce clip itself now runs 1.2s (0.7s
+    // leap-and-land + a real 0.5s throat bite-and-hold — see lionClips.ts), so 0.9s of recovery on
+    // top of the 0.7s telegraph+attack window leaves the bite room to fully play out.
     ai.telegraphSeconds = 0.4;
     ai.recoverSeconds = 0.9;
     ai.strikeRange = computeStrikeRange(combatant.hitbox.radius);

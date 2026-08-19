@@ -64,7 +64,7 @@ export const ABILITIES: Record<AbilityId, Ability> = {
   'lion-pounce': {
     id: 'lion-pounce',
     name: "Lion's Pounce",
-    description: 'An explosive leaping tackle, learned from the jungle\'s own apex predator.',
+    description: 'An explosive leaping tackle finished with a real throat bite, learned from the jungle\'s own apex predator.',
     cooldownSeconds: 5,
     key: '7',
   },
