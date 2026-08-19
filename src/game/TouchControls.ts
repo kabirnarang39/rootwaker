@@ -25,8 +25,13 @@ export class TouchControls {
     this.root.innerHTML = `
       <style>
         .rw-touch-controls { position: fixed; inset: 0; z-index: 12; pointer-events: none; }
+        /* max() with a flat pixel floor: env(safe-area-inset-*) reports 0 on non-notched
+           devices, so this still reads as a normal 26px/20px margin there — only a real
+           notch/home-indicator (iPhone) pushes the controls in further. Requires
+           viewport-fit=cover on index.html's own viewport meta tag, or env() always reports 0. */
         .rw-stick-base {
-          position: fixed; bottom: 26px; left: 20px; width: 110px; height: 110px;
+          position: fixed; bottom: max(26px, env(safe-area-inset-bottom)); left: max(20px, env(safe-area-inset-left));
+          width: 110px; height: 110px;
           border-radius: 50%; pointer-events: auto; touch-action: none;
           background: radial-gradient(circle, rgba(20,13,9,0.5), rgba(7,10,8,0.65));
           border: 1px solid rgba(238,242,230,0.18);
@@ -37,7 +42,8 @@ export class TouchControls {
           transition: transform 40ms linear;
         }
         .rw-touch-buttons {
-          position: fixed; bottom: 22px; right: 20px; z-index: 12;
+          position: fixed; bottom: max(22px, env(safe-area-inset-bottom)); right: max(20px, env(safe-area-inset-right));
+          z-index: 12;
           display: grid; grid-template-columns: repeat(2, 62px); grid-template-rows: repeat(2, 62px);
           gap: 10px; pointer-events: none;
         }
@@ -58,7 +64,7 @@ export class TouchControls {
            Sits below HUD.ts's own "?" controls-legend toggle (top:20px, 30px tall), clear of it
            with real room to spare. */
         .rw-touch-menu {
-          position: fixed; top: 130px; right: 16px; z-index: 12;
+          position: fixed; top: 130px; right: max(16px, env(safe-area-inset-right)); z-index: 12;
           display: flex; flex-direction: column; gap: 6px; pointer-events: none;
         }
         .rw-touch-menu-btn {

@@ -744,7 +744,7 @@ export class HUD {
          open. rw-legend-attract is a brief, self-clearing pulse (not a loop) so a fresh player
          notices the toggle without it nagging for the rest of the run. */
       .rw-legend-toggle {
-        position: fixed; top: 20px; right: 20px; z-index: 11;
+        position: fixed; top: max(20px, env(safe-area-inset-top)); right: max(20px, env(safe-area-inset-right)); z-index: 11;
         width: 30px; height: 30px; padding: 0;
         font-family: var(--display-face); font-size: 15px; line-height: 1; color: var(--parchment);
         background: linear-gradient(180deg, rgba(20,13,9,0.68), rgba(7,10,8,0.84));
