@@ -109,6 +109,21 @@ export function createVineViper(): VineViper {
   eyeR.position.set(0.06, 0.02, 0.05);
   add('head', 'viper-eye-r', eyeR);
 
+  // Real pit-viper trait: an infrared-sensing loreal pit organ between the eye and nostril —
+  // able to detect a temperature gradient as fine as 0.003°C, how a real pit viper hunts warm
+  // prey in the dark. A small dark recessed indentation, distinct from the glowing eye, sitting
+  // just forward of it toward the snout.
+  const pitGeo = new THREE.SphereGeometry(0.014, 6, 6);
+  const pitMat = new THREE.MeshStandardMaterial({ color: 0x1a1006, flatShading: true, roughness: 0.9 });
+  const pitL = new THREE.Mesh(pitGeo, pitMat);
+  pitL.scale.set(1, 0.6, 1);
+  pitL.position.set(-0.05, -0.005, 0.08);
+  add('head', 'viper-pit-l', pitL);
+  const pitR = new THREE.Mesh(pitGeo, pitMat);
+  pitR.scale.copy(pitL.scale);
+  pitR.position.set(0.05, -0.005, 0.08);
+  add('head', 'viper-pit-r', pitR);
+
   // Jaw: the lower mandible, a smaller flattened wedge that hinges open on the strike clip.
   const jaw = new THREE.Mesh(new THREE.ConeGeometry(0.055, 0.13, 4), darkMat);
   jaw.rotation.x = Math.PI / 2;

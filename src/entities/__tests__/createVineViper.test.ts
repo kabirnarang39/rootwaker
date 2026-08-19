@@ -29,9 +29,19 @@ describe('createVineViper', () => {
       'viper-fang-l', 'viper-fang-r',
       'viper-tongue-l', 'viper-tongue-r',
       'viper-eye-l', 'viper-eye-r',
+      'viper-pit-l', 'viper-pit-r',
     ]) {
       expect(names, `missing anatomy part: ${part}`).toContain(part);
     }
+  });
+
+  it('has a real pit-viper heat-sensing pit organ, distinct from the eye — placed forward of it toward the snout, not overlapping', () => {
+    const viper = createVineViper();
+    const head = viper.rig.getJoint('head');
+    const byName = (name: string) => head.children.find((c) => c.name === name)!;
+    const eyeL = byName('viper-eye-l');
+    const pitL = byName('viper-pit-l');
+    expect(pitL.position.z).toBeGreaterThan(eyeL.position.z);
   });
 
   it('applying the strike clip at t=0 leaves the head on its bind pose, not at the clip\'s raw keyframe value (regression: clips author position keyframes as deltas around zero, so without captureBasePose the first frame would drop the head to [0,0,0] in local space)', () => {
