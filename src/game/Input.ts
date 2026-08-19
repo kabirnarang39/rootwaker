@@ -2,7 +2,6 @@ export type PlayerAction =
   | 'attack'
   | 'dodge'
   | 'jump'
-  | 'interact'
   | 'pounce'
   | 'cycleView'
   | 'ability1'
@@ -171,7 +170,6 @@ export class Input {
     if (e.code === 'Space') this.emitAction('jump');
     else if (e.code === 'KeyJ') this.emitAction('attack');
     else if (e.code === 'KeyK') this.emitAction('dodge');
-    else if (e.code === 'KeyE') this.emitAction('interact');
     else if (e.code === 'KeyL') this.emitAction('pounce');
     else if (e.code === 'KeyC') this.emitAction('cycleView');
     else if (e.code === 'Digit1') this.emitAction('ability1');
