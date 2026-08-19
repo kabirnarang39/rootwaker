@@ -1190,6 +1190,14 @@ export class Game {
       }
     }
 
+    // Real spatial-audio listener refresh — once per frame, before any telegraph/alert SFX below
+    // fires, so every one of them pans/attenuates against up-to-date player position + camera yaw.
+    this.audio.setListener(
+      this.playerController.body.position.x,
+      this.playerController.body.position.z,
+      this.cameraRig.orbitYaw,
+    );
+
     for (const hare of this.level.hares) {
       const hareDistance = hare.position.distanceTo(this.playerController.body.position);
       const approachSpeed = computeApproachSpeed(
@@ -1220,7 +1228,7 @@ export class Game {
       const prevBoarAiState = this.prevBoarAiState.get(boar.ai);
       boar.update(time, delta, boarDistance);
       if (boar.ai.state === 'telegraph' && prevBoarAiState !== 'telegraph') {
-        this.audio.playBoarSnort();
+        this.audio.playBoarSnort(boar.group.position.x, boar.group.position.z);
         this.tryShowStoryBeat('boar');
       }
       this.prevBoarAiState.set(boar.ai, boar.ai.state);
@@ -1241,7 +1249,7 @@ export class Game {
       const prevBearAiState = this.prevBearAiState.get(bear.ai);
       bear.update(time, delta, bearDistance);
       if (bear.ai.state === 'telegraph' && prevBearAiState !== 'telegraph') {
-        this.audio.playBearGrowl();
+        this.audio.playBearGrowl(bear.group.position.x, bear.group.position.z);
         this.tryShowStoryBeat('bear');
       }
       this.prevBearAiState.set(bear.ai, bear.ai.state);
@@ -1262,7 +1270,7 @@ export class Game {
       const prevCrocAiState = this.prevCrocAiState.get(crocodile.ai);
       crocodile.update(time, delta, crocDistance);
       if (crocodile.ai.state === 'telegraph' && prevCrocAiState !== 'telegraph') {
-        this.audio.playCrocodileHiss();
+        this.audio.playCrocodileHiss(crocodile.group.position.x, crocodile.group.position.z);
         this.tryShowStoryBeat('crocodile');
       }
       this.prevCrocAiState.set(crocodile.ai, crocodile.ai.state);
@@ -1288,7 +1296,7 @@ export class Game {
       const prevSharkAiState = this.prevSharkAiState.get(shark.ai);
       shark.update(time, delta, sharkDistance);
       if (shark.ai.state === 'telegraph' && prevSharkAiState !== 'telegraph') {
-        this.audio.playSharkThreat();
+        this.audio.playSharkThreat(shark.group.position.x, shark.group.position.z);
         this.tryShowStoryBeat('shark');
       }
       this.prevSharkAiState.set(shark.ai, shark.ai.state);
@@ -1326,7 +1334,7 @@ export class Game {
       const prevMonkeyAiState = this.prevMonkeyAiState.get(monkey.ai);
       monkey.update(time, delta, monkeyDistance);
       if (monkey.ai.state === 'telegraph' && prevMonkeyAiState !== 'telegraph') {
-        this.audio.playMonkeyChatter();
+        this.audio.playMonkeyChatter(monkey.group.position.x, monkey.group.position.z);
         this.tryShowStoryBeat('monkey');
       }
       this.prevMonkeyAiState.set(monkey.ai, monkey.ai.state);
@@ -1353,7 +1361,7 @@ export class Game {
       const prevOwlAiState = this.prevOwlAiState.get(owl.ai);
       owl.update(time, delta, owlHorizontalDistance);
       if (owl.ai.state === 'telegraph' && prevOwlAiState !== 'telegraph') {
-        this.audio.playOwlScreech();
+        this.audio.playOwlScreech(owl.group.position.x, owl.group.position.z);
         this.tryShowStoryBeat('owl');
       }
       this.prevOwlAiState.set(owl.ai, owl.ai.state);
@@ -1383,7 +1391,7 @@ export class Game {
       const prevViperAiState = this.prevViperAiState.get(viper.ai);
       viper.update(time, delta, viperDistance);
       if (viper.ai.state === 'telegraph' && prevViperAiState !== 'telegraph') {
-        this.audio.playViperHiss();
+        this.audio.playViperHiss(viper.group.position.x, viper.group.position.z);
         this.tryShowStoryBeat('viper');
       }
       this.prevViperAiState.set(viper.ai, viper.ai.state);
@@ -1405,7 +1413,7 @@ export class Game {
       const prevLionAiState = this.prevLionAiState.get(lion.ai);
       lion.update(time, delta, lionDistance);
       if (lion.ai.state === 'telegraph' && prevLionAiState !== 'telegraph') {
-        this.audio.playLionRoar();
+        this.audio.playLionRoar(lion.group.position.x, lion.group.position.z);
         this.tryShowStoryBeat('lion');
       }
       this.prevLionAiState.set(lion.ai, lion.ai.state);
@@ -1432,7 +1440,7 @@ export class Game {
       );
       const prevSquirrelState = this.prevSquirrelState.get(squirrel.ai);
       squirrel.update(time, delta, squirrelDistance, squirrelApproachSpeed);
-      if (squirrel.ai.state === 'alert' && prevSquirrelState !== 'alert') this.audio.playSquirrelChatter();
+      if (squirrel.ai.state === 'alert' && prevSquirrelState !== 'alert') this.audio.playSquirrelChatter(squirrel.position.x, squirrel.position.z);
       this.prevSquirrelState.set(squirrel.ai, squirrel.ai.state);
       if (squirrel.ai.state === 'fleeing') {
         const dx = squirrel.position.x - this.playerController.body.position.x;
@@ -1451,7 +1459,9 @@ export class Game {
       const flock = this.level.finchFlock;
       const flockDistance = this.level.finchFlockCenter.distanceTo(this.playerController.body.position);
       flock.update(time, delta, flockDistance);
-      if (flock.state === 'flushed' && this.prevFinchFlockState !== 'flushed') this.audio.playBirdFlush();
+      if (flock.state === 'flushed' && this.prevFinchFlockState !== 'flushed') {
+        this.audio.playBirdFlush(this.level.finchFlockCenter.x, this.level.finchFlockCenter.z);
+      }
       this.prevFinchFlockState = flock.state;
     }
 
@@ -1476,9 +1486,9 @@ export class Game {
       // idiom), and the active-window damage applies once per window (not every frame) via
       // groundSlamDamageApplied, reset only when a fresh 'active' window begins.
       if (king.groundSlam.state === 'telegraph' && this.prevGroundSlamState !== 'telegraph') {
-        this.audio.playGroundSlamTelegraph();
+        this.audio.playGroundSlamTelegraph(king.group.position.x, king.group.position.z);
       } else if (king.groundSlam.state === 'active' && this.prevGroundSlamState !== 'active') {
-        this.audio.playGroundSlamImpact();
+        this.audio.playGroundSlamImpact(king.group.position.x, king.group.position.z);
         this.groundSlamDamageApplied = false;
       }
       if (king.groundSlam.isDamaging() && !this.groundSlamDamageApplied) {

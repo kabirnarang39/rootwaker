@@ -302,19 +302,21 @@ export class CharacterSelect {
         this.audio.playFoxBark();
         break;
       case 'bear':
-        this.audio.playBearGrowl();
+        // Character-select is a UI screen, not a world position — 0,0 matches AudioFX's own
+        // default listener position, so the preview plays dead-center, not off to one side.
+        this.audio.playBearGrowl(0, 0);
         break;
       case 'viper':
-        this.audio.playViperHiss();
+        this.audio.playViperHiss(0, 0);
         break;
       case 'boar':
-        this.audio.playBoarSnort();
+        this.audio.playBoarSnort(0, 0);
         break;
       case 'lion':
-        this.audio.playLionRoar();
+        this.audio.playLionRoar(0, 0);
         break;
       case 'crocodile':
-        this.audio.playCrocodileHiss();
+        this.audio.playCrocodileHiss(0, 0);
         break;
     }
   }

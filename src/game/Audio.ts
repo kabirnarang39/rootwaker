@@ -8,11 +8,43 @@ function makeNoiseBuffer(ctx: AudioContext, seconds: number): AudioBuffer {
   return buffer;
 }
 
+// Real spatial-audio range: matches PlayerController's own FLY_MAX_ALTITUDE (40) as the
+// established "far edge of the playable world" scale, so a threat sound fades out over roughly
+// the same distance the player can actually perceive/traverse in one go. Floor stays audible
+// rather than silent — a real telegraphed warning should still be faintly there at max range,
+// not vanish, since it's the player's only cue to a threat they can't yet see.
+const SPATIAL_MAX_DISTANCE = 40;
+const SPATIAL_MIN_ATTENUATION = 0.12;
+
+/** Pure stereo-pan math, pulled out of spatialOutput so it's unit-testable without a real
+ * AudioContext (this project's test env is Node — no Web Audio globals at all). Same
+ * atan2(x,z)-relative-to-yaw convention as FoxFacing.ts/CameraRelativeMove.ts: 0 = dead ahead,
+ * +1 = hard right, -1 = hard left. */
+export function computeSpatialPan(sourceX: number, sourceZ: number, listenerX: number, listenerZ: number, listenerYaw: number): number {
+  const dx = sourceX - listenerX;
+  const dz = sourceZ - listenerZ;
+  const relativeAngle = Math.atan2(dx, dz) - listenerYaw;
+  return Math.max(-1, Math.min(1, Math.sin(relativeAngle)));
+}
+
+/** Pure distance-attenuation math — linear falloff to SPATIAL_MIN_ATTENUATION at
+ * SPATIAL_MAX_DISTANCE, never fully silent (a telegraphed threat should stay a faint cue at
+ * the edge of the playable world, not disappear). */
+export function computeSpatialAttenuation(distance: number): number {
+  return Math.max(SPATIAL_MIN_ATTENUATION, 1 - distance / SPATIAL_MAX_DISTANCE);
+}
+
 /** Small synthesized SFX/ambience — no external audio assets. */
 export class AudioFX {
   private ctx: AudioContext | null = null;
   private ambientGain: GainNode | null = null;
   private rainGain: GainNode | null = null;
+  // The player/camera's own position+facing, refreshed once per frame from Game.ts's animate()
+  // loop (see setListener). Real per-species alert calls (growls/hisses/roars/snorts) pan and
+  // fade against this so the player can hear WHERE a telegraphed threat is without looking at it.
+  private listenerX = 0;
+  private listenerZ = 0;
+  private listenerYaw = 0;
 
   unlock() {
     if (this.ctx) return;
@@ -20,7 +52,33 @@ export class AudioFX {
     this.startJungleAmbience();
   }
 
-  private tone(freq: number, duration: number, type: OscillatorType, gainPeak: number, delay = 0) {
+  /** Called once per frame with the player's world position and the camera's own orbitYaw (the
+   * same atan2(x,z) angle convention FoxFacing.ts and CameraRelativeMove.ts already use), so every
+   * spatialized SFX this frame pans/attenuates against up-to-date listener state. */
+  setListener(x: number, z: number, yaw: number): void {
+    this.listenerX = x;
+    this.listenerZ = z;
+    this.listenerYaw = yaw;
+  }
+
+  /** Builds a real stereo-pan + distance-attenuation chain for a sound emitted at (sourceX,
+   * sourceZ), returning the node callers should connect their final gain(s) into instead of
+   * ctx.destination directly. One call per SFX invocation — layered sounds (e.g. a growl's noise
+   * + oscillator layers) share the SAME returned node, so pan/distance is computed once, not
+   * once per layer. */
+  private spatialOutput(sourceX: number, sourceZ: number): AudioNode {
+    const ctx = this.ctx!;
+    const distance = Math.hypot(sourceX - this.listenerX, sourceZ - this.listenerZ);
+    const panner = ctx.createStereoPanner();
+    panner.pan.value = computeSpatialPan(sourceX, sourceZ, this.listenerX, this.listenerZ, this.listenerYaw);
+    const distanceGain = ctx.createGain();
+    distanceGain.gain.value = computeSpatialAttenuation(distance);
+    panner.connect(distanceGain);
+    distanceGain.connect(ctx.destination);
+    return panner;
+  }
+
+  private tone(freq: number, duration: number, type: OscillatorType, gainPeak: number, delay = 0, destination?: AudioNode) {
     if (!this.ctx) return;
     const ctx = this.ctx;
     const osc = ctx.createOscillator();
@@ -28,7 +86,7 @@ export class AudioFX {
     osc.type = type;
     osc.frequency.value = freq;
     osc.connect(gain);
-    gain.connect(ctx.destination);
+    gain.connect(destination ?? ctx.destination);
     const t0 = ctx.currentTime + delay;
     gain.gain.setValueAtTime(0, t0);
     gain.gain.linearRampToValueAtTime(gainPeak, t0 + 0.02);
@@ -294,11 +352,12 @@ export class AudioFX {
     noise.start();
   }
 
-  playGroundSlamTelegraph(): void {
+  playGroundSlamTelegraph(sourceX: number, sourceZ: number): void {
     // Low rumble build — same filtered-noise shape as playGustHit, but pitched lower with a
     // slower, ramping attack: a heavier, ground-borne warning rather than an airy gust.
     if (!this.ctx) return;
     const ctx = this.ctx;
+    const dest = this.spatialOutput(sourceX, sourceZ);
     const noise = ctx.createBufferSource();
     noise.buffer = makeNoiseBuffer(ctx, 0.7);
     const filter = ctx.createBiquadFilter();
@@ -310,15 +369,16 @@ export class AudioFX {
     gain.gain.linearRampToValueAtTime(0.12, ctx.currentTime + 0.7);
     noise.connect(filter);
     filter.connect(gain);
-    gain.connect(ctx.destination);
+    gain.connect(dest);
     noise.start();
   }
 
-  playGroundSlamImpact(): void {
+  playGroundSlamImpact(sourceX: number, sourceZ: number): void {
     // A short, heavy low-frequency thump — oscillator-driven with a falling pitch and a sharp
     // attack, reading as "impact" landing right after the telegraph's rumble build.
     if (!this.ctx) return;
     const ctx = this.ctx;
+    const dest = this.spatialOutput(sourceX, sourceZ);
     const osc = ctx.createOscillator();
     osc.type = 'sine';
     osc.frequency.setValueAtTime(60, ctx.currentTime);
@@ -327,7 +387,7 @@ export class AudioFX {
     gain.gain.setValueAtTime(0.18, ctx.currentTime);
     gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
     osc.connect(gain);
-    gain.connect(ctx.destination);
+    gain.connect(dest);
     osc.start();
     osc.stop(ctx.currentTime + 0.35);
   }
@@ -381,9 +441,10 @@ export class AudioFX {
    * and a sawtooth falling fast from 2.2kHz. Contrast with playRoar(), which is the same
    * noise-buffer technique but lowpass with a downward filter sweep — a bellow, not a shriek;
    * copying that shape here would make the owl sound like a small bear. */
-  playOwlScreech(): void {
+  playOwlScreech(sourceX: number, sourceZ: number): void {
     if (!this.ctx) return;
     const ctx = this.ctx;
+    const dest = this.spatialOutput(sourceX, sourceZ);
     const bufferSize = Math.floor(ctx.sampleRate * 0.45);
     const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
     const data = buffer.getChannelData(0);
@@ -402,7 +463,7 @@ export class AudioFX {
     noiseGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.45);
     noise.connect(filter);
     filter.connect(noiseGain);
-    noiseGain.connect(ctx.destination);
+    noiseGain.connect(dest);
     noise.start();
 
     const osc = ctx.createOscillator();
@@ -413,7 +474,7 @@ export class AudioFX {
     oscGain.gain.setValueAtTime(0.05, ctx.currentTime);
     oscGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4);
     osc.connect(oscGain);
-    oscGain.connect(ctx.destination);
+    oscGain.connect(dest);
     osc.start();
     osc.stop(ctx.currentTime + 0.45);
   }
@@ -430,9 +491,10 @@ export class AudioFX {
    * snake's hiss has no pitch to it whatsoever). A bandpass filter centred high gives it that
    * airy "sss" character, with a gentle amplitude swell up and fall back down rather than the
    * screech's hard-open attack. */
-  playViperHiss(): void {
+  playViperHiss(sourceX: number, sourceZ: number): void {
     if (!this.ctx) return;
     const ctx = this.ctx;
+    const dest = this.spatialOutput(sourceX, sourceZ);
     const noise = ctx.createBufferSource();
     noise.buffer = makeNoiseBuffer(ctx, 0.5);
     const filter = ctx.createBiquadFilter();
@@ -445,18 +507,20 @@ export class AudioFX {
     gain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.5); // fall
     noise.connect(filter);
     filter.connect(gain);
-    gain.connect(ctx.destination);
+    gain.connect(dest);
     noise.start();
   }
 
   /** The grove squirrel's alarm call. A real squirrel's "kuk-kuk-kuk" is tonal and staccato —
    * contrast with playViperHiss/playOwlScreech, which are pure or noise-dominant; this is 5 short
    * square-wave clicks with almost no decay tail, aimed *at* the predator rather than fled with. */
-  playSquirrelChatter(): void {
+  playSquirrelChatter(sourceX: number, sourceZ: number): void {
+    if (!this.ctx) return;
+    const dest = this.spatialOutput(sourceX, sourceZ);
     const clickCount = 5;
     const clickSpacing = 0.09;
     for (let i = 0; i < clickCount; i++) {
-      this.tone(1900 + (i % 2) * 220, 0.045, 'square', 0.07, i * clickSpacing);
+      this.tone(1900 + (i % 2) * 220, 0.045, 'square', 0.07, i * clickSpacing, dest);
     }
   }
 
@@ -464,9 +528,10 @@ export class AudioFX {
    * ~14Hz — fast enough to read as fluttering wingbeats, contrasted with playOwlScreech's slower
    * ~58Hz modulation which reads as a vocal rasp, not a mechanical flutter — plus 2-3 short rising
    * chirps riding on top as the flock scatters and calls out. */
-  playBirdFlush(): void {
+  playBirdFlush(sourceX: number, sourceZ: number): void {
     if (!this.ctx) return;
     const ctx = this.ctx;
+    const dest = this.spatialOutput(sourceX, sourceZ);
     const bufferSize = Math.floor(ctx.sampleRate * 0.35);
     const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
     const data = buffer.getChannelData(0);
@@ -484,12 +549,12 @@ export class AudioFX {
     gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
     noise.connect(filter);
     filter.connect(gain);
-    gain.connect(ctx.destination);
+    gain.connect(dest);
     noise.start();
 
-    this.tone(2600, 0.08, 'sine', 0.04, 0.05);
-    this.tone(3100, 0.08, 'sine', 0.04, 0.15);
-    this.tone(3600, 0.09, 'sine', 0.035, 0.25);
+    this.tone(2600, 0.08, 'sine', 0.04, 0.05, dest);
+    this.tone(3100, 0.08, 'sine', 0.04, 0.15, dest);
+    this.tone(3600, 0.09, 'sine', 0.035, 0.25, dest);
   }
 
   /** The Canopy Owl's dive-strike: a rushing bandpass-filtered air-swoop — noise swept downward
@@ -659,9 +724,10 @@ export class AudioFX {
    * triumphant sweep 1400->120Hz over 0.6s). This is shorter, narrower, and stays low the whole
    * time: a warning grumble before a swipe, not an epic bellow — the bear hasn't attacked yet,
    * it's telling you it's about to. */
-  playBearGrowl(): void {
+  playBearGrowl(sourceX: number, sourceZ: number): void {
     if (!this.ctx) return;
     const ctx = this.ctx;
+    const dest = this.spatialOutput(sourceX, sourceZ);
     const noise = ctx.createBufferSource();
     noise.buffer = makeNoiseBuffer(ctx, 0.4);
     const filter = ctx.createBiquadFilter();
@@ -673,7 +739,7 @@ export class AudioFX {
     noiseGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4);
     noise.connect(filter);
     filter.connect(noiseGain);
-    noiseGain.connect(ctx.destination);
+    noiseGain.connect(dest);
     noise.start();
 
     const growl = ctx.createOscillator();
@@ -684,7 +750,7 @@ export class AudioFX {
     growlGain.gain.setValueAtTime(0.06, ctx.currentTime);
     growlGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4);
     growl.connect(growlGain);
-    growlGain.connect(ctx.destination);
+    growlGain.connect(dest);
     growl.start(ctx.currentTime);
     growl.stop(ctx.currentTime + 0.42);
   }
@@ -692,9 +758,10 @@ export class AudioFX {
   /** The Tusk Boar's own telegraph warning — a sharp, short, aggressive snort, nothing like
    * the bear's low sustained growl: real boars snort explosively right before a charge, not a
    * sustained sound. Deliberately very short (0.18s) and percussive. */
-  playBoarSnort(): void {
+  playBoarSnort(sourceX: number, sourceZ: number): void {
     if (!this.ctx) return;
     const ctx = this.ctx;
+    const dest = this.spatialOutput(sourceX, sourceZ);
     const noise = ctx.createBufferSource();
     noise.buffer = makeNoiseBuffer(ctx, 0.18);
     const filter = ctx.createBiquadFilter();
@@ -706,7 +773,7 @@ export class AudioFX {
     noiseGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.18);
     noise.connect(filter);
     filter.connect(noiseGain);
-    noiseGain.connect(ctx.destination);
+    noiseGain.connect(dest);
     noise.start();
 
     const grunt = ctx.createOscillator();
@@ -717,7 +784,7 @@ export class AudioFX {
     gruntGain.gain.setValueAtTime(0.08, ctx.currentTime);
     gruntGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.16);
     grunt.connect(gruntGain);
-    gruntGain.connect(ctx.destination);
+    gruntGain.connect(dest);
     grunt.start(ctx.currentTime);
     grunt.stop(ctx.currentTime + 0.18);
   }
@@ -851,9 +918,10 @@ export class AudioFX {
    * warning sound (playBearGrowl's short growl, playBoarSnort's quick snort, playWraithGroan's
    * unearthly moan). A low sawtooth oscillator with a slow pitch dip reads as a real chest-deep
    * roar rather than a synth tone, layered with filtered noise for breath/rasp. */
-  playLionRoar(): void {
+  playLionRoar(sourceX: number, sourceZ: number): void {
     if (!this.ctx) return;
     const ctx = this.ctx;
+    const dest = this.spatialOutput(sourceX, sourceZ);
     const osc = ctx.createOscillator();
     osc.type = 'sawtooth';
     osc.frequency.setValueAtTime(110, ctx.currentTime);
@@ -868,7 +936,7 @@ export class AudioFX {
     oscGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.55);
     osc.connect(oscFilter);
     oscFilter.connect(oscGain);
-    oscGain.connect(ctx.destination);
+    oscGain.connect(dest);
     osc.start();
     osc.stop(ctx.currentTime + 0.55);
 
@@ -883,7 +951,7 @@ export class AudioFX {
     noiseGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5);
     noise.connect(noiseFilter);
     noiseFilter.connect(noiseGain);
-    noiseGain.connect(ctx.destination);
+    noiseGain.connect(dest);
     noise.start();
   }
 
@@ -971,9 +1039,10 @@ export class AudioFX {
    * than the viper's own airy 5200Hz hiss (a crocodile is a far bigger animal): a low bandpass
    * growl around 900Hz with a real sub-bass rumble underneath for genuine weight, not just a
    * pitched-down copy of the viper's cue. */
-  playCrocodileHiss(): void {
+  playCrocodileHiss(sourceX: number, sourceZ: number): void {
     if (!this.ctx) return;
     const ctx = this.ctx;
+    const dest = this.spatialOutput(sourceX, sourceZ);
     const noise = ctx.createBufferSource();
     noise.buffer = makeNoiseBuffer(ctx, 0.6);
     const filter = ctx.createBiquadFilter();
@@ -986,7 +1055,7 @@ export class AudioFX {
     noiseGain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.6);
     noise.connect(filter);
     filter.connect(noiseGain);
-    noiseGain.connect(ctx.destination);
+    noiseGain.connect(dest);
     noise.start();
 
     const rumble = ctx.createOscillator();
@@ -997,7 +1066,7 @@ export class AudioFX {
     rumbleGain.gain.linearRampToValueAtTime(0.06, ctx.currentTime + 0.2);
     rumbleGain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.6);
     rumble.connect(rumbleGain);
-    rumbleGain.connect(ctx.destination);
+    rumbleGain.connect(dest);
     rumble.start();
     rumble.stop(ctx.currentTime + 0.62);
   }
@@ -1510,9 +1579,10 @@ export class AudioFX {
    * physical water-surge instead — a rushing, turbulent noise swell as it accelerates into its
    * approach, the same real distinguishing trait (silent, water-borne threat) that separates a
    * shark from every land species already in the game. */
-  playSharkThreat(): void {
+  playSharkThreat(sourceX: number, sourceZ: number): void {
     if (!this.ctx) return;
     const ctx = this.ctx;
+    const dest = this.spatialOutput(sourceX, sourceZ);
     const noise = ctx.createBufferSource();
     noise.buffer = makeNoiseBuffer(ctx, 0.55);
     const filter = ctx.createBiquadFilter();
@@ -1525,7 +1595,7 @@ export class AudioFX {
     gain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.55);
     noise.connect(filter);
     filter.connect(gain);
-    gain.connect(ctx.destination);
+    gain.connect(dest);
     noise.start();
   }
 
@@ -1616,9 +1686,10 @@ export class AudioFX {
    * more tonal than playSquirrelChatter's flat uniform clicks (a squirrel's alarm is percussive;
    * a real monkey's call actually bends pitch up then down within each syllable). 3 real
    * oo-ah syllables, staggered, each one a genuine pitch glide rather than a fixed tone. */
-  playMonkeyChatter(): void {
+  playMonkeyChatter(sourceX: number, sourceZ: number): void {
     if (!this.ctx) return;
     const ctx = this.ctx;
+    const dest = this.spatialOutput(sourceX, sourceZ);
     const syllableCount = 3;
     const syllableSpacing = 0.22;
     for (let i = 0; i < syllableCount; i++) {
@@ -1633,7 +1704,7 @@ export class AudioFX {
       gain.gain.linearRampToValueAtTime(0.07, t0 + 0.03);
       gain.gain.linearRampToValueAtTime(0, t0 + 0.15);
       osc.connect(gain);
-      gain.connect(ctx.destination);
+      gain.connect(dest);
       osc.start(t0);
       osc.stop(t0 + 0.16);
     }

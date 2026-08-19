@@ -1,5 +1,52 @@
 import { describe, it, expect } from 'vitest';
-import { AudioFX } from '../Audio';
+import { AudioFX, computeSpatialPan, computeSpatialAttenuation } from '../Audio';
+
+describe('spatial audio math', () => {
+  it('a source dead ahead of the listener pans center', () => {
+    // Listener facing yaw=0 (real forward = +Z per FoxFacing.ts's own atan2(x,z) convention);
+    // a source directly ahead has dx=0, so pan must be ~0, not pulled left or right.
+    expect(computeSpatialPan(0, 10, 0, 0, 0)).toBeCloseTo(0, 5);
+  });
+
+  it('a source to the listener\'s right pans positive, left pans negative', () => {
+    expect(computeSpatialPan(10, 0, 0, 0, 0)).toBeGreaterThan(0);
+    expect(computeSpatialPan(-10, 0, 0, 0, 0)).toBeLessThan(0);
+  });
+
+  it('rotating the listener 180 degrees flips a source from ahead to behind — pan crosses zero, sign flips with a quarter-turn either way', () => {
+    const facingAway = computeSpatialPan(0, 10, 0, 0, Math.PI);
+    // Directly behind stays centered (sin(pi) ~ 0), but a quarter-turn either side of that
+    // reveals the flip: same world source, opposite ear once the listener has turned around.
+    const turnedOneWay = computeSpatialPan(0, 10, 0, 0, Math.PI - Math.PI / 2);
+    const turnedOtherWay = computeSpatialPan(0, 10, 0, 0, Math.PI + Math.PI / 2);
+    expect(facingAway).toBeCloseTo(0, 5);
+    expect(turnedOneWay).toBeLessThan(0);
+    expect(turnedOtherWay).toBeGreaterThan(0);
+    expect(Math.sign(turnedOneWay)).not.toBe(Math.sign(turnedOtherWay));
+  });
+
+  it('pan never exceeds the real stereo range [-1, 1]', () => {
+    for (let angle = 0; angle < Math.PI * 2; angle += 0.3) {
+      const x = Math.sin(angle) * 20;
+      const z = Math.cos(angle) * 20;
+      const pan = computeSpatialPan(x, z, 0, 0, 0);
+      expect(pan).toBeGreaterThanOrEqual(-1);
+      expect(pan).toBeLessThanOrEqual(1);
+    }
+  });
+
+  it('a source at the listener\'s own position is full volume', () => {
+    expect(computeSpatialAttenuation(0)).toBe(1);
+  });
+
+  it('attenuation falls off linearly with real distance, never below the audible floor', () => {
+    const near = computeSpatialAttenuation(10);
+    const far = computeSpatialAttenuation(30);
+    const beyondWorldEdge = computeSpatialAttenuation(1000);
+    expect(near).toBeGreaterThan(far);
+    expect(beyondWorldEdge).toBeCloseTo(0.12, 5); // a telegraphed threat stays a faint cue, never silent
+  });
+});
 
 describe('AudioFX hunting sounds', () => {
   it('playPounceAttempt does not throw before unlock() (no AudioContext yet)', () => {
@@ -27,12 +74,12 @@ describe('AudioFX hunting sounds', () => {
 describe('AudioFX throne-room sounds', () => {
   it('playGroundSlamTelegraph does not throw before unlock()', () => {
     const fx = new AudioFX();
-    expect(() => fx.playGroundSlamTelegraph()).not.toThrow();
+    expect(() => fx.playGroundSlamTelegraph(5, 5)).not.toThrow();
   });
 
   it('playGroundSlamImpact does not throw before unlock()', () => {
     const fx = new AudioFX();
-    expect(() => fx.playGroundSlamImpact()).not.toThrow();
+    expect(() => fx.playGroundSlamImpact(5, 5)).not.toThrow();
   });
 
   it('playArcComplete does not throw before unlock()', () => {
@@ -71,22 +118,22 @@ describe('AudioFX combat-clarity sounds', () => {
 describe('AudioFX species sounds', () => {
   it('playOwlScreech does not throw before unlock()', () => {
     const fx = new AudioFX();
-    expect(() => fx.playOwlScreech()).not.toThrow();
+    expect(() => fx.playOwlScreech(5, 5)).not.toThrow();
   });
 
   it('playViperHiss does not throw before unlock()', () => {
     const fx = new AudioFX();
-    expect(() => fx.playViperHiss()).not.toThrow();
+    expect(() => fx.playViperHiss(5, 5)).not.toThrow();
   });
 
   it('playSquirrelChatter does not throw before unlock()', () => {
     const fx = new AudioFX();
-    expect(() => fx.playSquirrelChatter()).not.toThrow();
+    expect(() => fx.playSquirrelChatter(5, 5)).not.toThrow();
   });
 
   it('playBirdFlush does not throw before unlock()', () => {
     const fx = new AudioFX();
-    expect(() => fx.playBirdFlush()).not.toThrow();
+    expect(() => fx.playBirdFlush(5, 5)).not.toThrow();
   });
 
   it('playOwlDive does not throw before unlock()', () => {
@@ -111,12 +158,12 @@ describe('AudioFX species sounds', () => {
 
   it('playBearGrowl does not throw before unlock()', () => {
     const fx = new AudioFX();
-    expect(() => fx.playBearGrowl()).not.toThrow();
+    expect(() => fx.playBearGrowl(5, 5)).not.toThrow();
   });
 
   it('playBoarSnort does not throw before unlock()', () => {
     const fx = new AudioFX();
-    expect(() => fx.playBoarSnort()).not.toThrow();
+    expect(() => fx.playBoarSnort(5, 5)).not.toThrow();
   });
 
   it('playWraithGroan does not throw before unlock()', () => {
@@ -145,7 +192,7 @@ describe('AudioFX species sounds', () => {
 
   it('playLionRoar does not throw before unlock()', () => {
     const fx = new AudioFX();
-    expect(() => fx.playLionRoar()).not.toThrow();
+    expect(() => fx.playLionRoar(5, 5)).not.toThrow();
   });
 
   it('playLionPounceActivate does not throw before unlock()', () => {
@@ -155,7 +202,7 @@ describe('AudioFX species sounds', () => {
 
   it('playCrocodileHiss does not throw before unlock()', () => {
     const fx = new AudioFX();
-    expect(() => fx.playCrocodileHiss()).not.toThrow();
+    expect(() => fx.playCrocodileHiss(5, 5)).not.toThrow();
   });
 
   it('playCrocodileLungeActivate does not throw before unlock()', () => {
@@ -221,7 +268,7 @@ describe('AudioFX player-fox voice', () => {
 describe('AudioFX shark (living sea)', () => {
   it('playSharkThreat does not throw before unlock()', () => {
     const fx = new AudioFX();
-    expect(() => fx.playSharkThreat()).not.toThrow();
+    expect(() => fx.playSharkThreat(5, 5)).not.toThrow();
   });
 
   it('playSharkBiteActivate does not throw before unlock()', () => {
@@ -243,7 +290,7 @@ describe('AudioFX shark (living sea)', () => {
 describe('AudioFX monkey', () => {
   it('playMonkeyChatter does not throw before unlock()', () => {
     const fx = new AudioFX();
-    expect(() => fx.playMonkeyChatter()).not.toThrow();
+    expect(() => fx.playMonkeyChatter(5, 5)).not.toThrow();
   });
 
   it('playMonkeyHurt does not throw before unlock()', () => {
