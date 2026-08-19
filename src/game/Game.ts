@@ -591,7 +591,18 @@ export class Game {
         if (action === 'dodge') this.duelDodgePressed = true;
         return;
       }
-      if (action === 'jump') this.jumpPressed = true;
+      if (action === 'jump') {
+        // Real species-gated flight launch: only the owl has real flight locomotion (see
+        // PlayerController's beginFly/updateFly) — every other species' Space keeps meaning
+        // exactly what it always has, a normal grounded jump. Only reachable from 'grounded'
+        // (beginFly's own guard), so a mid-air jump-arc or a climb/swim can never accidentally
+        // launch flight.
+        if (this.playerSpecies === 'owl' && this.playerController.mode === 'grounded') {
+          this.playerController.beginFly();
+        } else {
+          this.jumpPressed = true;
+        }
+      }
       if (action === 'attack') this.tryAttack();
       if (action === 'dodge') this.tryDodge();
       if (action === 'pounce') this.tryPounce();
@@ -941,6 +952,14 @@ export class Game {
       }
     } else if (this.playerController.mode === 'swimming') {
       this.playerController.updateSwim(this.moveInput, delta, this.activeWater);
+    } else if (this.playerController.mode === 'flying') {
+      // Real held-key vertical control, same idiom Block already uses for KeyH — Space
+      // (ascend) doubles as the same key that launches flight and jumps for every other species;
+      // holding Shift to descend is the same real, intuitive up/down pairing most flight-capable
+      // games use (Minecraft creative flight, etc), and it's otherwise unbound in this project.
+      const ascend = this.input.isHeld('Space');
+      const descend = this.input.isHeld('ShiftLeft') || this.input.isHeld('ShiftRight');
+      this.playerController.updateFly(this.moveInput, delta, ascend, descend, this.groundHeightWithLedges);
     } else {
       if (time < this.dashEndTime) {
         // Boar's Charge lunge — a direct position/velocity override for the dash window only,
@@ -1118,6 +1137,7 @@ export class Game {
       time < this.staggerUntil,
       this.playerController.mode === 'climbing',
       time < this.attackPoseUntil,
+      this.playerController.mode === 'flying',
     );
     if (!this.seaAmbienceStarted) {
       const { min, max } = this.level.chapterBounds;

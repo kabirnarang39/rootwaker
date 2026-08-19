@@ -3,7 +3,7 @@ import { SPECIES_COMBO_SCALE, scaleMoveForSpecies, scaleKnockbackForSpecies } fr
 import { CLAW_SWIPE } from '../Combat';
 import type { SpeciesId } from '../../scene/PlayableCharacter';
 
-const SPECIES: SpeciesId[] = ['fox', 'bear', 'viper', 'boar', 'lion', 'crocodile'];
+const SPECIES: SpeciesId[] = ['fox', 'bear', 'viper', 'boar', 'lion', 'crocodile', 'owl'];
 
 describe('SpeciesCombatProfile', () => {
   it('every playable species has a real, defined scale', () => {
@@ -41,5 +41,13 @@ describe('SpeciesCombatProfile', () => {
   it('knockback scales with the same real per-species multiplier as damage — a heavier hit pushes harder', () => {
     expect(scaleKnockbackForSpecies(1, 'lion')).toBeCloseTo(SPECIES_COMBO_SCALE.lion.damage, 5);
     expect(scaleKnockbackForSpecies(1, 'fox')).toBe(1);
+  });
+
+  it('the owl has the fastest real recovery in the roster — a real fast-strike, fast-reset hunting tempo', () => {
+    const recoveryOf = (species: SpeciesId) => scaleMoveForSpecies(CLAW_SWIPE, species).recoverySeconds;
+    for (const species of SPECIES) {
+      if (species === 'owl') continue;
+      expect(recoveryOf('owl')).toBeLessThan(recoveryOf(species));
+    }
   });
 });

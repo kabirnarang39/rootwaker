@@ -147,6 +147,29 @@ export const CROCODILE_SKINS: CharacterSkin[] = [
   },
 ];
 
+export const OWL_SKINS: CharacterSkin[] = [
+  {
+    id: 'dusk',
+    name: 'Dusk Owl',
+    furColor: 0x6b6257,
+    furDark: 0x413a32,
+    bellyColor: 0xb9ae9c,
+    glowColor: 0xffc247,
+    glowRim: 0xffe0a0,
+  },
+  {
+    // Real snowy owl (Bubo scandiacus) plumage — a genuinely distinct real coloring, not an
+    // invented palette, the same "real species, real look" standard every other skin follows.
+    id: 'snowy',
+    name: 'Snowy Owl',
+    furColor: 0xe8e4d8,
+    furDark: 0xb0a894,
+    bellyColor: 0xf5f2ea,
+    glowColor: 0x9dd4ff,
+    glowRim: 0xdff0ff,
+  },
+];
+
 export function skinById(id: string): FoxSkin {
   return SKINS.find((s) => s.id === id) ?? SKINS[0];
 }

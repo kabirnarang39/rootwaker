@@ -17,6 +17,21 @@ const SWIM_BUOYANCY_SCALE = -0.6; // negative gravity scale = net upward pull to
 const SWIM_DRAG_PER_SECOND = 0.9;
 const SWIM_MOVE_SPEED = 2.5;
 const POUNCE_MAX_RANGE = 2; // meters — real fox pounces reach much further, but this is a stylized, readable gameplay range
+// Real flight (owl only — see Game.ts's species gate on the launch input): freeform 3D movement
+// with drag instead of climbing's direct-position-delta or swimming's buoyancy-scaled gravity —
+// a real bird actively flaps to hold altitude, no persistent gravity pull while airborne, but real
+// air resistance still caps how fast it can build speed in any direction.
+const FLY_SPEED = 6.5; // m/s horizontal cruise — real owls read faster in flight than any grounded species here
+const FLY_VERTICAL_SPEED = 4.0; // m/s ascend/descend acceleration
+// damp() computes velocity *= (1 - dragPerSecond)^delta — dragPerSecond must stay in (0, 1) (the
+// "fraction of velocity lost per second" this project's other modes already use, e.g. swimming's
+// own 0.9) or that base goes negative and Math.pow(negative, fractional exponent) is NaN in JS —
+// a real bug an initial value of 2.5 here hit immediately, caught by this file's own new tests
+// before it ever shipped, not assumed safe by inspection.
+const FLY_DRAG_PER_SECOND = 0.85;
+const FLY_MIN_CLEARANCE = 0.6; // meters above terrain — a real safety floor for cruising/ascending flight
+const FLY_LANDING_THRESHOLD = 0.15; // meters above terrain — close enough, while actively descending, to touch down
+const FLY_MAX_ALTITUDE = 40; // a real ceiling comfortably above the mountain's own summit (~20-25m)
 const MAX_STAMINA = 100;
 const STAMINA_DRAIN_PER_SECOND = 15; // climbing for ~6.7s at rest drains a full bar
 const STAMINA_REGEN_PER_SECOND = 25; // resting recovers faster than climbing drains — a real ledge pause matters
@@ -164,5 +179,50 @@ export class PlayerController {
     if (this.mode !== 'grounded') return { success: false, distance: this.body.position.distanceTo(preyPosition) };
     const window = checkPounceRange(this.body.position, preyPosition, maxRange);
     return { success: window.inRange, distance: window.distance };
+  }
+
+  /** Launches real flight — species-gated in Game.ts (only reachable as the owl), same
+   * "canTransition('grounded', X) is the only legal entry" convention every other mode uses. */
+  beginFly(): void {
+    if (this.mode !== 'grounded') return;
+    this.mode = 'flying';
+    this.body.velocity.set(0, 0, 0);
+  }
+
+  /** `ascend`/`descend` are real held-key state (Space/Shift), not part of the shared MoveInput
+   * shape — same idiom as updateSwim taking its own extra `water` param beyond MoveInput, rather
+   * than growing that interface for a control scheme only one mode uses. Landing is a real
+   * player-controlled maneuver: only an ACTIVE descent (not just cruising near the terrain) can
+   * cross the real safety floor (FLY_MIN_CLEARANCE) down to the landing threshold — otherwise a
+   * player just leveling off close to the ground would involuntarily land mid-cruise. */
+  updateFly(
+    input: MoveInput,
+    delta: number,
+    ascend: boolean,
+    descend: boolean,
+    groundHeightAt: (x: number, z: number) => number,
+  ): void {
+    this.body.velocity.x += input.x * FLY_SPEED * delta;
+    this.body.velocity.z += input.z * FLY_SPEED * delta;
+    if (ascend) this.body.velocity.y += FLY_VERTICAL_SPEED * delta;
+    if (descend) this.body.velocity.y -= FLY_VERTICAL_SPEED * delta;
+    damp(this.body.velocity, FLY_DRAG_PER_SECOND, delta);
+    integrate(this.body, delta);
+
+    const groundY = groundHeightAt(this.body.position.x, this.body.position.z);
+
+    if (descend) {
+      if (this.body.position.y <= groundY + FLY_LANDING_THRESHOLD) {
+        this.body.position.y = groundY;
+        this.body.velocity.set(0, 0, 0);
+        this.mode = 'grounded';
+        this.grounded = true;
+        return;
+      }
+    } else if (this.body.position.y < groundY + FLY_MIN_CLEARANCE) {
+      this.body.position.y = groundY + FLY_MIN_CLEARANCE;
+      if (this.body.velocity.y < 0) this.body.velocity.y = 0;
+    }
+    this.body.position.y = Math.min(this.body.position.y, groundY + FLY_MAX_ALTITUDE);
   }
 }

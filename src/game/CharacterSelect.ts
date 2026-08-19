@@ -4,7 +4,7 @@ import type { SpeciesId, PlayableCharacter } from '../scene/PlayableCharacter';
 import { ABILITIES, type AbilityId } from './AbilityKit';
 import { AudioFX } from './Audio';
 
-export const SPECIES_ORDER: SpeciesId[] = ['fox', 'bear', 'viper', 'boar', 'lion', 'crocodile'];
+export const SPECIES_ORDER: SpeciesId[] = ['fox', 'bear', 'viper', 'boar', 'lion', 'crocodile', 'owl'];
 
 function hex(n: number): string {
   return `#${n.toString(16).padStart(6, '0')}`;
@@ -27,6 +27,7 @@ const WILD_FIELD_NOTES: Partial<Record<SpeciesId, WildFieldNote>> = {
   boar: { hp: 68, biteDamage: 14, abilityId: 'boar-charge' },
   lion: { hp: 100, biteDamage: 18, abilityId: 'lion-pounce' },
   crocodile: { hp: 60, biteDamage: 15, abilityId: 'croc-lunge' },
+  owl: { hp: 34, biteDamage: 10, abilityId: 'owl-dive' },
   // fox has no entry: it's never a huntable wild NPC in this game (see createJungleLevel.ts's
   // wildlife spawns), so there's no real wild-form stat to show — renderFieldNotes special-cases it.
 };
@@ -85,6 +86,7 @@ export class CharacterSelect {
     boar: 0,
     lion: 0,
     crocodile: 0,
+    owl: 0,
   };
   // Real voice preview on card selection — previously this screen only showed name/blurb/skin
   // swatch, none of a real animal's own identity that the game already gives every species

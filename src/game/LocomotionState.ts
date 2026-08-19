@@ -1,10 +1,11 @@
-export type LocomotionMode = 'grounded' | 'climbing' | 'swimming' | 'combat';
+export type LocomotionMode = 'grounded' | 'climbing' | 'swimming' | 'combat' | 'flying';
 
 const ALLOWED: Record<LocomotionMode, LocomotionMode[]> = {
-  grounded: ['grounded', 'climbing', 'swimming', 'combat'],
+  grounded: ['grounded', 'climbing', 'swimming', 'combat', 'flying'],
   climbing: ['climbing', 'grounded'],
   swimming: ['swimming', 'grounded'],
   combat: ['combat', 'grounded'],
+  flying: ['flying', 'grounded'],
 };
 
 /**

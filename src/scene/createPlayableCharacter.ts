@@ -4,6 +4,7 @@ import { createPlayableViper } from './createPlayableViper';
 import { createPlayableBoar } from './createPlayableBoar';
 import { createPlayableLion } from './createPlayableLion';
 import { createPlayableCrocodile } from './createPlayableCrocodile';
+import { createPlayableOwl } from './createPlayableOwl';
 import {
   SKINS,
   BEAR_SKINS,
@@ -11,6 +12,7 @@ import {
   BOAR_SKINS,
   LION_SKINS,
   CROCODILE_SKINS,
+  OWL_SKINS,
   skinById,
   type CharacterSkin,
 } from './skins';
@@ -23,6 +25,7 @@ export const SPECIES_SKINS: Record<SpeciesId, CharacterSkin[]> = {
   boar: BOAR_SKINS,
   lion: LION_SKINS,
   crocodile: CROCODILE_SKINS,
+  owl: OWL_SKINS,
 };
 
 function skinFor(species: SpeciesId, skinId: string): CharacterSkin {
@@ -45,6 +48,8 @@ export function createPlayableCharacter(species: SpeciesId, skinId: string): Pla
       return createPlayableLion(skinFor('lion', skinId));
     case 'crocodile':
       return createPlayableCrocodile(skinFor('crocodile', skinId));
+    case 'owl':
+      return createPlayableOwl(skinFor('owl', skinId));
     case 'fox':
     default:
       return createFox(skinById(skinId));
@@ -67,4 +72,5 @@ export const SPECIES_LABELS: Record<SpeciesId, { name: string; blurb: string }> 
   boar: { name: 'Boar', blurb: 'Sturdy and stubborn — built low to the ground, tusks always ready.' },
   lion: { name: 'Lion', blurb: 'A real apex presence — maned, muscular, and unmistakably in charge.' },
   crocodile: { name: 'Crocodile', blurb: 'Long, low, and almost perfectly still — until it isn\'t.' },
+  owl: { name: 'Owl', blurb: 'The one spirit with real wings — silent flight, a hunter\'s eyes fixed forward.' },
 };
