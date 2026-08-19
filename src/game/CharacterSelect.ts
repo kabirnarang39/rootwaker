@@ -56,7 +56,7 @@ function disposeGroup(group: THREE.Object3D): void {
  * entirely. */
 export class CharacterSelect {
   private root: HTMLDivElement;
-  private cardEls: HTMLDivElement[];
+  private cardEls: HTMLButtonElement[];
   private swatchEl: HTMLSpanElement;
   private skinNameEl: HTMLSpanElement;
   private prevBtn: HTMLButtonElement;
@@ -133,6 +133,10 @@ export class CharacterSelect {
           background: rgba(20,13,9,0.55);
           cursor: pointer; text-align: center;
           transition: border-color 180ms ease, transform 180ms ease, background 180ms ease;
+          font: inherit; color: inherit; /* real <button> now, not a div — reset UA button chrome */
+        }
+        .rw-cs-card:focus-visible {
+          outline: 2px solid var(--spirit-amber, #ffb15e); outline-offset: 2px;
         }
         .rw-cs-card:hover { transform: translateY(-3px); }
         .rw-cs-card.rw-cs-selected {
@@ -184,8 +188,15 @@ export class CharacterSelect {
     container.appendChild(this.root);
 
     const cardsEl = this.root.querySelector('.rw-cs-cards')!;
+    // Real combination-testing find: every other interactive control on this screen (skin
+    // prev/next, "Enter the Jungle") is a real <button> — natively focusable, natively
+    // Enter/Space-activatable, no custom keyboard code needed. These species cards were a plain
+    // <div> with only a click handler — invisible to Tab order and unusable by keyboard alone,
+    // the one real inconsistency on an otherwise keyboard-complete screen. A <button> is the
+    // correct fix, not tabindex/role/keydown bolted onto a div — same native semantics for free.
     this.cardEls = SPECIES_ORDER.map((species) => {
-      const card = document.createElement('div');
+      const card = document.createElement('button');
+      card.type = 'button';
       card.className = 'rw-cs-card';
       const info = SPECIES_LABELS[species];
       card.innerHTML = `<div class="rw-cs-species-name">${info.name}</div><div class="rw-cs-blurb">${info.blurb}</div>`;
