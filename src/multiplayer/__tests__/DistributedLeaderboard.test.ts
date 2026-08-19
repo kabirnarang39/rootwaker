@@ -198,7 +198,7 @@ describe('DistributedCoronationLeaderboardClient', () => {
       expect(await client.getTop(10)).toHaveLength(0);
     });
 
-    it('rejects an entry with an invalid species (not one of the 3 real playable species)', async () => {
+    it('rejects an entry with an invalid species (not one of the real playable species)', async () => {
       const { DistributedCoronationLeaderboardClient } = await import('../DistributedLeaderboard');
       const client = new DistributedCoronationLeaderboardClient();
       await client.getTop(1);
@@ -207,6 +207,19 @@ describe('DistributedCoronationLeaderboardClient', () => {
         playerId: 'attacker', playerName: 'Attacker', seq: 1,
       });
       expect(await client.getTop(10)).toHaveLength(0);
+    });
+
+    it('accepts a real owl entry (regression: VALID_SPECIES was never updated when owl shipped as the 7th playable species — every owl coronation was silently rejected by every peer)', async () => {
+      const { DistributedCoronationLeaderboardClient } = await import('../DistributedLeaderboard');
+      const client = new DistributedCoronationLeaderboardClient();
+      await client.getTop(1);
+      entryAction.onMessage!({
+        species: 'owl', coronationSeconds: 250, animalsDefeated: 6,
+        playerId: 'peer-owl', playerName: 'Silent Hornbill #7', seq: 1,
+      });
+      const top = await client.getTop(10);
+      expect(top).toHaveLength(1);
+      expect(top[0].species).toBe('owl');
     });
 
     it('rejects a malformed/non-object entry entirely (null, a string, a number)', async () => {

@@ -25,7 +25,7 @@ const SAVE_STORAGE_KEY = 'rootwaker.save.v1';
 // identical purpose — kept as a local literal rather than importing CharacterSelect.ts's
 // SPECIES_ORDER, since that file pulls in the whole THREE.js-backed selection UI just for a
 // 6-item list SaveGame.ts (deliberately dependency-light) doesn't otherwise need.
-const VALID_SPECIES = new Set(['fox', 'bear', 'viper', 'boar', 'lion', 'crocodile']);
+const VALID_SPECIES = new Set(['fox', 'bear', 'viper', 'boar', 'lion', 'crocodile', 'owl']);
 
 function isFiniteNumber(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value);

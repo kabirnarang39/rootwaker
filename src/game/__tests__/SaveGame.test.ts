@@ -155,6 +155,19 @@ describe('SaveGame', () => {
     expect(await save.load()).toEqual(withCoronation);
   });
 
+  it('an owl save round-trips correctly (regression: VALID_SPECIES was never updated when owl shipped as a 7th playable species — every owl player\'s save silently failed isValidSaveState and could never resume)', async () => {
+    const save = new SaveGame();
+    const owlSave: GameSaveState = { ...sampleState, species: 'owl', skinId: 'dusk' };
+    await save.save(owlSave);
+    expect(await save.load()).toEqual(owlSave);
+  });
+
+  it('a save with an unrecognized species string is rejected', async () => {
+    const save = new SaveGame();
+    await save.save({ ...sampleState, species: 'dragon' } as unknown as GameSaveState);
+    expect(await save.load()).toBeNull();
+  });
+
   it('clear() does not throw when localStorage.removeItem throws', async () => {
     vi.stubGlobal('localStorage', {
       getItem: () => null,

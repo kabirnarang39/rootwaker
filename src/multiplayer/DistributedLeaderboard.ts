@@ -27,7 +27,7 @@ const SEQ_KEY = 'rootwaker.world-leaderboard-seq.v1';
 // documented limitation as this project's other P2P tradeoffs (no TURN relay, the mesh's
 // peer-count ceiling) — bounding the damage a bad actor/buggy peer can do, not preventing spoofing
 // entirely.
-const VALID_SPECIES = new Set(['fox', 'bear', 'viper', 'boar', 'lion', 'crocodile']);
+const VALID_SPECIES = new Set(['fox', 'bear', 'viper', 'boar', 'lion', 'crocodile', 'owl']);
 const MAX_NAME_LENGTH = 40; // real UI cap is 24 (DeviceIdentity.setDisplayName) — slack for older/other clients
 const MAX_PLAYER_ID_LENGTH = 100; // real device ids are 36-char UUIDs — generous slack, never unbounded
 const MAX_CORONATION_SECONDS = 1e7; // ~115 days of real elapsed play time — well beyond any real run
