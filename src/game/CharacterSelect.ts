@@ -64,6 +64,8 @@ export class CharacterSelect {
   private nextBtn: HTMLButtonElement;
   private beginBtn: HTMLButtonElement;
   private fieldNotesEl: HTMLDivElement;
+  private detailNameEl: HTMLDivElement;
+  private detailBlurbEl: HTMLDivElement;
 
   // Real live 3D render preview, not a static portrait — reuses the exact same
   // createPlayableCharacter() the actual game uses, so what the player sees here is the real
@@ -111,58 +113,71 @@ export class CharacterSelect {
           animation: rw-cs-fade-in 420ms ease-out both;
         }
         @keyframes rw-cs-fade-in { from { opacity: 0; } to { opacity: 1; } }
-        .rw-cs-panel { display: flex; flex-direction: column; align-items: center; gap: 28px; max-width: 720px; padding: 32px; }
+        .rw-cs-panel { display: flex; flex-direction: column; align-items: center; gap: 22px; max-width: 640px; padding: 32px; }
         .rw-cs-title {
           font-family: var(--display-face, ui-serif, Georgia, serif);
-          font-size: 34px; letter-spacing: 0.02em; color: var(--parchment, #eef2e6);
+          font-size: 32px; letter-spacing: 0.02em; color: var(--parchment, #eef2e6);
           text-shadow: 0 0 24px rgba(111,242,255,0.25);
         }
-        .rw-cs-subtitle { font-size: 14px; opacity: 0.7; margin-top: -18px; text-align: center; }
-        .rw-cs-cards { display: flex; gap: 18px; }
-        .rw-cs-preview-row { display: flex; align-items: center; gap: 22px; }
+        .rw-cs-subtitle { font-size: 14px; opacity: 0.7; margin-top: -14px; text-align: center; }
+        /* Real declutter: a fresh player used to see all 7 species' full name+blurb simultaneously
+           (a wide row of 7 equal-weight text cards) — only the SELECTED species' detail is ever
+           shown now, in a dedicated right-hand panel; the left list is just names, so scanning all
+           7 options and reading about the one you're actually considering are two separate,
+           uncluttered steps instead of one dense wall. */
+        .rw-cs-body { display: flex; gap: 18px; align-items: stretch; width: 100%; }
+        .rw-cs-cards {
+          display: flex; flex-direction: column; gap: 6px; width: 148px; flex-shrink: 0;
+        }
+        .rw-cs-detail {
+          flex: 1; display: flex; flex-direction: column; gap: 14px;
+          padding: 18px; border-radius: 10px;
+          border: 1px solid rgba(238,242,230,0.14);
+          background: rgba(20,13,9,0.4);
+        }
+        .rw-cs-detail-top { display: flex; gap: 16px; align-items: flex-start; }
         .rw-cs-preview-canvas {
-          width: 168px; height: 168px; border-radius: 12px;
+          width: 128px; height: 128px; border-radius: 12px; flex-shrink: 0;
           border: 2px solid rgba(238,242,230,0.14);
           background: radial-gradient(circle at 50% 32%, rgba(111,242,255,0.1), rgba(7,10,8,0.4) 75%);
         }
-        .rw-cs-fieldnotes { max-width: 280px; font-size: 12px; line-height: 1.55; text-align: left; }
+        .rw-cs-detail-name { font-family: var(--display-face, ui-serif, Georgia, serif); font-size: 22px; margin-bottom: 4px; }
+        .rw-cs-blurb { font-size: 13px; line-height: 1.5; opacity: 0.8; }
+        .rw-cs-fieldnotes { font-size: 12px; line-height: 1.55; text-align: left; }
         .rw-cs-fn-stats { opacity: 0.85; margin-bottom: 6px; }
         .rw-cs-fn-skill { opacity: 0.7; }
         .rw-cs-fn-skill strong { color: var(--spirit-amber, #ffb15e); font-weight: 600; }
         .rw-cs-card {
-          width: 190px; padding: 18px 16px; border-radius: 10px;
-          border: 2px solid rgba(238,242,230,0.14);
-          background: rgba(20,13,9,0.55);
-          cursor: pointer; text-align: center;
-          transition: border-color 180ms ease, transform 180ms ease, background 180ms ease;
-          font: inherit; color: inherit; /* real <button> now, not a div — reset UA button chrome */
+          padding: 10px 14px; border-radius: 8px;
+          border: 1px solid rgba(238,242,230,0.14);
+          background: rgba(20,13,9,0.4);
+          cursor: pointer; text-align: left;
+          transition: border-color 160ms ease, background 160ms ease;
+          font: inherit; font-size: 14px; color: inherit; /* real <button> now, not a div — reset UA button chrome */
         }
         .rw-cs-card:focus-visible {
           outline: 2px solid var(--spirit-amber, #ffb15e); outline-offset: 2px;
         }
-        .rw-cs-card:hover { transform: translateY(-3px); }
+        .rw-cs-card:hover { border-color: rgba(238,242,230,0.3); }
         .rw-cs-card.rw-cs-selected {
           border-color: var(--spirit-amber, #ffb15e);
-          background: rgba(255,177,94,0.1);
-          box-shadow: 0 0 22px rgba(255,177,94,0.25);
+          background: rgba(255,177,94,0.12);
         }
-        .rw-cs-species-name { font-family: var(--display-face, ui-serif, Georgia, serif); font-size: 20px; margin-bottom: 6px; }
-        .rw-cs-blurb { font-size: 12px; line-height: 1.4; opacity: 0.75; min-height: 48px; }
-        .rw-cs-skin-row { display: flex; align-items: center; justify-content: center; gap: 10px; margin-top: 24px; }
+        .rw-cs-skin-row { display: flex; align-items: center; justify-content: center; gap: 10px; }
         .rw-cs-swatch {
-          width: 46px; height: 46px; border-radius: 50%;
+          width: 40px; height: 40px; border-radius: 50%;
           border: 2px solid rgba(238,242,230,0.35);
           box-shadow: 0 0 16px 2px var(--swatch-glow, transparent);
           transition: box-shadow 220ms ease;
         }
-        .rw-cs-skin-name { min-width: 150px; font-size: 13px; text-align: center; }
+        .rw-cs-skin-name { min-width: 140px; font-size: 13px; text-align: center; }
         .rw-cs-skin-btn {
           background: transparent; border: 1px solid rgba(238,242,230,0.3); color: var(--parchment, #eef2e6);
           border-radius: 6px; width: 30px; height: 30px; cursor: pointer; font-size: 15px; line-height: 1;
         }
         .rw-cs-skin-btn:hover { background: rgba(255,177,94,0.2); }
         .rw-cs-begin {
-          margin-top: 10px; padding: 12px 34px; border-radius: 8px; border: none; cursor: pointer;
+          margin-top: 4px; padding: 12px 34px; border-radius: 8px; border: none; cursor: pointer;
           font-family: var(--display-face, ui-serif, Georgia, serif); font-size: 16px; letter-spacing: 0.03em;
           background: var(--spirit-amber, #ffb15e); color: #14100a;
           transition: transform 140ms ease, box-shadow 140ms ease;
@@ -173,16 +188,24 @@ export class CharacterSelect {
       <div class="rw-cs-panel">
         <div class="rw-cs-title">Choose Your Spirit</div>
         <div class="rw-cs-subtitle">Every animal moves, fights, and climbs like the real thing.</div>
-        <div class="rw-cs-cards"></div>
-        <div class="rw-cs-preview-row">
-          <canvas class="rw-cs-preview-canvas"></canvas>
-          <div class="rw-cs-fieldnotes"></div>
-        </div>
-        <div class="rw-cs-skin-row">
-          <button class="rw-cs-skin-btn rw-cs-skin-prev" type="button" aria-label="previous skin">&lsaquo;</button>
-          <span class="rw-cs-swatch"></span>
-          <span class="rw-cs-skin-name"></span>
-          <button class="rw-cs-skin-btn rw-cs-skin-next" type="button" aria-label="next skin">&rsaquo;</button>
+        <div class="rw-cs-body">
+          <div class="rw-cs-cards"></div>
+          <div class="rw-cs-detail">
+            <div class="rw-cs-detail-top">
+              <canvas class="rw-cs-preview-canvas"></canvas>
+              <div>
+                <div class="rw-cs-detail-name"></div>
+                <div class="rw-cs-blurb"></div>
+              </div>
+            </div>
+            <div class="rw-cs-fieldnotes"></div>
+            <div class="rw-cs-skin-row">
+              <button class="rw-cs-skin-btn rw-cs-skin-prev" type="button" aria-label="previous skin">&lsaquo;</button>
+              <span class="rw-cs-swatch"></span>
+              <span class="rw-cs-skin-name"></span>
+              <button class="rw-cs-skin-btn rw-cs-skin-next" type="button" aria-label="next skin">&rsaquo;</button>
+            </div>
+          </div>
         </div>
         <button class="rw-cs-begin" type="button">Enter the Jungle</button>
       </div>
@@ -196,12 +219,13 @@ export class CharacterSelect {
     // <div> with only a click handler — invisible to Tab order and unusable by keyboard alone,
     // the one real inconsistency on an otherwise keyboard-complete screen. A <button> is the
     // correct fix, not tabindex/role/keydown bolted onto a div — same native semantics for free.
+    // Real declutter: cards carry only the species name now (see the .rw-cs-cards CSS comment
+    // above) — the blurb moves into the shared detail panel, updated per-selection in render().
     this.cardEls = SPECIES_ORDER.map((species) => {
       const card = document.createElement('button');
       card.type = 'button';
       card.className = 'rw-cs-card';
-      const info = SPECIES_LABELS[species];
-      card.innerHTML = `<div class="rw-cs-species-name">${info.name}</div><div class="rw-cs-blurb">${info.blurb}</div>`;
+      card.textContent = SPECIES_LABELS[species].name;
       card.addEventListener('click', () => this.selectSpecies(species));
       cardsEl.appendChild(card);
       return card;
@@ -213,6 +237,8 @@ export class CharacterSelect {
     this.nextBtn = this.root.querySelector('.rw-cs-skin-next')!;
     this.beginBtn = this.root.querySelector('.rw-cs-begin')!;
     this.fieldNotesEl = this.root.querySelector('.rw-cs-fieldnotes')!;
+    this.detailNameEl = this.root.querySelector('.rw-cs-detail-name')!;
+    this.detailBlurbEl = this.root.querySelector('.rw-cs-blurb')!;
 
     this.prevBtn.addEventListener('click', () => this.cycleSkin(-1));
     this.nextBtn.addEventListener('click', () => this.cycleSkin(1));
@@ -332,6 +358,8 @@ export class CharacterSelect {
     this.cardEls.forEach((el, i) => el.classList.toggle('rw-cs-selected', i === this.speciesIndex));
     const species = SPECIES_ORDER[this.speciesIndex];
     const skin = SPECIES_SKINS[species][this.skinIndexBySpecies[species]];
+    this.detailNameEl.textContent = SPECIES_LABELS[species].name;
+    this.detailBlurbEl.textContent = SPECIES_LABELS[species].blurb;
     this.skinNameEl.textContent = skin.name;
     this.swatchEl.style.background = `radial-gradient(circle at 35% 30%, ${hex(skin.furColor)}, ${hex(skin.furDark)})`;
     this.swatchEl.style.setProperty('--swatch-glow', hex(skin.glowColor));

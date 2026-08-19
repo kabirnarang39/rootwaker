@@ -1,6 +1,7 @@
 import { selectCharacter } from './game/CharacterSelect';
 import { ResumeGate } from './game/ResumeGate';
 import { SaveGame } from './game/SaveGame';
+import { TitleScreen } from './game/TitleScreen';
 
 const app = document.querySelector<HTMLDivElement>('#app')!;
 const saveGame = new SaveGame();
@@ -19,6 +20,13 @@ async function loadGame() {
 }
 
 async function boot(): Promise<void> {
+  // The real landing moment this project never had — always shown first, whether or not a save
+  // exists, so a first-time player actually sees the game's own name, and every player has a
+  // place to set a real display name (shown on the world leaderboard/coronation results — see
+  // HUD.ts's own `${playerName} · ${species}` label, previously always just an auto-generated
+  // placeholder no UI ever let a player change).
+  await new TitleScreen(app).whenContinue();
+
   const existingSave = await saveGame.load();
 
   if (existingSave) {
