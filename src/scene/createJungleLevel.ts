@@ -16,6 +16,7 @@ import { createFishSchool } from '../entities/createFishSchool';
 import { createShark, type Shark } from '../entities/createShark';
 import { createMonkey, type Monkey } from '../entities/createMonkey';
 import { TreeObstacleGrid, type TreeObstacle } from './TreeObstacleGrid';
+import { applyAttire, type AttireStyle } from './attireKit';
 
 export interface ClimbableWall {
   normal: THREE.Vector3;
@@ -1083,8 +1084,15 @@ function buildThroneRoom(summitGate: THREE.Vector3): { meshes: THREE.Object3D[];
     group.visible = false;
     return group;
   };
-  const groundAnimalAt = (build: () => { group: THREE.Group }, x: number, z: number, rotationY = 0): THREE.Group => {
+  const groundAnimalAt = (
+    build: () => { group: THREE.Group },
+    x: number,
+    z: number,
+    rotationY = 0,
+    attire: AttireStyle = 'none',
+  ): THREE.Group => {
     const entity = build();
+    applyAttire(entity.group, attire); // BEFORE positioning — needs the group's own local-space bounds
     entity.group.position.set(x, summitGate.y, z);
     entity.group.rotation.y = rotationY;
     entity.group.visible = false;
@@ -1094,17 +1102,20 @@ function buildThroneRoom(summitGate: THREE.Vector3): { meshes: THREE.Object3D[];
   // adding every ground species that's shipped since this audience was first built (boar, lion,
   // crocodile, monkey) so the coronation crowd actually represents the real animal roster the
   // fox has been fighting all game, not just the 3 species that existed when this shipped.
+  // Real attire variety, alternating styles across the crowd so it doesn't read as one uniform —
+  // see attireKit.ts for why a neck collar/cord is the one accessory shape that reads correctly
+  // across every body plan in this cast without per-species tailoring.
   const animalAudience: THREE.Object3D[] = [
     perchedOwlAt(summitGate.x - AUDIENCE_HALF_WIDTH, summitGate.z + 8),
     perchedOwlAt(summitGate.x + AUDIENCE_HALF_WIDTH, summitGate.z + 13),
-    groundAnimalAt(createGroveBear, summitGate.x - AUDIENCE_HALF_WIDTH + 1, summitGate.z + 15, Math.PI / 2),
-    groundAnimalAt(createGroveBear, summitGate.x + AUDIENCE_HALF_WIDTH - 1, summitGate.z + 6, -Math.PI / 2),
-    groundAnimalAt(createVineViper, summitGate.x - AUDIENCE_HALF_WIDTH + 1.5, summitGate.z + 21, Math.PI / 2),
-    groundAnimalAt(() => createGroveSquirrel(new THREE.Vector3()), summitGate.x + AUDIENCE_HALF_WIDTH - 1.5, summitGate.z + 20, -Math.PI / 2),
-    groundAnimalAt(createTuskBoar, summitGate.x - AUDIENCE_HALF_WIDTH + 1.2, summitGate.z + 18, Math.PI / 2),
-    groundAnimalAt(createLion, summitGate.x + AUDIENCE_HALF_WIDTH - 1.2, summitGate.z + 16, -Math.PI / 2),
-    groundAnimalAt(createCrocodile, summitGate.x - AUDIENCE_HALF_WIDTH + 1.4, summitGate.z + 9, Math.PI / 2),
-    groundAnimalAt(createMonkey, summitGate.x + AUDIENCE_HALF_WIDTH - 1.6, summitGate.z + 20, -Math.PI / 2),
+    groundAnimalAt(createGroveBear, summitGate.x - AUDIENCE_HALF_WIDTH + 1, summitGate.z + 15, Math.PI / 2, 'formal-collar'),
+    groundAnimalAt(createGroveBear, summitGate.x + AUDIENCE_HALF_WIDTH - 1, summitGate.z + 6, -Math.PI / 2, 'informal-cord'),
+    groundAnimalAt(createVineViper, summitGate.x - AUDIENCE_HALF_WIDTH + 1.5, summitGate.z + 21, Math.PI / 2, 'ceremonial-beads'),
+    groundAnimalAt(() => createGroveSquirrel(new THREE.Vector3()), summitGate.x + AUDIENCE_HALF_WIDTH - 1.5, summitGate.z + 20, -Math.PI / 2, 'informal-cord'),
+    groundAnimalAt(createTuskBoar, summitGate.x - AUDIENCE_HALF_WIDTH + 1.2, summitGate.z + 18, Math.PI / 2, 'informal-cord'),
+    groundAnimalAt(createLion, summitGate.x + AUDIENCE_HALF_WIDTH - 1.2, summitGate.z + 16, -Math.PI / 2, 'formal-collar'),
+    groundAnimalAt(createCrocodile, summitGate.x - AUDIENCE_HALF_WIDTH + 1.4, summitGate.z + 9, Math.PI / 2, 'ceremonial-beads'),
+    groundAnimalAt(createMonkey, summitGate.x + AUDIENCE_HALF_WIDTH - 1.6, summitGate.z + 20, -Math.PI / 2, 'formal-collar'),
   ];
 
   const throneRoom: ThroneRoom = {

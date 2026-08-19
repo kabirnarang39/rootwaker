@@ -184,6 +184,17 @@ describe('createJungleLevel', () => {
     expect(level.throneRoom.animalAudience.length).toBeGreaterThanOrEqual(10);
   });
 
+  it('real attire variety across the crowd: at least two distinct real neck-collar styles, not one clone repeated (see attireKit.ts)', () => {
+    const level = createJungleLevel();
+    const styles = new Set<string>();
+    for (const spectator of level.throneRoom.animalAudience) {
+      spectator.traverse((obj) => {
+        if (obj.name.startsWith('attire-')) styles.add(obj.name);
+      });
+    }
+    expect(styles.size).toBeGreaterThanOrEqual(2);
+  });
+
   it('a real throne sits in the throne room, always visible (not hidden behind openGate() like the reveal-payoff audience/village), with real jeweled regalia', () => {
     const level = createJungleLevel();
     let throneMesh: THREE.Object3D | undefined;
