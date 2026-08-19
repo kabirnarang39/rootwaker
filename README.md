@@ -11,14 +11,24 @@ Built solo with Three.js and an AI pair-programming partner, entirely code-gener
 
 ## Features
 
+- **7 playable spirits** — fox, bear, viper, boar, lion, crocodile, owl (the only one with real
+  flight locomotion), each with its own real anatomy, locomotion, and combat identity
 - **Free-roam jungle chapter** — climbing, swimming, stealth hunting, escalating telegraph combat
-- **Real animal cast** — bear, boar, owl, viper, squirrel, finch flock, lion, each with real
-  species-appropriate locomotion, attacks, and a power you earn by defeating (and eating) them
+- **A real animal cast to hunt** — bear, boar, owl, viper, lion, crocodile, shark, monkey, each
+  with species-appropriate locomotion/attacks and a power you earn by defeating (and eating) them;
+  squirrels and a finch flock as ambient, non-combat wildlife
+- **A real living sea** — real swim-state gating, tide, and shark combat, not just decorative water
 - **Real 3-hit combo combat** — dodge with true invincibility frames, block with chip damage,
   hit-stagger, finisher-triggered enemy stagger
 - **A real mountain climb** — winding open-terrain ascent with stamina, rest ledges, wind hazards
-- **A coronation ceremony** — defeat the King atop a real summit room with a cheering animal audience
-- **Dynamic weather** — fog, light, tide, and rain coupled to one shared condition
+- **A coronation ceremony** — defeat the King atop a real summit room with crown/throne regalia
+  and a diverse costumed animal crowd
+- **Real spatial audio** — every threat's telegraph/alert call pans and fades by real direction
+  and distance from the player, not just a flat sound bank
+- **Dynamic weather** — fog, light, tide, thunderstorms, and rain intensity coupled to one shared
+  condition
+- **Real touch controls** — a full on-screen joystick + action buttons on phones/tablets, not just
+  a scaled-down desktop layout; installable as a standalone app (PWA) on mobile home screens
 - **Encrypted local save/resume** — AES-GCM, no account, no server
 - **A real distributed leaderboard** — gossip-synced peer-to-peer (via [trystero](https://github.com/dmotz/trystero)'s
   serverless WebRTC matchmaking over public relays), encrypted locally on your device, no backend
@@ -30,18 +40,23 @@ Built solo with Three.js and an AI pair-programming partner, entirely code-gener
 | Key | Action |
 |---|---|
 | `W A S D` | Move |
-| `Space` | Jump |
+| `Space` | Jump (owl: launch/ascend flight) |
+| `Shift` | (owl, while flying) descend |
 | `J` | Attack (3-hit combo) |
 | `K` | Dodge |
 | `H` | Block |
 | `L` | Pounce (hunting) |
 | Mouse drag | Look |
 | `C` | Cycle camera view |
-| `1–7` | Powers |
+| `1–0` | Powers (10 slots) |
 | `M` | Challenge another player to a duel |
 | `O` | World leaderboard |
 | `T` | Duel chat |
 | `Y` | Duel voice mute |
+
+On a phone or tablet, all of the above is available through a real on-screen joystick, action
+buttons, and a secondary menu — no keyboard required. Tap the "?" in the top-right corner anytime
+for the full control reference.
 
 ## Tech stack
 
