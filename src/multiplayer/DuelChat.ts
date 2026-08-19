@@ -7,6 +7,13 @@ export interface ChatMessage {
 }
 
 const MAX_CHAT_LEN = 200;
+// Real combination-testing find: per-message length was already bounded (msg.text.slice), but
+// the message COUNT never was — a malicious/broken peer sustaining a flood for the length of a
+// duel would grow `this.messages` without limit. The UI already only ever renders the last 30
+// (HUD.ts's renderDuelChat), so keeping history well beyond that buys nothing real; capping it
+// bounds the same class of "unbounded remote data" risk this file's own text-length cap already
+// covers, just for count instead of length.
+const MAX_HISTORY = 200;
 
 /** Real live text chat scoped to the two duel participants only, riding the SAME
  * RTCPeerConnection/data channel P2PChallengeLink already opened for the fight — no separate
@@ -26,8 +33,13 @@ export class DuelChat {
       const msg = data as { type?: string; text?: string };
       if (msg.type !== 'chat' || typeof msg.text !== 'string') return;
       this.messages.push({ from: 'opponent', text: msg.text.slice(0, MAX_CHAT_LEN), at: Date.now() });
+      this.trimHistory();
       this.handlers.forEach((h) => h(this.messages));
     });
+  }
+
+  private trimHistory(): void {
+    if (this.messages.length > MAX_HISTORY) this.messages.splice(0, this.messages.length - MAX_HISTORY);
   }
 
   send(text: string): void {
@@ -35,6 +47,7 @@ export class DuelChat {
     if (!trimmed) return;
     this.link.send({ type: 'chat', text: trimmed });
     this.messages.push({ from: 'me', text: trimmed, at: Date.now() });
+    this.trimHistory();
     this.handlers.forEach((h) => h(this.messages));
   }
 

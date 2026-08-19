@@ -51,4 +51,14 @@ describe('DuelChat', () => {
     const sentText = (link.send as any).mock.calls[0][0].text as string;
     expect(sentText.length).toBe(200);
   });
+
+  it('a real combination-testing find: a sustained flood from the opponent (or a malicious/broken peer) never grows history without limit — count is capped the same way message length already was', () => {
+    const link = fakeLink();
+    const chat = new DuelChat(link as any);
+    for (let i = 0; i < 500; i++) link.deliver({ type: 'chat', text: `msg ${i}` });
+    expect(chat.history.length).toBeLessThanOrEqual(200);
+    // The MOST RECENT messages survive the trim, not the oldest — a real chat history keeps
+    // what just happened, not a stale window from the start of the flood.
+    expect(chat.history[chat.history.length - 1].text).toBe('msg 499');
+  });
 });
